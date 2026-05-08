@@ -1,21 +1,21 @@
-//! Human-readable debug serialization format.
+//! Human-readable serialization format.
 
 const std = @import("std");
 
-const serialize = @import("../serialize.zig").serialize;
+const serialize = @import("serialize.zig").serialize;
 
-/// Serializes `value` to a compact human-readable debug representation.
+/// Serializes `value` to a compact human-readable representation.
 pub fn write(writer: *std.Io.Writer, value: anytype) !void {
     var enc = encoder(writer);
     try serialize(value, &enc);
 }
 
-/// Returns a low-level debug encoder for use with `zerde.serialize`.
+/// Returns a low-level human-readable encoder for use with `zerde.serialize`.
 pub fn encoder(writer: *std.Io.Writer) Encoder {
     return .{ .writer = writer };
 }
 
-/// Low-level debug encoder used by the generic serializer.
+/// Low-level human-readable encoder used by the generic serializer.
 pub const Encoder = struct {
     const Self = @This();
     const max_depth = 64;
@@ -35,37 +35,37 @@ pub const Encoder = struct {
     stack: [max_depth]Frame = undefined,
     stack_len: usize = 0,
 
-    /// Emits the debug `null` value.
+    /// Emits the `null` value.
     pub fn emitNull(self: *Self) !void {
         try self.beforeValue();
         try self.writer.writeAll("null");
     }
 
-    /// Emits a debug boolean value.
+    /// Emits a boolean value.
     pub fn emitBool(self: *Self, value: bool) !void {
         try self.beforeValue();
         try self.writer.writeAll(if (value) "true" else "false");
     }
 
-    /// Emits a debug integer value.
+    /// Emits an integer value.
     pub fn emitInt(self: *Self, value: anytype) !void {
         try self.beforeValue();
         try self.writer.print("{d}", .{value});
     }
 
-    /// Emits a debug float value.
+    /// Emits a float value.
     pub fn emitFloat(self: *Self, value: anytype) !void {
         try self.beforeValue();
         try self.writer.print("{d}", .{value});
     }
 
-    /// Emits a quoted debug string with common escapes.
+    /// Emits a quoted string with common escapes.
     pub fn emitString(self: *Self, value: []const u8) !void {
         try self.beforeValue();
         try self.writeEscapedString(value);
     }
 
-    /// Begins a debug sequence.
+    /// Begins a sequence.
     pub fn beginSeq(self: *Self, len: ?usize) !void {
         _ = len;
         try self.beforeValue();
@@ -73,13 +73,13 @@ pub const Encoder = struct {
         try self.push(.seq);
     }
 
-    /// Ends the current debug sequence.
+    /// Ends the current sequence.
     pub fn endSeq(self: *Self) !void {
         self.pop(.seq);
         try self.writer.writeAll("]");
     }
 
-    /// Begins a debug struct representation using the short Zig type name.
+    /// Begins a struct representation using the short Zig type name.
     pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void {
         try self.beforeValue();
         try self.writer.print("{s} {{", .{shortTypeName(T)});
@@ -87,27 +87,27 @@ pub const Encoder = struct {
         try self.push(.struct_);
     }
 
-    /// Emits the next debug struct field name.
+    /// Emits the next struct field name.
     pub fn emitFieldName(self: *Self, name: []const u8) !void {
         const frame = self.currentFrame(.struct_);
-        if (frame.expecting_field_value) return error.InvalidDebugEncoderState;
+        if (frame.expecting_field_value) return error.InvalidHumanEncoderState;
         if (frame.count != 0) try self.writer.writeAll(", ");
         try self.writer.print("{s}: ", .{name});
         frame.count += 1;
         frame.expecting_field_value = true;
     }
 
-    /// Ends the current debug struct representation.
+    /// Ends the current struct representation.
     pub fn endStruct(self: *Self) !void {
         const frame = self.currentFrame(.struct_);
-        if (frame.expecting_field_value) return error.InvalidDebugEncoderState;
+        if (frame.expecting_field_value) return error.InvalidHumanEncoderState;
         const had_fields = frame.count != 0;
         self.pop(.struct_);
         if (had_fields) try self.writer.writeAll(" ");
         try self.writer.writeAll("}");
     }
 
-    /// Emits an enum tag as a debug string.
+    /// Emits an enum tag as a string.
     pub fn emitEnumTag(self: *Self, tag: []const u8) !void {
         try self.emitString(tag);
     }
@@ -122,7 +122,7 @@ pub const Encoder = struct {
                 frame.count += 1;
             },
             .struct_ => {
-                if (!frame.expecting_field_value) return error.InvalidDebugEncoderState;
+                if (!frame.expecting_field_value) return error.InvalidHumanEncoderState;
                 frame.expecting_field_value = false;
             },
         }
@@ -178,7 +178,7 @@ fn shortTypeName(comptime T: type) []const u8 {
     return name[start..];
 }
 
-fn expectDebug(value: anytype, expected: []const u8) !void {
+fn expectHuman(value: anytype, expected: []const u8) !void {
     var buffer: [1024]u8 = undefined;
     var writer: std.Io.Writer = .fixed(&buffer);
 
@@ -187,45 +187,45 @@ fn expectDebug(value: anytype, expected: []const u8) !void {
     try std.testing.expectEqualStrings(expected, writer.buffered());
 }
 
-test "debug writes primitive values" {
-    try expectDebug(true, "true");
-    try expectDebug(false, "false");
-    try expectDebug(@as(i32, -42), "-42");
-    try expectDebug(@as(u64, 42), "42");
-    try expectDebug(@as(f64, 1.5), "1.5");
+test "human writes primitive values" {
+    try expectHuman(true, "true");
+    try expectHuman(false, "false");
+    try expectHuman(@as(i32, -42), "-42");
+    try expectHuman(@as(u64, 42), "42");
+    try expectHuman(@as(f64, 1.5), "1.5");
 }
 
-test "debug writes strings" {
-    try expectDebug("Grant", "\"Grant\"");
-    try expectDebug(@as([]const u8, "Grant"), "\"Grant\"");
+test "human writes strings" {
+    try expectHuman("Grant", "\"Grant\"");
+    try expectHuman(@as([]const u8, "Grant"), "\"Grant\"");
 
     var mutable = [_]u8{ 'Z', 'i', 'g' };
     const mutable_slice: []u8 = mutable[0..];
-    try expectDebug(mutable_slice, "\"Zig\"");
+    try expectHuman(mutable_slice, "\"Zig\"");
 
-    try expectDebug(@as([]const u8, "quote: \" slash: \\ newline:\n"), "\"quote: \\\" slash: \\\\ newline:\\n\"");
+    try expectHuman(@as([]const u8, "quote: \" slash: \\ newline:\n"), "\"quote: \\\" slash: \\\\ newline:\\n\"");
 }
 
-test "debug writes arrays and slices" {
-    try expectDebug([3]u8{ 1, 2, 3 }, "[1, 2, 3]");
+test "human writes arrays and slices" {
+    try expectHuman([3]u8{ 1, 2, 3 }, "[1, 2, 3]");
 
     const values = [_]u16{ 10, 20, 30 };
     const slice: []const u16 = values[0..];
-    try expectDebug(slice, "[10, 20, 30]");
+    try expectHuman(slice, "[10, 20, 30]");
 }
 
-test "debug writes optionals" {
-    try expectDebug(@as(?u8, null), "null");
-    try expectDebug(@as(?u8, 7), "7");
+test "human writes optionals" {
+    try expectHuman(@as(?u8, null), "null");
+    try expectHuman(@as(?u8, 7), "7");
 }
 
-test "debug writes enums as string tags" {
+test "human writes enums as string tags" {
     const Color = enum { red, green, blue };
 
-    try expectDebug(Color.green, "\"green\"");
+    try expectHuman(Color.green, "\"green\"");
 }
 
-test "debug writes nested structs in declaration order" {
+test "human writes nested structs in declaration order" {
     const User = struct {
         id: u64,
         name: []const u8,
@@ -237,19 +237,19 @@ test "debug writes nested structs in declaration order" {
         nickname: ?[]const u8,
     };
 
-    try expectDebug(Session{
+    try expectHuman(Session{
         .user = .{ .id = 1, .name = "Grant", .active = true },
         .scores = .{ 9, 10 },
         .nickname = null,
     }, "Session { user: User { id: 1, name: \"Grant\", active: true }, scores: [9, 10], nickname: null }");
 }
 
-test "debug writes structs with default fields" {
+test "human writes structs with default fields" {
     const Defaults = struct {
         id: u8,
         active: bool = true,
         label: []const u8 = "new",
     };
 
-    try expectDebug(Defaults{ .id = 1 }, "Defaults { id: 1, active: true, label: \"new\" }");
+    try expectHuman(Defaults{ .id = 1 }, "Defaults { id: 1, active: true, label: \"new\" }");
 }

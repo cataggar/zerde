@@ -2,7 +2,7 @@
 
 const std = @import("std");
 
-const serialize = @import("../serialize.zig").serialize;
+const serialize = @import("serialize.zig").serialize;
 
 /// Serializes `value` as compact JSON to `writer`.
 ///

@@ -1,4 +1,4 @@
-//! Internal type trait helpers.
+//! Type trait helpers.
 
 /// Returns whether `T` is one of Zerde's default string slice types.
 pub fn isString(comptime T: type) bool {

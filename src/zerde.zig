@@ -1,12 +1,14 @@
 //! Public root module for Zerde serialization APIs.
 
 /// JSON format API.
-pub const json = @import("formats/json.zig");
-/// Debug format API for human-readable serialization output.
-pub const debug = @import("formats/debug.zig");
+pub const json = @import("json.zig");
+/// Human-readable format API.
+pub const human = @import("human.zig");
 
 /// Type-specialized codec namespace factory.
 pub const Codec = @import("codec.zig").Codec;
+/// Formats supported by the simple codec dispatch API.
+pub const Format = @import("codec.zig").Format;
 
 /// Generic type-directed serialization traversal.
 pub const serialize = @import("serialize.zig").serialize;
@@ -17,14 +19,15 @@ pub const deinit = @import("deinit.zig").deinit;
 
 test {
     _ = json;
-    _ = debug;
+    _ = human;
     _ = Codec;
+    _ = Format;
     _ = serialize;
     _ = deserialize;
     _ = deinit;
     _ = @import("meta.zig");
     _ = @import("schema.zig");
-    _ = @import("internal/rename.zig");
-    _ = @import("internal/testing.zig");
-    _ = @import("internal/traits.zig");
+    _ = @import("rename.zig");
+    _ = @import("testing.zig");
+    _ = @import("traits.zig");
 }

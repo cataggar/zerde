@@ -1,4 +1,4 @@
-//! Internal field-name rename rules.
+//! Field-name rename rules.
 
 /// Supported field-name rename policies.
 pub const RenameRule = enum {
