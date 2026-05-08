@@ -1,16 +1,21 @@
+//! Human-readable debug serialization format.
+
 const std = @import("std");
 
 const serialize = @import("../serialize.zig").serialize;
 
+/// Serializes `value` to a compact human-readable debug representation.
 pub fn write(writer: *std.Io.Writer, value: anytype) !void {
     var enc = encoder(writer);
     try serialize(value, &enc);
 }
 
+/// Returns a low-level debug encoder for use with `zerde.serialize`.
 pub fn encoder(writer: *std.Io.Writer) Encoder {
     return .{ .writer = writer };
 }
 
+/// Low-level debug encoder used by the generic serializer.
 pub const Encoder = struct {
     const Self = @This();
     const max_depth = 64;
@@ -30,31 +35,37 @@ pub const Encoder = struct {
     stack: [max_depth]Frame = undefined,
     stack_len: usize = 0,
 
+    /// Emits the debug `null` value.
     pub fn emitNull(self: *Self) !void {
         try self.beforeValue();
         try self.writer.writeAll("null");
     }
 
+    /// Emits a debug boolean value.
     pub fn emitBool(self: *Self, value: bool) !void {
         try self.beforeValue();
         try self.writer.writeAll(if (value) "true" else "false");
     }
 
+    /// Emits a debug integer value.
     pub fn emitInt(self: *Self, value: anytype) !void {
         try self.beforeValue();
         try self.writer.print("{d}", .{value});
     }
 
+    /// Emits a debug float value.
     pub fn emitFloat(self: *Self, value: anytype) !void {
         try self.beforeValue();
         try self.writer.print("{d}", .{value});
     }
 
+    /// Emits a quoted debug string with common escapes.
     pub fn emitString(self: *Self, value: []const u8) !void {
         try self.beforeValue();
         try self.writeEscapedString(value);
     }
 
+    /// Begins a debug sequence.
     pub fn beginSeq(self: *Self, len: ?usize) !void {
         _ = len;
         try self.beforeValue();
@@ -62,11 +73,13 @@ pub const Encoder = struct {
         try self.push(.seq);
     }
 
+    /// Ends the current debug sequence.
     pub fn endSeq(self: *Self) !void {
         self.pop(.seq);
         try self.writer.writeAll("]");
     }
 
+    /// Begins a debug struct representation using the short Zig type name.
     pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void {
         try self.beforeValue();
         try self.writer.print("{s} {{", .{shortTypeName(T)});
@@ -74,6 +87,7 @@ pub const Encoder = struct {
         try self.push(.struct_);
     }
 
+    /// Emits the next debug struct field name.
     pub fn emitFieldName(self: *Self, name: []const u8) !void {
         const frame = self.currentFrame(.struct_);
         if (frame.expecting_field_value) return error.InvalidDebugEncoderState;
@@ -83,6 +97,7 @@ pub const Encoder = struct {
         frame.expecting_field_value = true;
     }
 
+    /// Ends the current debug struct representation.
     pub fn endStruct(self: *Self) !void {
         const frame = self.currentFrame(.struct_);
         if (frame.expecting_field_value) return error.InvalidDebugEncoderState;
@@ -92,6 +107,7 @@ pub const Encoder = struct {
         try self.writer.writeAll("}");
     }
 
+    /// Emits an enum tag as a debug string.
     pub fn emitEnumTag(self: *Self, tag: []const u8) !void {
         try self.emitString(tag);
     }

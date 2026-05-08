@@ -1,5 +1,12 @@
+//! Generic type-directed serialization traversal.
+
 const std = @import("std");
 
+/// Serializes `value` by walking its Zig type at comptime and calling methods
+/// on `encoder`'s structural protocol.
+///
+/// Supported types currently include bools, integers, floats, strings, arrays,
+/// slices, optionals, enums, and plain structs.
 pub fn serialize(value: anytype, encoder: anytype) !void {
     try serializeValue(@TypeOf(value), value, encoder);
 }
