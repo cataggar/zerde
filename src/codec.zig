@@ -20,6 +20,7 @@ pub const Format = enum {
 pub fn Codec(comptime T: type) type {
     comptime {
         meta.validate(T, meta.optionsFor(T));
+        schema_mod.validateType(T);
     }
 
     return struct {
@@ -38,16 +39,16 @@ pub fn Codec(comptime T: type) type {
 
         /// Deserializes a `Type` value from `reader` in the selected format.
         pub fn read(allocator: std.mem.Allocator, reader: *std.Io.Reader, comptime format: Format) !T {
-            _ = allocator;
-            _ = reader;
             return switch (format) {
-                .json, .human => error.Unsupported,
+                .json => try json.read(T, allocator, reader),
+                .human => @compileError("human format is write-only"),
             };
         }
 
         /// Validates a value against codec-level rules.
         pub fn validate(value: T) !void {
             _ = value;
+            comptime schema_mod.validateType(T);
         }
 
         /// Returns the internal schema descriptor for `Type`.
@@ -226,6 +227,54 @@ test "codec writes metadata consistently across formats" {
     try expectCodecWrite(User, user, .human, "User { userId: 1, name: \"Grant\" }");
 }
 
+test "codec reads json equivalent to format api" {
+    const User = struct {
+        id: u64,
+        name: []const u8,
+        active: bool,
+    };
+    const input = "{\"id\":1,\"name\":\"Grant\",\"active\":true}";
+
+    const format_value = try json.readSlice(User, std.testing.allocator, input);
+    defer deinitValue(User, std.testing.allocator, format_value);
+
+    var reader: std.Io.Reader = .fixed(input);
+    const codec_value = try Codec(User).read(std.testing.allocator, &reader, .json);
+    defer Codec(User).deinit(std.testing.allocator, codec_value);
+
+    try std.testing.expectEqual(format_value.id, codec_value.id);
+    try std.testing.expectEqualStrings(format_value.name, codec_value.name);
+    try std.testing.expectEqual(format_value.active, codec_value.active);
+}
+
+test "codec reads json using metadata rules" {
+    const ApiUser = struct {
+        user_id: u64,
+        display_name: []const u8,
+        password_hash: []const u8 = "redacted",
+
+        pub const zerde = .{
+            .rename_all = .camel_case,
+            .deny_unknown_fields = true,
+            .fields = .{
+                .display_name = .{ .rename = "name" },
+                .password_hash = .{ .skip_deserializing = true },
+            },
+        };
+    };
+
+    var reader: std.Io.Reader = .fixed("{\"userId\":1,\"name\":\"Grant\"}");
+    const value = try Codec(ApiUser).read(std.testing.allocator, &reader, .json);
+    defer Codec(ApiUser).deinit(std.testing.allocator, value);
+
+    try std.testing.expectEqual(@as(u64, 1), value.user_id);
+    try std.testing.expectEqualStrings("Grant", value.display_name);
+    try std.testing.expectEqualStrings("redacted", value.password_hash);
+
+    var unknown_reader: std.Io.Reader = .fixed("{\"userId\":1,\"name\":\"Grant\",\"extra\":true}");
+    try std.testing.expectError(error.UnknownField, Codec(ApiUser).read(std.testing.allocator, &unknown_reader, .json));
+}
+
 test "codec deinit frees json deserialized owned values" {
     const Tag = struct {
         name: []const u8,
@@ -251,4 +300,57 @@ test "codec deinit frees json deserialized owned values" {
     try std.testing.expectEqualStrings("admin", value.tags[0].name);
     try std.testing.expectEqualStrings("ops", value.tags[1].name);
     try std.testing.expectEqualStrings("a", value.nickname.?);
+}
+
+test "codec read and deinit are leak-free for owned json values" {
+    const Child = struct {
+        label: []const u8,
+    };
+    const Value = struct {
+        name: []const u8,
+        children: []const Child,
+        note: ?[]const u8,
+    };
+
+    var reader: std.Io.Reader = .fixed(
+        \\{
+        \\  "name": "root",
+        \\  "children": [{"label":"one"},{"label":"two"}],
+        \\  "note": "owned"
+        \\}
+    );
+    const value = try Codec(Value).read(std.testing.allocator, &reader, .json);
+    defer Codec(Value).deinit(std.testing.allocator, value);
+
+    try std.testing.expectEqualStrings("root", value.name);
+    try std.testing.expectEqual(@as(usize, 2), value.children.len);
+    try std.testing.expectEqualStrings("one", value.children[0].label);
+    try std.testing.expectEqualStrings("two", value.children[1].label);
+    try std.testing.expectEqualStrings("owned", value.note.?);
+}
+
+test "codec schema compiles for supported types" {
+    const Role = enum { admin, user };
+    const Account = struct {
+        account_id: u64,
+        roles: []const Role,
+        nickname: ?[]const u8,
+        enabled: bool = true,
+
+        pub const zerde = .{
+            .rename_all = .camel_case,
+        };
+    };
+
+    const account_schema = comptime Codec(Account).schema();
+    const fields = account_schema.shape.struct_.fields;
+
+    try std.testing.expectEqualStrings(@typeName(Account), account_schema.type_name);
+    try std.testing.expectEqual(@as(usize, 4), fields.len);
+    try std.testing.expectEqualStrings("accountId", fields[0].wire_name);
+    try std.testing.expect(fields[0].required);
+    try std.testing.expectEqual(@as(?usize, null), fields[1].schema.shape.seq.len);
+    try std.testing.expectEqualStrings("admin", fields[1].schema.shape.seq.child.shape.enum_.tags[0]);
+    try std.testing.expect(!fields[2].required);
+    try std.testing.expect(fields[3].has_default);
 }

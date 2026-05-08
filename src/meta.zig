@@ -40,6 +40,7 @@ pub fn optionsFor(comptime T: type) Options {
 
 /// Validates metadata options for `T` at comptime.
 pub fn validate(comptime T: type, comptime options: Options) void {
+    @setEvalBranchQuota(100_000);
     _ = options;
 
     if (!@hasDecl(T, "zerde")) return;
@@ -159,7 +160,7 @@ fn hasField(comptime T: type, comptime field_name: []const u8) bool {
     switch (@typeInfo(T)) {
         .@"struct" => |struct_info| {
             inline for (struct_info.fields) |field| {
-                if (std.mem.eql(u8, field.name, field_name)) return true;
+                if (comptime std.mem.eql(u8, field.name, field_name)) return true;
             }
             return false;
         },

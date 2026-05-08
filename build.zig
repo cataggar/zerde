@@ -21,6 +21,7 @@ pub fn build(b: *std.Build) void {
     addCompileErrorTest(b, test_step, mod, target, optimize, "test/compile_errors/bad_metadata_field.zig", "error: zerde metadata references unknown field 'name' on bad_metadata_field.User");
     addCompileErrorTest(b, test_step, mod, target, optimize, "test/compile_errors/bad_type_option.zig", "error: unknown zerde type metadata option");
     addCompileErrorTest(b, test_step, mod, target, optimize, "test/compile_errors/bad_field_option.zig", "error: unknown zerde metadata for field 'id' option");
+    addCompileErrorTest(b, test_step, mod, target, optimize, "test/compile_errors/human_codec_read.zig", "error: human format is write-only");
 }
 
 fn addCompileErrorTest(
