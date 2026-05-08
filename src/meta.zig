@@ -8,7 +8,18 @@ const rename = @import("rename.zig");
 pub const Options = struct {
     rename_all: rename.RenameRule = .none,
     deny_unknown_fields: bool = false,
+    union_repr: UnionRepr = .external,
 };
+
+/// Supported tagged union wire representations.
+pub const UnionRepr = enum {
+    external,
+    internal,
+    adjacent,
+};
+
+pub const union_tag_field_name = "tag";
+pub const union_content_field_name = "value";
 
 /// Normalized field-level metadata options.
 pub const FieldOptions = struct {
@@ -37,6 +48,9 @@ pub fn optionsFor(comptime T: type) Options {
     if (@hasField(@TypeOf(metadata), "deny_unknown_fields")) {
         options.deny_unknown_fields = @field(metadata, "deny_unknown_fields");
     }
+    if (@hasField(@TypeOf(metadata), "union_repr")) {
+        options.union_repr = @field(metadata, "union_repr");
+    }
 
     return options;
 }
@@ -51,6 +65,7 @@ pub fn validate(comptime T: type, comptime options: Options) void {
     const metadata = T.zerde;
     validateMetadataStruct(@TypeOf(metadata), "type metadata");
     validateKnownOptions(@TypeOf(metadata), .type_metadata, "type metadata");
+    validateUnionOptions(T, metadata);
 
     if (@hasField(@TypeOf(metadata), "fields")) {
         const fields_metadata = @field(metadata, "fields");
@@ -67,6 +82,28 @@ pub fn validate(comptime T: type, comptime options: Options) void {
 
             validateFieldHooks(parseFieldOptions(field_value), "metadata for field '" ++ field_metadata.name ++ "'");
         }
+    }
+}
+
+fn validateUnionOptions(comptime T: type, comptime metadata: anytype) void {
+    if (!@hasField(@TypeOf(metadata), "union_repr")) return;
+
+    switch (@typeInfo(T)) {
+        .@"union" => |union_info| {
+            if (union_info.tag_type == null) {
+                @compileError("zerde union_repr requires a tagged union on " ++ @typeName(T));
+            }
+
+            const repr = @field(metadata, "union_repr");
+            if (repr == .internal) {
+                inline for (union_info.fields) |field| {
+                    if (field.type != void and @typeInfo(field.type) != .@"struct") {
+                        @compileError("zerde internal union_repr requires struct or void variants on " ++ @typeName(T));
+                    }
+                }
+            }
+        },
+        else => @compileError("zerde union_repr is only valid on tagged unions"),
     }
 }
 
@@ -195,7 +232,7 @@ fn countKnownOptions(comptime T: type, comptime allowed: MetadataOptionSet) usiz
 
 fn isKnownOptionName(comptime allowed: MetadataOptionSet, comptime name: []const u8) bool {
     return switch (allowed) {
-        .type_metadata => comptimeEql(name, "rename_all") or comptimeEql(name, "deny_unknown_fields") or comptimeEql(name, "fields"),
+        .type_metadata => comptimeEql(name, "rename_all") or comptimeEql(name, "deny_unknown_fields") or comptimeEql(name, "union_repr") or comptimeEql(name, "fields"),
         .field_metadata => comptimeEql(name, "rename") or comptimeEql(name, "skip") or comptimeEql(name, "skip_serializing") or comptimeEql(name, "skip_deserializing") or comptimeEql(name, "with") or comptimeEql(name, "serialize_with") or comptimeEql(name, "deserialize_with"),
     };
 }
@@ -272,6 +309,17 @@ test "metadata parses type and field options" {
     try std.testing.expectEqual(UnixTimestamp, deserializeHook(timestamp_options).?);
     try std.testing.expectEqualStrings("userId", comptime fieldWireName("user_id", fieldOptionsFor(User, "user_id"), optionsFor(User)));
     try std.testing.expectEqualStrings("password", comptime fieldWireName("password_hash", password_options, optionsFor(User)));
+}
+
+test "metadata parses union representation" {
+    const Event = union(enum) {
+        started: struct { at: u64 },
+        stopped,
+
+        pub const zerde = .{ .union_repr = .internal };
+    };
+
+    try std.testing.expectEqual(UnionRepr.internal, optionsFor(Event).union_repr);
 }
 
 test "metadata parses skip and skip_serializing separately" {

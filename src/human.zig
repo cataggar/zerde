@@ -225,6 +225,38 @@ test "human writes enums as string tags" {
     try expectHuman(Color.green, "\"green\"");
 }
 
+test "human writes tagged unions with external tags" {
+    const Circle = struct { radius: u8 };
+    const Shape = union(enum) {
+        circle: Circle,
+        point,
+    };
+
+    try expectHuman(Shape{ .circle = .{ .radius = 10 } }, "Shape { circle: Circle { radius: 10 } }");
+    try expectHuman(Shape{ .point = {} }, "Shape { point: null }");
+}
+
+test "human writes alternate tagged union representations" {
+    const Circle = struct { radius: u8 };
+    const Adjacent = union(enum) {
+        circle: Circle,
+        point,
+
+        pub const zerde = .{ .union_repr = .adjacent };
+    };
+    const Internal = union(enum) {
+        circle: Circle,
+        point,
+
+        pub const zerde = .{ .union_repr = .internal };
+    };
+
+    try expectHuman(Adjacent{ .circle = .{ .radius = 10 } }, "Adjacent { tag: \"circle\", value: Circle { radius: 10 } }");
+    try expectHuman(Adjacent{ .point = {} }, "Adjacent { tag: \"point\", value: null }");
+    try expectHuman(Internal{ .circle = .{ .radius = 10 } }, "Internal { tag: \"circle\", radius: 10 }");
+    try expectHuman(Internal{ .point = {} }, "Internal { tag: \"point\" }");
+}
+
 test "human writes nested structs in declaration order" {
     const User = struct {
         id: u64,

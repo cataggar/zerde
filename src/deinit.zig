@@ -27,6 +27,17 @@ pub fn deinit(comptime T: type, allocator: std.mem.Allocator, value: T) void {
                 if (!field.is_comptime) deinit(field.type, allocator, @field(value, field.name));
             }
         },
+        .@"union" => |union_info| {
+            if (union_info.tag_type) |_| {
+                const active_name = @tagName(std.meta.activeTag(value));
+                inline for (union_info.fields) |field| {
+                    if (std.mem.eql(u8, active_name, field.name)) {
+                        if (field.type != void) deinit(field.type, allocator, @field(value, field.name));
+                        return;
+                    }
+                }
+            }
+        },
         else => {},
     }
 }
@@ -112,6 +123,20 @@ test "deinit frees slices of owned structs" {
     initialized += 1;
 
     deinit(Value, allocator, .{ .items = items });
+}
+
+test "deinit frees active tagged union payload" {
+    const Shape = union(enum) {
+        label: []const u8,
+        none,
+    };
+
+    const allocator = std.testing.allocator;
+    const label = try allocator.dupe(u8, "owned");
+    errdefer allocator.free(label);
+
+    deinit(Shape, allocator, .{ .label = label });
+    deinit(Shape, allocator, .{ .none = {} });
 }
 
 fn ownedChild(

@@ -991,6 +991,68 @@ test "json writes enums as string tags" {
     try expectJson(Color.green, "\"green\"");
 }
 
+test "json writes tagged unions with external tags" {
+    const Circle = struct { radius: u8 };
+    const Rect = struct { width: u8, height: u8 };
+    const Shape = union(enum) {
+        circle: Circle,
+        rect: Rect,
+        point,
+    };
+
+    try expectJson(Shape{ .circle = .{ .radius = 10 } }, "{\"circle\":{\"radius\":10}}");
+    try expectJson(Shape{ .rect = .{ .width = 3, .height = 4 } }, "{\"rect\":{\"width\":3,\"height\":4}}");
+    try expectJson(Shape{ .point = {} }, "{\"point\":null}");
+}
+
+test "json writes externally tagged unions with varied payload types" {
+    const Shape = union(enum) {
+        count: u8,
+        label: []const u8,
+        scores: []const u16,
+        maybe: ?u8,
+        none,
+    };
+    const scores = [_]u16{ 2, 3, 5 };
+
+    try expectJson(Shape{ .count = 7 }, "{\"count\":7}");
+    try expectJson(Shape{ .label = "home" }, "{\"label\":\"home\"}");
+    try expectJson(Shape{ .scores = scores[0..] }, "{\"scores\":[2,3,5]}");
+    try expectJson(Shape{ .maybe = null }, "{\"maybe\":null}");
+    try expectJson(Shape{ .none = {} }, "{\"none\":null}");
+}
+
+test "json writes adjacently tagged unions" {
+    const Circle = struct { radius: u8 };
+    const Shape = union(enum) {
+        count: u8,
+        circle: Circle,
+        none,
+
+        pub const zerde = .{ .union_repr = .adjacent };
+    };
+
+    try expectJson(Shape{ .count = 7 }, "{\"tag\":\"count\",\"value\":7}");
+    try expectJson(Shape{ .circle = .{ .radius = 10 } }, "{\"tag\":\"circle\",\"value\":{\"radius\":10}}");
+    try expectJson(Shape{ .none = {} }, "{\"tag\":\"none\",\"value\":null}");
+}
+
+test "json writes internally tagged unions" {
+    const Circle = struct { radius: u8 };
+    const Rect = struct { width: u8, height: u8 };
+    const Shape = union(enum) {
+        circle: Circle,
+        rect: Rect,
+        point,
+
+        pub const zerde = .{ .union_repr = .internal };
+    };
+
+    try expectJson(Shape{ .circle = .{ .radius = 10 } }, "{\"tag\":\"circle\",\"radius\":10}");
+    try expectJson(Shape{ .rect = .{ .width = 3, .height = 4 } }, "{\"tag\":\"rect\",\"width\":3,\"height\":4}");
+    try expectJson(Shape{ .point = {} }, "{\"tag\":\"point\"}");
+}
+
 test "json writeAlloc returns owned bytes" {
     const User = struct {
         id: u64,
@@ -1223,6 +1285,142 @@ test "json reads enums as string tags" {
     try std.testing.expectError(error.InvalidEnumTag, readSlice(Color, std.testing.allocator, "\"purple\""));
 }
 
+test "json reads tagged unions with external tags" {
+    const Circle = struct { radius: u8 };
+    const Rect = struct { width: u8, height: u8 };
+    const Shape = union(enum) {
+        circle: Circle,
+        rect: Rect,
+        point,
+    };
+
+    const circle = try readSlice(Shape, std.testing.allocator, "{\"circle\":{\"radius\":10}}");
+    try std.testing.expectEqualDeep(Shape{ .circle = .{ .radius = 10 } }, circle);
+
+    const rect = try readSlice(Shape, std.testing.allocator, "{\"rect\":{\"width\":3,\"height\":4}}");
+    try std.testing.expectEqualDeep(Shape{ .rect = .{ .width = 3, .height = 4 } }, rect);
+
+    const point = try readSlice(Shape, std.testing.allocator, "{\"point\":null}");
+    try std.testing.expectEqualDeep(Shape{ .point = {} }, point);
+
+    try std.testing.expectError(error.UnknownUnionTag, readSlice(Shape, std.testing.allocator, "{\"triangle\":{}}"));
+    try std.testing.expectError(error.DuplicateField, readSlice(Shape, std.testing.allocator, "{\"point\":null,\"circle\":{\"radius\":1}}"));
+    try expectReadFails(Shape, "{\"point\":{}}");
+    try expectReadFails(Shape, "{\"circle\":null}");
+}
+
+test "json reads externally tagged unions with varied payload types" {
+    const Shape = union(enum) {
+        count: u8,
+        label: []const u8,
+        scores: []const u16,
+        maybe: ?u8,
+        none,
+    };
+
+    const count = try readSlice(Shape, std.testing.allocator, "{\"count\":7}");
+    defer deinitValue(Shape, std.testing.allocator, count);
+    try std.testing.expectEqualDeep(Shape{ .count = 7 }, count);
+
+    const label = try readSlice(Shape, std.testing.allocator, "{\"label\":\"home\"}");
+    defer deinitValue(Shape, std.testing.allocator, label);
+    switch (label) {
+        .label => |value| try std.testing.expectEqualStrings("home", value),
+        else => return error.InvalidValue,
+    }
+
+    const scores = try readSlice(Shape, std.testing.allocator, "{\"scores\":[2,3,5]}");
+    defer deinitValue(Shape, std.testing.allocator, scores);
+    switch (scores) {
+        .scores => |value| try std.testing.expectEqualDeep(&[_]u16{ 2, 3, 5 }, value),
+        else => return error.InvalidValue,
+    }
+
+    const maybe = try readSlice(Shape, std.testing.allocator, "{\"maybe\":null}");
+    defer deinitValue(Shape, std.testing.allocator, maybe);
+    try std.testing.expectEqualDeep(Shape{ .maybe = null }, maybe);
+}
+
+test "json reads adjacently tagged unions" {
+    const Circle = struct { radius: u8 };
+    const Shape = union(enum) {
+        count: u8,
+        circle: Circle,
+        none,
+
+        pub const zerde = .{ .union_repr = .adjacent };
+    };
+
+    const count = try readSlice(Shape, std.testing.allocator, "{\"tag\":\"count\",\"value\":7}");
+    try std.testing.expectEqualDeep(Shape{ .count = 7 }, count);
+
+    const circle = try readSlice(Shape, std.testing.allocator, "{\"tag\":\"circle\",\"value\":{\"radius\":10}}");
+    try std.testing.expectEqualDeep(Shape{ .circle = .{ .radius = 10 } }, circle);
+
+    const none = try readSlice(Shape, std.testing.allocator, "{\"tag\":\"none\",\"value\":null}");
+    try std.testing.expectEqualDeep(Shape{ .none = {} }, none);
+
+    try std.testing.expectError(error.UnknownUnionTag, readSlice(Shape, std.testing.allocator, "{\"tag\":\"triangle\",\"value\":{}}"));
+    try std.testing.expectError(error.MissingUnionTag, readSlice(Shape, std.testing.allocator, "{\"value\":7,\"tag\":\"count\"}"));
+    try expectReadFails(Shape, "{\"tag\":\"none\",\"value\":{}}");
+    try expectReadFails(Shape, "{\"tag\":\"circle\",\"value\":null}");
+}
+
+test "json reads internally tagged unions" {
+    const Circle = struct { radius: u8 };
+    const Rect = struct { width: u8, height: u8 };
+    const Shape = union(enum) {
+        circle: Circle,
+        rect: Rect,
+        point,
+
+        pub const zerde = .{ .union_repr = .internal };
+    };
+
+    const circle = try readSlice(Shape, std.testing.allocator, "{\"tag\":\"circle\",\"radius\":10}");
+    try std.testing.expectEqualDeep(Shape{ .circle = .{ .radius = 10 } }, circle);
+
+    const rect = try readSlice(Shape, std.testing.allocator, "{\"tag\":\"rect\",\"width\":3,\"height\":4}");
+    try std.testing.expectEqualDeep(Shape{ .rect = .{ .width = 3, .height = 4 } }, rect);
+
+    const point = try readSlice(Shape, std.testing.allocator, "{\"tag\":\"point\"}");
+    try std.testing.expectEqualDeep(Shape{ .point = {} }, point);
+
+    try std.testing.expectError(error.UnknownUnionTag, readSlice(Shape, std.testing.allocator, "{\"tag\":\"triangle\"}"));
+    try std.testing.expectError(error.MissingUnionTag, readSlice(Shape, std.testing.allocator, "{\"radius\":10,\"tag\":\"circle\"}"));
+}
+
+test "json rejects tagged unions without a tag" {
+    const Shape = union(enum) {
+        circle: struct { radius: u8 },
+        point,
+    };
+
+    try std.testing.expectError(error.MissingUnionTag, readSlice(Shape, std.testing.allocator, "{}"));
+}
+
+test "json reads optional tagged unions" {
+    const Shape = union(enum) {
+        label: []const u8,
+        none,
+    };
+
+    const missing = try readSlice(?Shape, std.testing.allocator, "null");
+    defer deinitValue(?Shape, std.testing.allocator, missing);
+    try std.testing.expect(missing == null);
+
+    const labeled = try readSlice(?Shape, std.testing.allocator, "{\"label\":\"home\"}");
+    defer deinitValue(?Shape, std.testing.allocator, labeled);
+    switch (labeled.?) {
+        .label => |label| try std.testing.expectEqualStrings("home", label),
+        .none => return error.InvalidValue,
+    }
+
+    const none = try readSlice(?Shape, std.testing.allocator, "{\"none\":null}");
+    defer deinitValue(?Shape, std.testing.allocator, none);
+    try std.testing.expectEqualDeep(Shape{ .none = {} }, none.?);
+}
+
 test "json reads structs and nested structs" {
     const User = struct {
         id: u64,
@@ -1249,6 +1447,82 @@ test "json reads structs and nested structs" {
     try std.testing.expect(value.user.active);
     try std.testing.expectEqualDeep([2]u8{ 9, 10 }, value.scores);
     try std.testing.expect(value.nickname == null);
+}
+
+test "json reads tagged union nested in struct" {
+    const Shape = union(enum) {
+        label: []const u8,
+        none,
+    };
+    const Drawing = struct {
+        id: u8,
+        shape: Shape,
+    };
+
+    const value = try readSlice(Drawing, std.testing.allocator, "{\"id\":1,\"shape\":{\"label\":\"home\"}}");
+    defer deinitValue(Drawing, std.testing.allocator, value);
+
+    try std.testing.expectEqual(@as(u8, 1), value.id);
+    switch (value.shape) {
+        .label => |label| try std.testing.expectEqualStrings("home", label),
+        .none => return error.InvalidValue,
+    }
+}
+
+test "json reads tagged unions in slices" {
+    const Shape = union(enum) {
+        label: []const u8,
+        none,
+    };
+
+    const values = try readSlice([]const Shape, std.testing.allocator,
+        \\[
+        \\  {"label":"first"},
+        \\  {"none":null},
+        \\  {"label":"second"}
+        \\]
+    );
+    defer deinitValue([]const Shape, std.testing.allocator, values);
+
+    try std.testing.expectEqual(@as(usize, 3), values.len);
+    switch (values[0]) {
+        .label => |label| try std.testing.expectEqualStrings("first", label),
+        .none => return error.InvalidValue,
+    }
+    try std.testing.expectEqualDeep(Shape{ .none = {} }, values[1]);
+    switch (values[2]) {
+        .label => |label| try std.testing.expectEqualStrings("second", label),
+        .none => return error.InvalidValue,
+    }
+}
+
+test "json reads defaulted tagged union fields" {
+    const Shape = union(enum) {
+        label: []const u8,
+        none,
+    };
+    const Drawing = struct {
+        id: u8,
+        shape: Shape = .{ .label = "default" },
+    };
+
+    const value = try readSlice(Drawing, std.testing.allocator, "{\"id\":1}");
+    defer deinitValue(Drawing, std.testing.allocator, value);
+
+    try std.testing.expectEqual(@as(u8, 1), value.id);
+    switch (value.shape) {
+        .label => |label| try std.testing.expectEqualStrings("default", label),
+        .none => return error.InvalidValue,
+    }
+}
+
+test "json read cleans up tagged union payload on extra tag" {
+    const Shape = union(enum) {
+        label: []const u8,
+        none,
+    };
+
+    try std.testing.expectError(error.DuplicateField, readSlice(Shape, std.testing.allocator, "{\"label\":\"owned\",\"none\":null}"));
 }
 
 test "json reads whitespace-heavy formatted documents" {
@@ -1633,6 +1907,36 @@ test "json compact and pretty roundtrip basic structs" {
     const pretty_parsed = try readSlice(User, std.testing.allocator, pretty);
     defer deinitValue(User, std.testing.allocator, pretty_parsed);
     try std.testing.expectEqualDeep(user, pretty_parsed);
+}
+
+test "json roundtrips tagged unions with owned payloads" {
+    const Shape = union(enum) {
+        label: []const u8,
+        scores: []const u16,
+        none,
+    };
+    const scores = [_]u16{ 2, 3, 5 };
+
+    const labeled = Shape{ .label = "home" };
+    const labeled_bytes = try writeAlloc(std.testing.allocator, labeled);
+    defer std.testing.allocator.free(labeled_bytes);
+    const labeled_parsed = try readSlice(Shape, std.testing.allocator, labeled_bytes);
+    defer deinitValue(Shape, std.testing.allocator, labeled_parsed);
+    try std.testing.expectEqualDeep(labeled, labeled_parsed);
+
+    const scored = Shape{ .scores = scores[0..] };
+    const scored_bytes = try writeAlloc(std.testing.allocator, scored);
+    defer std.testing.allocator.free(scored_bytes);
+    const scored_parsed = try readSlice(Shape, std.testing.allocator, scored_bytes);
+    defer deinitValue(Shape, std.testing.allocator, scored_parsed);
+    try std.testing.expectEqualDeep(scored, scored_parsed);
+
+    const none = Shape{ .none = {} };
+    const none_bytes = try writeAlloc(std.testing.allocator, none);
+    defer std.testing.allocator.free(none_bytes);
+    const none_parsed = try readSlice(Shape, std.testing.allocator, none_bytes);
+    defer deinitValue(Shape, std.testing.allocator, none_parsed);
+    try std.testing.expectEqualDeep(none, none_parsed);
 }
 
 test "json field with hook serializes and deserializes" {

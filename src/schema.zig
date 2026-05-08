@@ -22,6 +22,7 @@ pub const Shape = union(enum) {
     seq: SeqInfo,
     struct_: StructInfo,
     enum_: EnumInfo,
+    union_: UnionInfo,
 };
 
 pub const IntInfo = struct {
@@ -54,6 +55,16 @@ pub const StructInfo = struct {
 
 pub const EnumInfo = struct {
     tags: []const []const u8,
+};
+
+pub const UnionVariantInfo = struct {
+    zig_name: []const u8,
+    schema: ?*const Schema,
+};
+
+pub const UnionInfo = struct {
+    repr: meta.UnionRepr,
+    variants: []const UnionVariantInfo,
 };
 
 /// Builds the internal schema descriptor for `T`.
@@ -112,6 +123,12 @@ fn buildShape(comptime T: type) Shape {
             if (struct_info.is_tuple) unsupported(T);
             comptime meta.validate(T, meta.optionsFor(T));
             break :blk .{ .struct_ = .{ .fields = structFields(T) } };
+        },
+        .@"union" => |union_info| blk: {
+            if (union_info.tag_type == null) unsupported(T);
+            const options = meta.optionsFor(T);
+            comptime meta.validate(T, options);
+            break :blk .{ .union_ = .{ .repr = options.union_repr, .variants = unionVariants(T) } };
         },
         else => unsupported(T),
     };
@@ -185,6 +202,27 @@ fn buildEnumTags(comptime T: type) [@typeInfo(T).@"enum".fields.len][]const u8 {
     return tags;
 }
 
+fn unionVariants(comptime T: type) []const UnionVariantInfo {
+    const Holder = struct {
+        const variants = buildUnionVariants(T);
+    };
+    return &Holder.variants;
+}
+
+fn buildUnionVariants(comptime T: type) [@typeInfo(T).@"union".fields.len]UnionVariantInfo {
+    const union_info = @typeInfo(T).@"union";
+    var variants: [union_info.fields.len]UnionVariantInfo = undefined;
+
+    inline for (union_info.fields, 0..) |field, i| {
+        variants[i] = .{
+            .zig_name = field.name,
+            .schema = if (field.type == void) null else schemaFor(field.type),
+        };
+    }
+
+    return variants;
+}
+
 fn isRequiredField(comptime field: std.builtin.Type.StructField, comptime field_options: meta.FieldOptions) bool {
     if (!meta.shouldDeserialize(field_options)) return false;
     if (field.defaultValue() != null) return false;
@@ -253,4 +291,24 @@ test "schema describes sequences and enums" {
     try std.testing.expectEqual(@as(?usize, null), colors_schema.shape.seq.len);
     try std.testing.expectEqualStrings("red", colors_schema.shape.seq.child.shape.enum_.tags[0]);
     try std.testing.expectEqualStrings("green", colors_schema.shape.seq.child.shape.enum_.tags[1]);
+}
+
+test "schema describes tagged unions" {
+    const Circle = struct { radius: u8 };
+    const Tagged = union(enum) {
+        circle: Circle,
+        point,
+
+        pub const zerde = .{ .union_repr = .adjacent };
+    };
+
+    const shape_schema = forType(Tagged);
+    const union_schema = shape_schema.shape.union_;
+
+    try std.testing.expectEqual(meta.UnionRepr.adjacent, union_schema.repr);
+    try std.testing.expectEqual(@as(usize, 2), union_schema.variants.len);
+    try std.testing.expectEqualStrings("circle", union_schema.variants[0].zig_name);
+    try std.testing.expectEqual(std.meta.Tag(Shape).struct_, std.meta.activeTag(union_schema.variants[0].schema.?.shape));
+    try std.testing.expectEqualStrings("point", union_schema.variants[1].zig_name);
+    try std.testing.expect(union_schema.variants[1].schema == null);
 }

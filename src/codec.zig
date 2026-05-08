@@ -302,6 +302,29 @@ test "codec deinit frees json deserialized owned values" {
     try std.testing.expectEqualStrings("a", value.nickname.?);
 }
 
+test "codec supports tagged union json workflows" {
+    const Shape = union(enum) {
+        label: []const u8,
+        none,
+    };
+    const ShapeSerde = Codec(Shape);
+
+    try expectCodecWrite(Shape, .{ .label = "home" }, .json, "{\"label\":\"home\"}");
+    try expectCodecWrite(Shape, .{ .none = {} }, .human, "Shape { none: null }");
+
+    var reader: std.Io.Reader = .fixed("{\"label\":\"home\"}");
+    const value = try ShapeSerde.read(std.testing.allocator, &reader, .json);
+    defer ShapeSerde.deinit(std.testing.allocator, value);
+
+    switch (value) {
+        .label => |label| try std.testing.expectEqualStrings("home", label),
+        .none => return error.InvalidValue,
+    }
+
+    const schema = comptime ShapeSerde.schema();
+    try std.testing.expectEqual(@as(usize, 2), schema.shape.union_.variants.len);
+}
+
 test "codec read and deinit are leak-free for owned json values" {
     const Child = struct {
         label: []const u8,

@@ -80,69 +80,205 @@ fn deserializeValue(comptime T: type, allocator: std.mem.Allocator, decoder: any
             const options = comptime meta.optionsFor(T);
             comptime meta.validate(T, options);
 
-            var result: T = undefined;
-            var seen = [_]bool{false} ** struct_info.fields.len;
-            var initialized = [_]bool{false} ** struct_info.fields.len;
-            errdefer {
-                inline for (struct_info.fields, 0..) |field, i| {
-                    if (!field.is_comptime and initialized[i]) {
-                        deinit_mod.deinit(field.type, allocator, @field(result, field.name));
-                    }
-                }
-            }
-
             try decoder.beginStruct(T);
-            while (try decoder.nextField()) |field_name| {
-                defer allocator.free(field_name);
-                var matched = false;
+            return try deserializeStructFromFields(T, allocator, decoder);
+        },
+        .@"union" => |union_info| {
+            if (union_info.tag_type == null) unsupported(T);
 
-                inline for (struct_info.fields, 0..) |field, i| {
-                    if (!field.is_comptime) {
-                        const field_options = comptime meta.fieldOptionsFor(T, field.name);
-                        const wire_name = comptime meta.fieldWireName(field.name, field_options, options);
-                        if (!matched and std.mem.eql(u8, field_name, wire_name)) {
-                            if (seen[i]) return error.DuplicateField;
-                            seen[i] = true;
-                            if (comptime meta.shouldDeserialize(field_options)) {
-                                if (comptime meta.deserializeHook(field_options)) |Hook| {
-                                    @field(result, field.name) = try Hook.deserialize(field.type, allocator, decoder);
-                                } else {
-                                    @field(result, field.name) = try deserializeValue(field.type, allocator, decoder);
-                                }
-                                initialized[i] = true;
-                            } else {
-                                try decoder.skipValue();
-                            }
-                            matched = true;
-                        }
-                    }
-                }
+            const options = comptime meta.optionsFor(T);
+            comptime meta.validate(T, options);
 
-                if (!matched) {
-                    if (options.deny_unknown_fields) return error.UnknownField;
-                    try decoder.skipValue();
-                }
-            }
-            try decoder.endStruct();
-
-            inline for (struct_info.fields, 0..) |field, i| {
-                if (!field.is_comptime and !initialized[i]) {
-                    if (field.defaultValue()) |default| {
-                        @field(result, field.name) = try cloneDefaultValue(field.type, allocator, default);
-                        initialized[i] = true;
-                    } else if (comptime isOptional(field.type)) {
-                        @field(result, field.name) = null;
-                        initialized[i] = true;
-                    } else {
-                        return error.MissingField;
-                    }
-                }
-            }
-
-            return result;
+            return switch (comptime options.union_repr) {
+                .external => try deserializeExternalUnion(T, allocator, decoder),
+                .adjacent => try deserializeAdjacentUnion(T, allocator, decoder),
+                .internal => try deserializeInternalUnion(T, allocator, decoder),
+            };
         },
         else => unsupported(T),
     }
+}
+
+fn deserializeStructFromFields(comptime T: type, allocator: std.mem.Allocator, decoder: anytype) !T {
+    const struct_info = @typeInfo(T).@"struct";
+    const options = comptime meta.optionsFor(T);
+
+    var result: T = undefined;
+    var seen = [_]bool{false} ** struct_info.fields.len;
+    var initialized = [_]bool{false} ** struct_info.fields.len;
+    errdefer {
+        inline for (struct_info.fields, 0..) |field, i| {
+            if (!field.is_comptime and initialized[i]) {
+                deinit_mod.deinit(field.type, allocator, @field(result, field.name));
+            }
+        }
+    }
+
+    while (try decoder.nextField()) |field_name| {
+        defer allocator.free(field_name);
+        var matched = false;
+
+        inline for (struct_info.fields, 0..) |field, i| {
+            if (!field.is_comptime) {
+                const field_options = comptime meta.fieldOptionsFor(T, field.name);
+                const wire_name = comptime meta.fieldWireName(field.name, field_options, options);
+                if (!matched and std.mem.eql(u8, field_name, wire_name)) {
+                    if (seen[i]) return error.DuplicateField;
+                    seen[i] = true;
+                    if (comptime meta.shouldDeserialize(field_options)) {
+                        if (comptime meta.deserializeHook(field_options)) |Hook| {
+                            @field(result, field.name) = try Hook.deserialize(field.type, allocator, decoder);
+                        } else {
+                            @field(result, field.name) = try deserializeValue(field.type, allocator, decoder);
+                        }
+                        initialized[i] = true;
+                    } else {
+                        try decoder.skipValue();
+                    }
+                    matched = true;
+                }
+            }
+        }
+
+        if (!matched) {
+            if (options.deny_unknown_fields) return error.UnknownField;
+            try decoder.skipValue();
+        }
+    }
+    try decoder.endStruct();
+
+    inline for (struct_info.fields, 0..) |field, i| {
+        if (!field.is_comptime and !initialized[i]) {
+            if (field.defaultValue()) |default| {
+                @field(result, field.name) = try cloneDefaultValue(field.type, allocator, default);
+                initialized[i] = true;
+            } else if (comptime isOptional(field.type)) {
+                @field(result, field.name) = null;
+                initialized[i] = true;
+            } else {
+                return error.MissingField;
+            }
+        }
+    }
+
+    return result;
+}
+
+fn deserializeExternalUnion(comptime T: type, allocator: std.mem.Allocator, decoder: anytype) !T {
+    const union_info = @typeInfo(T).@"union";
+
+    try decoder.beginStruct(T);
+    const field_name = (try decoder.nextField()) orelse return error.MissingUnionTag;
+    defer allocator.free(field_name);
+
+    inline for (union_info.fields) |field| {
+        if (std.mem.eql(u8, field_name, field.name)) {
+            const result = try deserializeUnionPayload(T, field, allocator, decoder);
+            errdefer deinit_mod.deinit(T, allocator, result);
+
+            if (try decoder.nextField()) |extra_name| {
+                defer allocator.free(extra_name);
+                try decoder.skipValue();
+                return error.DuplicateField;
+            }
+            try decoder.endStruct();
+            return result;
+        }
+    }
+
+    try decoder.skipValue();
+    return error.UnknownUnionTag;
+}
+
+fn deserializeAdjacentUnion(comptime T: type, allocator: std.mem.Allocator, decoder: anytype) !T {
+    const union_info = @typeInfo(T).@"union";
+
+    try decoder.beginStruct(T);
+    const tag_field = (try decoder.nextField()) orelse return error.MissingUnionTag;
+    defer allocator.free(tag_field);
+    if (!std.mem.eql(u8, tag_field, meta.union_tag_field_name)) {
+        try decoder.skipValue();
+        return error.MissingUnionTag;
+    }
+
+    const tag = try decoder.readString(allocator);
+    defer allocator.free(tag);
+
+    const content_field = (try decoder.nextField()) orelse return error.MissingField;
+    defer allocator.free(content_field);
+    if (!std.mem.eql(u8, content_field, meta.union_content_field_name)) {
+        try decoder.skipValue();
+        return error.MissingField;
+    }
+
+    inline for (union_info.fields) |field| {
+        if (std.mem.eql(u8, tag, field.name)) {
+            const result = try deserializeUnionPayload(T, field, allocator, decoder);
+            errdefer deinit_mod.deinit(T, allocator, result);
+
+            if (try decoder.nextField()) |extra_name| {
+                defer allocator.free(extra_name);
+                try decoder.skipValue();
+                return error.DuplicateField;
+            }
+            try decoder.endStruct();
+            return result;
+        }
+    }
+
+    try decoder.skipValue();
+    return error.UnknownUnionTag;
+}
+
+fn deserializeInternalUnion(comptime T: type, allocator: std.mem.Allocator, decoder: anytype) !T {
+    const union_info = @typeInfo(T).@"union";
+
+    try decoder.beginStruct(T);
+    const tag_field = (try decoder.nextField()) orelse return error.MissingUnionTag;
+    defer allocator.free(tag_field);
+    if (!std.mem.eql(u8, tag_field, meta.union_tag_field_name)) {
+        try decoder.skipValue();
+        return error.MissingUnionTag;
+    }
+
+    const tag = try decoder.readString(allocator);
+    defer allocator.free(tag);
+
+    inline for (union_info.fields) |field| {
+        if (std.mem.eql(u8, tag, field.name)) {
+            if (field.type == void) {
+                if (try decoder.nextField()) |extra_name| {
+                    defer allocator.free(extra_name);
+                    try decoder.skipValue();
+                    return error.UnknownField;
+                }
+                try decoder.endStruct();
+                return @unionInit(T, field.name, {});
+            }
+
+            const payload = try deserializeStructFromFields(field.type, allocator, decoder);
+            errdefer deinit_mod.deinit(field.type, allocator, payload);
+            return @unionInit(T, field.name, payload);
+        }
+    }
+
+    while (try decoder.nextField()) |extra_name| {
+        defer allocator.free(extra_name);
+        try decoder.skipValue();
+    }
+    try decoder.endStruct();
+    return error.UnknownUnionTag;
+}
+
+fn deserializeUnionPayload(comptime T: type, comptime field: std.builtin.Type.UnionField, allocator: std.mem.Allocator, decoder: anytype) !T {
+    if (field.type == void) {
+        try decoder.readNull();
+        return @unionInit(T, field.name, {});
+    }
+
+    const payload = try deserializeValue(field.type, allocator, decoder);
+    errdefer deinit_mod.deinit(field.type, allocator, payload);
+    return @unionInit(T, field.name, payload);
 }
 
 fn hasTypeDeserializeHook(comptime T: type) bool {
@@ -209,6 +345,21 @@ fn cloneDefaultValue(comptime T: type, allocator: std.mem.Allocator, value: T) !
             }
 
             return result;
+        },
+        .@"union" => |union_info| {
+            if (union_info.tag_type == null) unsupported(T);
+
+            const active_name = @tagName(std.meta.activeTag(value));
+            inline for (union_info.fields) |field| {
+                if (std.mem.eql(u8, active_name, field.name)) {
+                    if (field.type == void) return @unionInit(T, field.name, {});
+
+                    const payload = try cloneDefaultValue(field.type, allocator, @field(value, field.name));
+                    errdefer deinit_mod.deinit(field.type, allocator, payload);
+                    return @unionInit(T, field.name, payload);
+                }
+            }
+            unreachable;
         },
         else => unsupported(T),
     }
