@@ -148,7 +148,13 @@ test "codec writes toml equivalent to format api" {
     try Codec(User).write(&codec_writer, user, .toml);
 
     try std.testing.expectEqualStrings(format_writer.buffered(), codec_writer.buffered());
-    try std.testing.expectEqualStrings("id = 1\nname = \"Grant\"\nactive = true", codec_writer.buffered());
+    try std.testing.expectEqualStrings(
+        \\id = 1
+        \\name = "Grant"
+        \\active = true
+    ,
+        codec_writer.buffered(),
+    );
 }
 
 test "codec writes supported values through both milestone 3 formats" {
@@ -278,7 +284,11 @@ test "codec reads toml equivalent to format api" {
         name: []const u8,
         active: bool,
     };
-    const input = "id = 1\nname = \"Grant\"\nactive = true";
+    const input =
+        \\id = 1
+        \\name = "Grant"
+        \\active = true
+    ;
 
     const format_value = try toml.readSlice(User, std.testing.allocator, input);
     defer deinitValue(User, std.testing.allocator, format_value);

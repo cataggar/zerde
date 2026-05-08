@@ -5,6 +5,15 @@ const std = @import("std");
 const serialize = @import("serialize.zig").serialize;
 const deserialize = @import("deserialize.zig").deserialize;
 const deinitValue = @import("deinit.zig").deinit;
+const number = @import("number.zig");
+
+const JsonNumber = number.Parser(.{
+    .decimal_float = true,
+    .exponent = true,
+    .strip_leading_positive_sign = false,
+    .integer_to_float = true,
+    .finite_float_emission = true,
+});
 
 /// JSON writer configuration.
 pub const WriteOptions = struct {
@@ -105,11 +114,6 @@ pub const Decoder = struct {
         first: bool = true,
     };
 
-    const Number = struct {
-        bytes: []u8,
-        is_float: bool,
-    };
-
     reader: *std.Io.Reader,
     allocator: std.mem.Allocator,
     stack: [max_depth]Frame = undefined,
@@ -150,21 +154,18 @@ pub const Decoder = struct {
     }
 
     pub fn readInt(self: *Self, comptime T: type) !T {
-        const number = try self.readNumber();
-        defer self.allocator.free(number.bytes);
-        if (number.is_float) return error.InvalidType;
-        if (@typeInfo(T).int.signedness == .unsigned and number.bytes.len != 0 and number.bytes[0] == '-') return error.InvalidValue;
-
-        return std.fmt.parseInt(T, number.bytes, 10) catch |err| switch (err) {
-            error.Overflow => error.IntegerOverflow,
-            error.InvalidCharacter => error.InvalidValue,
+        const token = try self.readNumber();
+        defer token.deinit(self.allocator);
+        return switch (token) {
+            .int => |integer| try JsonNumber.readInt(T, integer),
+            .float => error.InvalidType,
         };
     }
 
     pub fn readFloat(self: *Self, comptime T: type) !T {
-        const number = try self.readNumber();
-        defer self.allocator.free(number.bytes);
-        return std.fmt.parseFloat(T, number.bytes) catch error.InvalidValue;
+        const token = try self.readNumber();
+        defer token.deinit(self.allocator);
+        return try JsonNumber.readFloat(T, token);
     }
 
     pub fn readString(self: *Self, allocator: std.mem.Allocator) ![]u8 {
@@ -253,12 +254,12 @@ pub const Decoder = struct {
             .null => try self.readNull(),
             .bool => _ = try self.readBool(),
             .int => {
-                const number = try self.readNumber();
-                self.allocator.free(number.bytes);
+                const token = try self.readNumber();
+                token.deinit(self.allocator);
             },
             .float => {
-                const number = try self.readNumber();
-                self.allocator.free(number.bytes);
+                const token = try self.readNumber();
+                token.deinit(self.allocator);
             },
             .string => {
                 const value = try self.readString(self.allocator);
@@ -322,12 +323,11 @@ pub const Decoder = struct {
         };
     }
 
-    fn readNumber(self: *Self) !Number {
+    fn readNumber(self: *Self) !number.Token {
         try self.skipWhitespace();
 
         var out = std.Io.Writer.Allocating.init(self.allocator);
         errdefer out.deinit();
-        var is_float = false;
 
         if (try self.consumeIf('-')) try out.writer.writeByte('-');
 
@@ -347,14 +347,12 @@ pub const Decoder = struct {
         }
 
         if (try self.consumeIf('.')) {
-            is_float = true;
             try out.writer.writeByte('.');
             try self.readDigits(&out.writer);
         }
 
         if (try self.peekByte()) |byte| {
             if (byte == 'e' or byte == 'E') {
-                is_float = true;
                 try out.writer.writeByte(try self.reader.takeByte());
                 if (try self.peekByte()) |sign| {
                     if (sign == '+' or sign == '-') try out.writer.writeByte(try self.reader.takeByte());
@@ -363,7 +361,11 @@ pub const Decoder = struct {
             }
         }
 
-        return .{ .bytes = try out.toOwnedSlice(), .is_float = is_float };
+        const bytes = try out.toOwnedSlice();
+        return JsonNumber.parseOwned(self.allocator, bytes) catch |err| switch (err) {
+            error.InvalidNumberSyntax => error.InvalidJsonSyntax,
+            else => |e| return e,
+        };
     }
 
     fn peekNumberKind(self: *Self) !Kind {
@@ -526,12 +528,7 @@ pub const Encoder = struct {
 
     /// Emits a JSON number from a finite float.
     pub fn emitFloat(self: *Self, value: anytype) !void {
-        const Float = switch (@typeInfo(@TypeOf(value))) {
-            .comptime_float => f64,
-            else => @TypeOf(value),
-        };
-        const finite_value: Float = value;
-        if (!std.math.isFinite(finite_value)) return error.InvalidJsonFloat;
+        try JsonNumber.emitFloat(value);
 
         try self.beforeValue();
         try self.writer.print("{d}", .{value});
@@ -781,14 +778,16 @@ test "json pretty writes arrays and structs with default indent" {
         .id = 1,
         .name = "Grant",
         .scores = .{ 9, 10 },
-    }, .{ .pretty = true }, "{\n" ++
-        "  \"id\": 1,\n" ++
-        "  \"name\": \"Grant\",\n" ++
-        "  \"scores\": [\n" ++
-        "    9,\n" ++
-        "    10\n" ++
-        "  ]\n" ++
-        "}");
+    }, .{ .pretty = true },
+        \\{
+        \\  "id": 1,
+        \\  "name": "Grant",
+        \\  "scores": [
+        \\    9,
+        \\    10
+        \\  ]
+        \\}
+    );
 }
 
 test "json pretty supports custom numeric indent" {
@@ -796,12 +795,14 @@ test "json pretty supports custom numeric indent" {
         values: [2]u8,
     };
 
-    try expectJsonWithOptions(Nested{ .values = .{ 1, 2 } }, .{ .pretty = true, .indent = 4 }, "{\n" ++
-        "    \"values\": [\n" ++
-        "        1,\n" ++
-        "        2\n" ++
-        "    ]\n" ++
-        "}");
+    try expectJsonWithOptions(Nested{ .values = .{ 1, 2 } }, .{ .pretty = true, .indent = 4 },
+        \\{
+        \\    "values": [
+        \\        1,
+        \\        2
+        \\    ]
+        \\}
+    );
 }
 
 test "json pretty keeps empty containers compact" {
@@ -811,19 +812,23 @@ test "json pretty keeps empty containers compact" {
         empty_struct: Empty,
     };
 
-    try expectJsonWithOptions(Container{ .empty_array = .{}, .empty_struct = .{} }, .{ .pretty = true }, "{\n" ++
-        "  \"empty_array\": [],\n" ++
-        "  \"empty_struct\": {}\n" ++
-        "}");
+    try expectJsonWithOptions(Container{ .empty_array = .{}, .empty_struct = .{} }, .{ .pretty = true },
+        \\{
+        \\  "empty_array": [],
+        \\  "empty_struct": {}
+        \\}
+    );
 }
 
 test "json pretty supports zero-space indent and root arrays" {
     const values = [_]u16{ 1, 2 };
 
-    try expectJsonWithOptions(values, .{ .pretty = true, .indent = 0 }, "[\n" ++
-        "1,\n" ++
-        "2\n" ++
-        "]");
+    try expectJsonWithOptions(values, .{ .pretty = true, .indent = 0 },
+        \\[
+        \\1,
+        \\2
+        \\]
+    );
 }
 
 test "json pretty handles nested empty and non-empty containers" {
@@ -834,14 +839,16 @@ test "json pretty handles nested empty and non-empty containers" {
         more_empty: [0]u8,
     };
 
-    try expectJsonWithOptions(Nested{ .empty = .{}, .values = .{ 1, 2 }, .more_empty = .{} }, .{ .pretty = true }, "{\n" ++
-        "  \"empty\": {},\n" ++
-        "  \"values\": [\n" ++
-        "    1,\n" ++
-        "    2\n" ++
-        "  ],\n" ++
-        "  \"more_empty\": []\n" ++
-        "}");
+    try expectJsonWithOptions(Nested{ .empty = .{}, .values = .{ 1, 2 }, .more_empty = .{} }, .{ .pretty = true },
+        \\{
+        \\  "empty": {},
+        \\  "values": [
+        \\    1,
+        \\    2
+        \\  ],
+        \\  "more_empty": []
+        \\}
+    );
 }
 
 test "json writes structs and nested structs" {
@@ -1083,10 +1090,11 @@ test "json writeAllocWithOptions returns pretty owned bytes" {
     defer std.testing.allocator.free(bytes);
 
     try std.testing.expectEqualStrings(
-        "{\n" ++
-            " \"id\": 1,\n" ++
-            " \"name\": \"Grant\"\n" ++
-            "}",
+        \\{
+        \\ "id": 1,
+        \\ "name": "Grant"
+        \\}
+    ,
         bytes,
     );
 }

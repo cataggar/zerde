@@ -6,6 +6,18 @@ const serialize = @import("serialize.zig").serialize;
 const deserialize = @import("deserialize.zig").deserialize;
 const deinitValue = @import("deinit.zig").deinit;
 const datetime = @import("datetime.zig");
+const number = @import("number.zig");
+
+const TomlNumber = number.Parser(.{
+    .decimal_float = true,
+    .exponent = true,
+    .sign = .positive_and_negative,
+    .digit_separator = '_',
+    .prefixed_integers = .{ .binary = true, .octal = true, .hex = true },
+    .special_floats = true,
+    .integer_bounds = .{ .min = std.math.minInt(i64), .max = @intCast(std.math.maxInt(i64)) },
+    .integer_to_float = true,
+});
 
 /// TOML writer configuration.
 pub const WriteLayout = enum {
@@ -544,13 +556,7 @@ pub const Decoder = struct {
     pub fn readInt(self: *Self, comptime T: type) !T {
         const value = try self.consumeValue();
         return switch (value.*) {
-            .int => |integer| blk: {
-                if (@typeInfo(T).int.signedness == .unsigned and integer.bytes.len != 0 and integer.bytes[0] == '-') return error.InvalidValue;
-                break :blk std.fmt.parseInt(T, integer.bytes, integer.base) catch |err| switch (err) {
-                    error.Overflow => error.IntegerOverflow,
-                    error.InvalidCharacter => error.InvalidValue,
-                };
-            },
+            .int => |integer| try TomlNumber.readInt(T, integer),
             else => error.InvalidType,
         };
     }
@@ -558,8 +564,8 @@ pub const Decoder = struct {
     pub fn readFloat(self: *Self, comptime T: type) !T {
         const value = try self.consumeValue();
         return switch (value.*) {
-            .float => |bytes| std.fmt.parseFloat(T, bytes) catch error.InvalidValue,
-            .int => |integer| try integerToFloat(T, integer),
+            .float => |bytes| try TomlNumber.readFloat(T, .{ .float = bytes }),
+            .int => |integer| try TomlNumber.readFloat(T, .{ .int = integer }),
             else => error.InvalidType,
         };
     }
@@ -709,10 +715,7 @@ const Table = struct {
     }
 };
 
-const Integer = struct {
-    bytes: []u8,
-    base: u8,
-};
+const Integer = number.Integer;
 
 const Value = union(enum) {
     bool: bool,
@@ -954,55 +957,14 @@ const Parser = struct {
     }
 
     fn parseNumberToken(self: *Parser, raw: []const u8) !Value {
-        if (isSpecialFloat(raw)) {
-            const normalized = try normalizeSpecialFloat(self.allocator, raw);
-            errdefer self.allocator.free(normalized);
-            _ = std.fmt.parseFloat(f64, normalized) catch return error.InvalidValue;
-            return .{ .float = normalized };
-        }
-
-        if (raw.len >= 3 and raw[0] == '0' and raw[1] == 'x') return try self.parsePrefixedInteger(raw[2..], 16);
-        if (raw.len >= 3 and raw[0] == '0' and raw[1] == 'o') return try self.parsePrefixedInteger(raw[2..], 8);
-        if (raw.len >= 3 and raw[0] == '0' and raw[1] == 'b') return try self.parsePrefixedInteger(raw[2..], 2);
-
-        if (std.mem.indexOfAny(u8, raw, ".eE") != null) return try self.parseDecimalFloat(raw);
-        return try self.parseDecimalInteger(raw);
-    }
-
-    fn parsePrefixedInteger(self: *Parser, digits: []const u8, base: u8) !Value {
-        if (!validDigitRun(digits, base)) return error.InvalidTomlSyntax;
-        const normalized = try removeUnderscores(self.allocator, digits);
-        errdefer self.allocator.free(normalized);
-        const parsed = std.fmt.parseInt(u64, normalized, base) catch |err| switch (err) {
-            error.Overflow => return error.IntegerOverflow,
-            error.InvalidCharacter => return error.InvalidValue,
+        const token = TomlNumber.parseAlloc(self.allocator, raw) catch |err| switch (err) {
+            error.InvalidNumberSyntax => return error.InvalidTomlSyntax,
+            else => |e| return e,
         };
-        if (parsed > @as(u64, @intCast(std.math.maxInt(i64)))) return error.IntegerOverflow;
-        return .{ .int = .{ .bytes = normalized, .base = base } };
-    }
-
-    fn parseDecimalInteger(self: *Parser, raw: []const u8) !Value {
-        var index: usize = 0;
-        if (raw[index] == '+' or raw[index] == '-') index += 1;
-        if (index == raw.len) return error.InvalidTomlSyntax;
-        if (!validDigitRun(raw[index..], 10)) return error.InvalidTomlSyntax;
-        if (hasInvalidLeadingZero(raw[index..])) return error.InvalidTomlSyntax;
-
-        const normalized = try normalizeDecimalNumber(self.allocator, raw);
-        errdefer self.allocator.free(normalized);
-        _ = std.fmt.parseInt(i64, normalized, 10) catch |err| switch (err) {
-            error.Overflow => return error.IntegerOverflow,
-            error.InvalidCharacter => return error.InvalidValue,
+        return switch (token) {
+            .int => |integer| .{ .int = integer },
+            .float => |bytes| .{ .float = bytes },
         };
-        return .{ .int = .{ .bytes = normalized, .base = 10 } };
-    }
-
-    fn parseDecimalFloat(self: *Parser, raw: []const u8) !Value {
-        if (!validDecimalFloat(raw)) return error.InvalidTomlSyntax;
-        const normalized = try normalizeDecimalNumber(self.allocator, raw);
-        errdefer self.allocator.free(normalized);
-        _ = std.fmt.parseFloat(f64, normalized) catch return error.InvalidValue;
-        return .{ .float = normalized };
     }
 
     fn parseDateTimeValue(allocator: std.mem.Allocator, raw: []const u8) !Value {
@@ -1582,119 +1544,6 @@ fn writeEscapedTomlByte(writer: *std.Io.Writer, value: []const u8, run_start: *u
     run_start.* = index + 1;
 }
 
-fn integerToFloat(comptime T: type, integer: Integer) !T {
-    if (integer.bytes.len != 0 and integer.bytes[0] == '-') {
-        const value = std.fmt.parseInt(i128, integer.bytes, integer.base) catch return error.InvalidValue;
-        return @floatFromInt(value);
-    }
-    const value = std.fmt.parseInt(u128, integer.bytes, integer.base) catch return error.InvalidValue;
-    return @floatFromInt(value);
-}
-
-fn validDigitRun(bytes: []const u8, base: u8) bool {
-    if (bytes.len == 0) return false;
-    var prev_was_digit = false;
-    var saw_digit = false;
-    for (bytes) |byte| {
-        if (byte == '_') {
-            if (!prev_was_digit) return false;
-            prev_was_digit = false;
-            continue;
-        }
-        if (digitValue(byte, base) == null) return false;
-        prev_was_digit = true;
-        saw_digit = true;
-    }
-    return saw_digit and prev_was_digit;
-}
-
-fn hasInvalidLeadingZero(digits: []const u8) bool {
-    if (digits[0] != '0') return false;
-    var count: usize = 0;
-    for (digits) |byte| {
-        if (byte != '_') count += 1;
-    }
-    return count > 1;
-}
-
-fn validDecimalFloat(raw: []const u8) bool {
-    var index: usize = 0;
-    if (raw[index] == '+' or raw[index] == '-') index += 1;
-    if (index == raw.len) return false;
-
-    const int_start = index;
-    if (!consumeDigitRun(raw, &index, 10)) return false;
-    if (hasInvalidLeadingZero(raw[int_start..index])) return false;
-
-    var saw_dot_or_exp = false;
-    if (index < raw.len and raw[index] == '.') {
-        saw_dot_or_exp = true;
-        index += 1;
-        if (!consumeDigitRun(raw, &index, 10)) return false;
-    }
-
-    if (index < raw.len and (raw[index] == 'e' or raw[index] == 'E')) {
-        saw_dot_or_exp = true;
-        index += 1;
-        if (index < raw.len and (raw[index] == '+' or raw[index] == '-')) index += 1;
-        if (!consumeDigitRun(raw, &index, 10)) return false;
-    }
-
-    return saw_dot_or_exp and index == raw.len;
-}
-
-fn consumeDigitRun(raw: []const u8, index: *usize, base: u8) bool {
-    const start = index.*;
-    while (index.* < raw.len) {
-        const byte = raw[index.*];
-        if (byte == '_') {
-            index.* += 1;
-            continue;
-        }
-        if (digitValue(byte, base) == null) break;
-        index.* += 1;
-    }
-    return validDigitRun(raw[start..index.*], base);
-}
-
-fn removeUnderscores(allocator: std.mem.Allocator, bytes: []const u8) ![]u8 {
-    var out = std.Io.Writer.Allocating.init(allocator);
-    errdefer out.deinit();
-    for (bytes) |byte| if (byte != '_') try out.writer.writeByte(byte);
-    return try out.toOwnedSlice();
-}
-
-fn normalizeDecimalNumber(allocator: std.mem.Allocator, bytes: []const u8) ![]u8 {
-    var out = std.Io.Writer.Allocating.init(allocator);
-    errdefer out.deinit();
-    for (bytes, 0..) |byte, i| {
-        if (byte == '_' or (byte == '+' and i == 0)) continue;
-        try out.writer.writeByte(byte);
-    }
-    return try out.toOwnedSlice();
-}
-
-fn isSpecialFloat(raw: []const u8) bool {
-    const body = if (raw.len != 0 and (raw[0] == '+' or raw[0] == '-')) raw[1..] else raw;
-    return std.mem.eql(u8, body, "inf") or std.mem.eql(u8, body, "nan");
-}
-
-fn normalizeSpecialFloat(allocator: std.mem.Allocator, raw: []const u8) ![]u8 {
-    if (raw.len != 0 and raw[0] == '+') return try allocator.dupe(u8, raw[1..]);
-    return try allocator.dupe(u8, raw);
-}
-
-fn digitValue(byte: u8, base: u8) ?u8 {
-    const value: u8 = switch (byte) {
-        '0'...'9' => byte - '0',
-        'a'...'f' => byte - 'a' + 10,
-        'A'...'F' => byte - 'A' + 10,
-        else => return null,
-    };
-    if (value >= base) return null;
-    return value;
-}
-
 fn expectToml(value: anytype, expected: []const u8) !void {
     var buffer: [2048]u8 = undefined;
     var writer: std.Io.Writer = .fixed(&buffer);
@@ -1735,9 +1584,10 @@ test "toml writes root structs" {
     };
 
     try expectToml(User{ .id = 1, .name = "Grant", .active = true },
-        "id = 1\n" ++
-            "name = \"Grant\"\n" ++
-            "active = true");
+        \\id = 1
+        \\name = "Grant"
+        \\active = true
+    );
 }
 
 test "toml writes strings arrays and nested structs" {
@@ -1757,9 +1607,10 @@ test "toml writes strings arrays and nested structs" {
         .scores = .{ 9, 10 },
         .profile = .{ .bio = "Zig", .tags = tags[0..] },
     },
-        "name = \"quote: \\\" slash: \\\\ newline:\\n\"\n" ++
-            "scores = [9, 10]\n" ++
-            "profile = { bio = \"Zig\", tags = [\"admin\", \"ops\"] }");
+        \\name = "quote: \" slash: \\ newline:\n"
+        \\scores = [9, 10]
+        \\profile = { bio = "Zig", tags = ["admin", "ops"] }
+    );
 }
 
 test "toml writes metadata renamed and skipped fields" {
@@ -1778,8 +1629,9 @@ test "toml writes metadata renamed and skipped fields" {
     };
 
     try expectToml(ApiUser{ .user_id = 1, .display_name = "Grant", .password_hash = "secret" },
-        "userId = 1\n" ++
-            "name = \"Grant\"");
+        \\userId = 1
+        \\name = "Grant"
+    );
 }
 
 test "toml rejects unsupported root values and nulls" {
@@ -1963,15 +1815,16 @@ test "toml writes and reads arrays of tables" {
     const config = Config{ .name = "prod", .servers = servers[0..] };
 
     try expectTomlWithOptions(config, .{ .layout = .sections },
-        "name = \"prod\"\n" ++
-            "\n" ++
-            "[[servers]]\n" ++
-            "host = \"one.example.com\"\n" ++
-            "port = 8001\n" ++
-            "\n" ++
-            "[[servers]]\n" ++
-            "host = \"two.example.com\"\n" ++
-            "port = 8002");
+        \\name = "prod"
+        \\
+        \\[[servers]]
+        \\host = "one.example.com"
+        \\port = 8001
+        \\
+        \\[[servers]]
+        \\host = "two.example.com"
+        \\port = 8002
+    );
 
     const parsed = try readSlice(Config, std.testing.allocator,
         \\name = "prod"
@@ -2038,9 +1891,20 @@ test "toml reads multiline basic and literal strings" {
     );
     defer deinitValue(Document, std.testing.allocator, parsed);
 
-    try std.testing.expectEqualStrings("first line\nsecond\nline", parsed.basic);
+    try std.testing.expectEqualStrings(
+        \\first line
+        \\second
+        \\line
+    ,
+        parsed.basic,
+    );
     try std.testing.expectEqualStrings("one two", parsed.folded);
-    try std.testing.expectEqualStrings("raw \\ stays raw\nand ' quotes are fine", parsed.literal);
+    try std.testing.expectEqualStrings(
+        \\raw \ stays raw
+        \\and ' quotes are fine
+    ,
+        parsed.literal,
+    );
 }
 
 test "toml rejects malformed multiline strings" {
@@ -2149,14 +2013,15 @@ test "toml writes nested structs as table sections" {
         .database = .{ .host = "localhost", .port = 5432 },
         .logging = .{ .level = "debug" },
     }, .{ .layout = .sections },
-        "name = \"app\"\n" ++
-            "\n" ++
-            "[database]\n" ++
-            "host = \"localhost\"\n" ++
-            "port = 5432\n" ++
-            "\n" ++
-            "[logging]\n" ++
-            "level = \"debug\"");
+        \\name = "app"
+        \\
+        \\[database]
+        \\host = "localhost"
+        \\port = 5432
+        \\
+        \\[logging]
+        \\level = "debug"
+    );
 }
 
 test "toml write streams arrays of structs inline" {
@@ -2172,8 +2037,7 @@ test "toml write streams arrays of structs inline" {
         .{ .host = "two", .port = 2 },
     };
 
-    try expectToml(Config{ .servers = servers[0..] },
-        "servers = [{ host = \"one\", port = 1 }, { host = \"two\", port = 2 }]");
+    try expectToml(Config{ .servers = servers[0..] }, "servers = [{ host = \"one\", port = 1 }, { host = \"two\", port = 2 }]");
 }
 
 test "toml serializes and deserializes first-class date time values" {
@@ -2192,10 +2056,11 @@ test "toml serializes and deserializes first-class date time values" {
     };
 
     try expectToml(event,
-        "date = 1979-05-27\n" ++
-            "time = 07:32:00.999\n" ++
-            "local = 1979-05-27T07:32:00\n" ++
-            "offset = 1979-05-27T07:32:00-07:00");
+        \\date = 1979-05-27
+        \\time = 07:32:00.999
+        \\local = 1979-05-27T07:32:00
+        \\offset = 1979-05-27T07:32:00-07:00
+    );
 
     const parsed = try readSlice(Event, std.testing.allocator,
         \\date = 1979-05-27
@@ -2216,7 +2081,10 @@ test "toml low-level decoder works with deserialize" {
         name: []const u8,
     };
 
-    var reader: std.Io.Reader = .fixed("id = 7\nname = \"Ada\"");
+    var reader: std.Io.Reader = .fixed(
+        \\id = 7
+        \\name = "Ada"
+    );
     var dec = try decoder(&reader, std.testing.allocator);
     defer dec.deinit();
 
@@ -2266,5 +2134,8 @@ test "toml reader rejects malformed input" {
     try std.testing.expectError(error.UnknownField, readSlice(struct {
         id: u8,
         pub const zerde = .{ .deny_unknown_fields = true };
-    }, std.testing.allocator, "id = 1\nextra = true"));
+    }, std.testing.allocator,
+        \\id = 1
+        \\extra = true
+    ));
 }

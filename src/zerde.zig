@@ -6,6 +6,8 @@ pub const json = @import("json.zig");
 pub const toml = @import("toml.zig");
 /// Human-readable format API.
 pub const human = @import("human.zig");
+/// Shared numeric parsing and conversion helpers.
+pub const number = @import("number.zig");
 
 /// Type-specialized codec namespace factory.
 pub const Codec = @import("codec.zig").Codec;
@@ -23,6 +25,7 @@ test {
     _ = json;
     _ = toml;
     _ = human;
+    _ = number;
     _ = @import("datetime.zig");
     _ = Codec;
     _ = Format;
