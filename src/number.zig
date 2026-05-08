@@ -2,48 +2,80 @@
 
 const std = @import("std");
 
+/// Allowed leading sign forms for a numeric token.
 pub const SignPolicy = enum {
+    /// Reject both `+` and `-`.
     none,
+    /// Accept `-` only.
     negative,
+    /// Accept both `+` and `-`.
     positive_and_negative,
 };
 
+/// Integer radix prefixes accepted by a syntax.
 pub const IntegerPrefixes = struct {
+    /// Accept `0b` binary integers.
     binary: bool = false,
+    /// Accept `0o` octal integers.
     octal: bool = false,
+    /// Accept `0x` hexadecimal integers.
     hex: bool = false,
 };
 
+/// Optional normalized integer bounds checked during token parsing.
 pub const IntegerBounds = struct {
+    /// Minimum signed integer value accepted by the syntax.
     min: ?i128 = null,
+    /// Maximum non-negative integer value accepted by the syntax.
     max: ?u128 = null,
 };
 
+/// Numeric grammar and conversion capabilities for a format.
 pub const Syntax = struct {
+    /// Accept integer tokens.
     integer: bool = true,
+    /// Accept decimal float tokens with a fractional part or exponent.
     decimal_float: bool = false,
+    /// Accept exponent notation on decimal floats.
     exponent: bool = false,
+    /// Leading sign policy for integers, decimal floats, and special floats.
     sign: SignPolicy = .negative,
+    /// Sign policy for exponent signs.
     exponent_sign: SignPolicy = .positive_and_negative,
+    /// Optional digit separator that is allowed between digits and stripped.
     digit_separator: ?u8 = null,
+    /// Accepted non-decimal integer prefixes.
     prefixed_integers: IntegerPrefixes = .{},
+    /// Accept `inf` and `nan` special float tokens.
     special_floats: bool = false,
+    /// Reject multi-digit decimal numbers whose integer part starts with zero.
     reject_leading_zero_decimal: bool = true,
+    /// Remove a leading `+` from normalized decimal and special-float tokens.
     strip_leading_positive_sign: bool = true,
+    /// Optional bounds for parsed integer tokens before type-directed reads.
     integer_bounds: IntegerBounds = .{},
+    /// Permit reading integer tokens through `readFloat`.
     integer_to_float: bool = false,
+    /// Reject non-finite values from `emitFloat`.
     finite_float_emission: bool = false,
 };
 
+/// Normalized integer token bytes and their radix.
 pub const Integer = struct {
+    /// Allocator-owned normalized digits, including `-` when negative.
     bytes: []u8,
+    /// Integer radix used to parse `bytes`.
     base: u8,
 };
 
+/// Allocator-owned normalized numeric token.
 pub const Token = union(enum) {
+    /// Integer token with normalized digits and radix.
     int: Integer,
+    /// Float token with normalized decimal or special-float bytes.
     float: []u8,
 
+    /// Frees the token bytes owned by `self`.
     pub fn deinit(self: Token, allocator: std.mem.Allocator) void {
         switch (self) {
             .int => |integer| allocator.free(integer.bytes),
@@ -51,15 +83,18 @@ pub const Token = union(enum) {
         }
     }
 
+    /// Returns whether this token is a float token.
     pub fn isFloat(self: Token) bool {
         return self == .float;
     }
 };
 
+/// Returns a numeric parser specialized for `syntax`.
 pub fn Parser(comptime syntax: Syntax) type {
     return struct {
         const Self = @This();
 
+        /// Parses and normalizes `raw`, returning allocator-owned token bytes.
         pub fn parseAlloc(allocator: std.mem.Allocator, raw: []const u8) !Token {
             if (syntax.special_floats and isSpecialFloat(raw)) {
                 try validateSpecialFloatSyntax(raw);
@@ -79,6 +114,7 @@ pub fn Parser(comptime syntax: Syntax) type {
             return try parseDecimalInteger(allocator, raw);
         }
 
+        /// Parses owned `raw`, reusing it when normalization is unnecessary.
         pub fn parseOwned(allocator: std.mem.Allocator, raw: []u8) !Token {
             if (!needsNormalization()) {
                 errdefer allocator.free(raw);
@@ -95,10 +131,12 @@ pub fn Parser(comptime syntax: Syntax) type {
             return token;
         }
 
+        /// Converts a normalized integer token to `T`.
         pub fn readInt(comptime T: type, integer: Integer) !T {
             return try readInteger(T, integer);
         }
 
+        /// Converts a normalized float token, or allowed integer token, to `T`.
         pub fn readFloat(comptime T: type, token: Token) !T {
             return switch (token) {
                 .float => |bytes| try readFloatBytes(T, bytes),
@@ -106,6 +144,7 @@ pub fn Parser(comptime syntax: Syntax) type {
             };
         }
 
+        /// Validates float emission according to the configured syntax.
         pub fn emitFloat(value: anytype) !void {
             if (syntax.finite_float_emission) try ensureFiniteFloat(value);
         }
@@ -292,6 +331,7 @@ pub fn Parser(comptime syntax: Syntax) type {
     };
 }
 
+/// Converts a normalized integer token to `T`.
 pub fn readInteger(comptime T: type, integer: Integer) !T {
     if (@typeInfo(T).int.signedness == .unsigned and integer.bytes.len != 0 and integer.bytes[0] == '-') return error.InvalidValue;
     return std.fmt.parseInt(T, integer.bytes, integer.base) catch |err| switch (err) {
@@ -300,10 +340,12 @@ pub fn readInteger(comptime T: type, integer: Integer) !T {
     };
 }
 
+/// Parses normalized float bytes into `T`.
 pub fn readFloatBytes(comptime T: type, bytes: []const u8) !T {
     return std.fmt.parseFloat(T, bytes) catch error.InvalidValue;
 }
 
+/// Converts a normalized integer token to a float `T`.
 pub fn readFloatFromInteger(comptime T: type, integer: Integer) !T {
     if (integer.bytes.len != 0 and integer.bytes[0] == '-') {
         const value = std.fmt.parseInt(i128, integer.bytes, integer.base) catch return error.InvalidValue;
@@ -313,6 +355,7 @@ pub fn readFloatFromInteger(comptime T: type, integer: Integer) !T {
     return @floatFromInt(value);
 }
 
+/// Returns `error.InvalidJsonFloat` if `value` is not finite.
 pub fn ensureFiniteFloat(value: anytype) !void {
     const Float = switch (@typeInfo(@TypeOf(value))) {
         .comptime_float => f64,
