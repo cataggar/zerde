@@ -2,6 +2,8 @@
 
 const std = @import("std");
 
+const meta = @import("meta.zig");
+
 /// Serializes `value` by walking its Zig type at comptime and calling methods
 /// on `encoder`'s structural protocol.
 ///
@@ -62,15 +64,25 @@ fn serializeValue(comptime T: type, value: T, encoder: anytype) !void {
         .@"struct" => |struct_info| {
             if (struct_info.is_tuple) unsupported(T);
 
+            const options = comptime meta.optionsFor(T);
+            comptime meta.validate(T, options);
+
             comptime var field_count: usize = 0;
             inline for (struct_info.fields) |field| {
-                if (!field.is_comptime) field_count += 1;
+                if (!field.is_comptime) {
+                    const field_options = comptime meta.fieldOptionsFor(T, field.name);
+                    if (comptime meta.shouldSerialize(field_options)) field_count += 1;
+                }
             }
 
             try encoder.beginStruct(T, field_count);
             inline for (struct_info.fields) |field| {
                 if (!field.is_comptime) {
-                    try encoder.emitFieldName(field.name);
+                    const field_options = comptime meta.fieldOptionsFor(T, field.name);
+                    if (comptime !meta.shouldSerialize(field_options)) continue;
+
+                    const wire_name = comptime meta.fieldWireName(field.name, field_options, options);
+                    try encoder.emitFieldName(wire_name);
                     try serializeValue(field.type, @field(value, field.name), encoder);
                 }
             }

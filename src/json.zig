@@ -341,6 +341,127 @@ test "json writes structs and nested structs" {
     }, "{\"user\":{\"id\":1,\"name\":\"Grant\",\"active\":true},\"scores\":[9,10],\"nickname\":null}");
 }
 
+test "json writes metadata renamed and skipped fields" {
+    const ApiUser = struct {
+        user_id: u64,
+        display_name: []const u8,
+        password_hash: []const u8,
+
+        pub const zerde = .{
+            .rename_all = .camel_case,
+            .fields = .{
+                .password_hash = .{ .skip_serializing = true },
+            },
+        };
+    };
+
+    try expectJson(ApiUser{
+        .user_id = 1,
+        .display_name = "Grant",
+        .password_hash = "secret",
+    }, "{\"userId\":1,\"displayName\":\"Grant\"}");
+}
+
+test "json writes explicit field rename metadata" {
+    const User = struct {
+        id: u64,
+        display_name: []const u8,
+
+        pub const zerde = .{
+            .fields = .{
+                .display_name = .{ .rename = "name" },
+            },
+        };
+    };
+
+    try expectJson(User{ .id = 1, .display_name = "Grant" }, "{\"id\":1,\"name\":\"Grant\"}");
+}
+
+test "json explicit rename overrides rename_all" {
+    const User = struct {
+        user_id: u64,
+        display_name: []const u8,
+
+        pub const zerde = .{
+            .rename_all = .camel_case,
+            .fields = .{
+                .display_name = .{ .rename = "name" },
+            },
+        };
+    };
+
+    try expectJson(User{ .user_id = 1, .display_name = "Grant" }, "{\"userId\":1,\"name\":\"Grant\"}");
+}
+
+test "json snake_case rename_all preserves field names" {
+    const User = struct {
+        user_id: u64,
+        display_name: []const u8,
+
+        pub const zerde = .{
+            .rename_all = .snake_case,
+        };
+    };
+
+    try expectJson(User{ .user_id = 1, .display_name = "Grant" }, "{\"user_id\":1,\"display_name\":\"Grant\"}");
+}
+
+test "json skip metadata omits fields from field count" {
+    const Hidden = struct {
+        password_hash: []const u8,
+
+        pub const zerde = .{
+            .fields = .{
+                .password_hash = .{ .skip = true },
+            },
+        };
+    };
+
+    try expectJson(Hidden{ .password_hash = "secret" }, "{}");
+}
+
+test "json skip_serializing omits middle field without extra commas" {
+    const User = struct {
+        id: u64,
+        password_hash: []const u8,
+        active: bool,
+
+        pub const zerde = .{
+            .fields = .{
+                .password_hash = .{ .skip_serializing = true },
+            },
+        };
+    };
+
+    try expectJson(User{ .id = 1, .password_hash = "secret", .active = true }, "{\"id\":1,\"active\":true}");
+}
+
+test "json applies metadata to nested structs independently" {
+    const User = struct {
+        user_id: u64,
+        display_name: []const u8,
+
+        pub const zerde = .{
+            .rename_all = .camel_case,
+        };
+    };
+    const Session = struct {
+        session_id: u64,
+        user: User,
+
+        pub const zerde = .{
+            .fields = .{
+                .session_id = .{ .rename = "sid" },
+            },
+        };
+    };
+
+    try expectJson(Session{
+        .session_id = 99,
+        .user = .{ .user_id = 1, .display_name = "Grant" },
+    }, "{\"sid\":99,\"user\":{\"userId\":1,\"displayName\":\"Grant\"}}");
+}
+
 test "json writes enums as string tags" {
     const Color = enum { red, green, blue };
 

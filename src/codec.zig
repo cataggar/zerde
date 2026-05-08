@@ -3,6 +3,7 @@
 const std = @import("std");
 
 const meta = @import("meta.zig");
+const rename = @import("rename.zig");
 const schema_mod = @import("schema.zig");
 const human = @import("human.zig");
 const json = @import("json.zig");
@@ -178,4 +179,49 @@ test "codec json write propagates encoder errors" {
         .{ .text = invalid[0..] },
         .json,
     ));
+}
+
+test "codec validates metadata and writes renamed fields" {
+    const ApiUser = struct {
+        user_id: u64,
+        display_name: []const u8,
+        password_hash: []const u8,
+
+        pub const zerde = .{
+            .rename_all = .camel_case,
+            .fields = .{
+                .password_hash = .{ .skip_serializing = true },
+            },
+        };
+    };
+
+    const ApiUserSerde = Codec(ApiUser);
+
+    try std.testing.expectEqual(rename.RenameRule.camel_case, ApiUserSerde.options.rename_all);
+    try expectCodecWrite(ApiUser, .{
+        .user_id = 1,
+        .display_name = "Grant",
+        .password_hash = "secret",
+    }, .json, "{\"userId\":1,\"displayName\":\"Grant\"}");
+}
+
+test "codec writes metadata consistently across formats" {
+    const User = struct {
+        user_id: u64,
+        display_name: []const u8,
+        password_hash: []const u8,
+
+        pub const zerde = .{
+            .rename_all = .camel_case,
+            .fields = .{
+                .display_name = .{ .rename = "name" },
+                .password_hash = .{ .skip = true },
+            },
+        };
+    };
+
+    const user = User{ .user_id = 1, .display_name = "Grant", .password_hash = "secret" };
+
+    try expectCodecWrite(User, user, .json, "{\"userId\":1,\"name\":\"Grant\"}");
+    try expectCodecWrite(User, user, .human, "User { userId: 1, name: \"Grant\" }");
 }

@@ -253,3 +253,66 @@ test "human writes structs with default fields" {
 
     try expectHuman(Defaults{ .id = 1 }, "Defaults { id: 1, active: true, label: \"new\" }");
 }
+
+test "human writes metadata renamed and skipped fields" {
+    const ApiUser = struct {
+        user_id: u64,
+        display_name: []const u8,
+        password_hash: []const u8,
+
+        pub const zerde = .{
+            .rename_all = .camel_case,
+            .fields = .{
+                .password_hash = .{ .skip_serializing = true },
+            },
+        };
+    };
+
+    try expectHuman(ApiUser{
+        .user_id = 1,
+        .display_name = "Grant",
+        .password_hash = "secret",
+    }, "ApiUser { userId: 1, displayName: \"Grant\" }");
+}
+
+test "human explicit rename overrides rename_all" {
+    const User = struct {
+        user_id: u64,
+        display_name: []const u8,
+
+        pub const zerde = .{
+            .rename_all = .camel_case,
+            .fields = .{
+                .display_name = .{ .rename = "name" },
+            },
+        };
+    };
+
+    try expectHuman(User{ .user_id = 1, .display_name = "Grant" }, "User { userId: 1, name: \"Grant\" }");
+}
+
+test "human skip metadata handles empty and middle fields" {
+    const Hidden = struct {
+        password_hash: []const u8,
+
+        pub const zerde = .{
+            .fields = .{
+                .password_hash = .{ .skip = true },
+            },
+        };
+    };
+    const User = struct {
+        id: u64,
+        password_hash: []const u8,
+        active: bool,
+
+        pub const zerde = .{
+            .fields = .{
+                .password_hash = .{ .skip_serializing = true },
+            },
+        };
+    };
+
+    try expectHuman(Hidden{ .password_hash = "secret" }, "Hidden {}");
+    try expectHuman(User{ .id = 1, .password_hash = "secret", .active = true }, "User { id: 1, active: true }");
+}

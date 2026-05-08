@@ -3,9 +3,6 @@
 const std = @import("std");
 const zerde = @import("zerde.zig");
 
-/// Shared testing allocator for Zerde tests.
-pub const allocator = std.testing.allocator;
-
 test "root exposes codec write API" {
     const User = struct {
         id: u8,
