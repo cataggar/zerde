@@ -2,6 +2,8 @@
 
 /// JSON format API.
 pub const json = @import("json.zig");
+/// TOML format API.
+pub const toml = @import("toml.zig");
 /// Human-readable format API.
 pub const human = @import("human.zig");
 
@@ -19,7 +21,9 @@ pub const deinit = @import("deinit.zig").deinit;
 
 test {
     _ = json;
+    _ = toml;
     _ = human;
+    _ = @import("datetime.zig");
     _ = Codec;
     _ = Format;
     _ = serialize;

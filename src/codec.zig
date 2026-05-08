@@ -7,11 +7,13 @@ const rename = @import("rename.zig");
 const schema_mod = @import("schema.zig");
 const human = @import("human.zig");
 const json = @import("json.zig");
+const toml = @import("toml.zig");
 const deinitValue = @import("deinit.zig").deinit;
 
 /// Formats supported by the simple codec dispatch API.
 pub const Format = enum {
     json,
+    toml,
     human,
 };
 
@@ -33,6 +35,7 @@ pub fn Codec(comptime T: type) type {
         pub fn write(writer: *std.Io.Writer, value: T, comptime format: Format) !void {
             switch (format) {
                 .json => try json.write(writer, value),
+                .toml => try toml.write(writer, value),
                 .human => try human.write(writer, value),
             }
         }
@@ -41,6 +44,7 @@ pub fn Codec(comptime T: type) type {
         pub fn read(allocator: std.mem.Allocator, reader: *std.Io.Reader, comptime format: Format) !T {
             return switch (format) {
                 .json => try json.read(T, allocator, reader),
+                .toml => try toml.read(T, allocator, reader),
                 .human => @compileError("human format is write-only"),
             };
         }
@@ -124,6 +128,27 @@ test "codec writes human equivalent to format api" {
 
     try std.testing.expectEqualStrings(format_writer.buffered(), codec_writer.buffered());
     try std.testing.expectEqualStrings("User { id: 1, name: \"Grant\", active: true }", codec_writer.buffered());
+}
+
+test "codec writes toml equivalent to format api" {
+    const User = struct {
+        id: u64,
+        name: []const u8,
+        active: bool,
+    };
+
+    const user = User{ .id = 1, .name = "Grant", .active = true };
+
+    var format_buffer: [1024]u8 = undefined;
+    var format_writer: std.Io.Writer = .fixed(&format_buffer);
+    try toml.write(&format_writer, user);
+
+    var codec_buffer: [1024]u8 = undefined;
+    var codec_writer: std.Io.Writer = .fixed(&codec_buffer);
+    try Codec(User).write(&codec_writer, user, .toml);
+
+    try std.testing.expectEqualStrings(format_writer.buffered(), codec_writer.buffered());
+    try std.testing.expectEqualStrings("id = 1\nname = \"Grant\"\nactive = true", codec_writer.buffered());
 }
 
 test "codec writes supported values through both milestone 3 formats" {
@@ -240,6 +265,26 @@ test "codec reads json equivalent to format api" {
 
     var reader: std.Io.Reader = .fixed(input);
     const codec_value = try Codec(User).read(std.testing.allocator, &reader, .json);
+    defer Codec(User).deinit(std.testing.allocator, codec_value);
+
+    try std.testing.expectEqual(format_value.id, codec_value.id);
+    try std.testing.expectEqualStrings(format_value.name, codec_value.name);
+    try std.testing.expectEqual(format_value.active, codec_value.active);
+}
+
+test "codec reads toml equivalent to format api" {
+    const User = struct {
+        id: u64,
+        name: []const u8,
+        active: bool,
+    };
+    const input = "id = 1\nname = \"Grant\"\nactive = true";
+
+    const format_value = try toml.readSlice(User, std.testing.allocator, input);
+    defer deinitValue(User, std.testing.allocator, format_value);
+
+    var reader: std.Io.Reader = .fixed(input);
+    const codec_value = try Codec(User).read(std.testing.allocator, &reader, .toml);
     defer Codec(User).deinit(std.testing.allocator, codec_value);
 
     try std.testing.expectEqual(format_value.id, codec_value.id);
