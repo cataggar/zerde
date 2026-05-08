@@ -1333,6 +1333,124 @@ test "json reads metadata renamed fields" {
     try std.testing.expectEqualStrings("Ada", value.display_name);
 }
 
+test "json reads missing defaulted and optional fields" {
+    const User = struct {
+        id: u64,
+        active: bool = true,
+        nickname: ?[]const u8,
+        label: []const u8 = "guest",
+    };
+
+    const value = try readSlice(User, std.testing.allocator, "{\"id\":1}");
+    defer deinitValue(User, std.testing.allocator, value);
+
+    try std.testing.expectEqual(@as(u64, 1), value.id);
+    try std.testing.expect(value.active);
+    try std.testing.expect(value.nickname == null);
+    try std.testing.expectEqualStrings("guest", value.label);
+}
+
+test "json denies unknown fields when metadata requests it" {
+    const User = struct {
+        id: u64,
+
+        pub const zerde = .{
+            .deny_unknown_fields = true,
+        };
+    };
+
+    try std.testing.expectError(error.UnknownField, readSlice(User, std.testing.allocator, "{\"id\":1,\"extra\":2}"));
+}
+
+test "json read honors skip and skip_deserializing metadata" {
+    const User = struct {
+        id: u8,
+        password_hash: []const u8,
+        token: []const u8 = "default-token",
+        cached_score: u8 = 42,
+
+        pub const zerde = .{
+            .fields = .{
+                .password_hash = .{ .skip_serializing = true },
+                .token = .{ .skip_deserializing = true },
+                .cached_score = .{ .skip = true },
+            },
+        };
+    };
+
+    const value = try readSlice(User, std.testing.allocator,
+        \\{
+        \\  "id": 1,
+        \\  "password_hash": "from-input",
+        \\  "token": "ignored-input",
+        \\  "cached_score": 99
+        \\}
+    );
+    defer deinitValue(User, std.testing.allocator, value);
+
+    try std.testing.expectEqual(@as(u8, 1), value.id);
+    try std.testing.expectEqualStrings("from-input", value.password_hash);
+    try std.testing.expectEqualStrings("default-token", value.token);
+    try std.testing.expectEqual(@as(u8, 42), value.cached_score);
+}
+
+test "json skip_deserializing required field remains missing" {
+    const User = struct {
+        id: u8,
+        token: []const u8,
+
+        pub const zerde = .{
+            .fields = .{
+                .token = .{ .skip_deserializing = true },
+            },
+        };
+    };
+
+    try std.testing.expectError(error.MissingField, readSlice(User, std.testing.allocator,
+        \\{"id":1,"token":"ignored"}
+    ));
+}
+
+test "json deny_unknown_fields respects renamed wire names" {
+    const User = struct {
+        user_id: u64,
+        display_name: []const u8,
+
+        pub const zerde = .{
+            .rename_all = .camel_case,
+            .deny_unknown_fields = true,
+            .fields = .{
+                .display_name = .{ .rename = "name" },
+            },
+        };
+    };
+
+    const value = try readSlice(User, std.testing.allocator, "{\"userId\":1,\"name\":\"Ada\"}");
+    defer deinitValue(User, std.testing.allocator, value);
+
+    try std.testing.expectEqual(@as(u64, 1), value.user_id);
+    try std.testing.expectEqualStrings("Ada", value.display_name);
+    try std.testing.expectError(error.UnknownField, readSlice(User, std.testing.allocator, "{\"user_id\":1,\"name\":\"Ada\"}"));
+    try std.testing.expectError(error.UnknownField, readSlice(User, std.testing.allocator, "{\"userId\":1,\"name\":\"Ada\",\"extra\":true}"));
+}
+
+test "json detects duplicate skipped deserialization fields" {
+    const User = struct {
+        id: u8,
+        token: []const u8 = "default-token",
+
+        pub const zerde = .{
+            .fields = .{
+                .token = .{ .skip_deserializing = true },
+            },
+        };
+    };
+
+    try std.testing.expectError(error.DuplicateField, readSlice(User, std.testing.allocator,
+        \\{"id":1,"token":"one","token":"two"}
+    ));
+}
+
 test "json low-level decoder works with deserialize" {
     const User = struct {
         id: u8,

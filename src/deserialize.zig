@@ -78,9 +78,10 @@ fn deserializeValue(comptime T: type, allocator: std.mem.Allocator, decoder: any
 
             var result: T = undefined;
             var seen = [_]bool{false} ** struct_info.fields.len;
+            var initialized = [_]bool{false} ** struct_info.fields.len;
             errdefer {
                 inline for (struct_info.fields, 0..) |field, i| {
-                    if (!field.is_comptime and seen[i]) {
+                    if (!field.is_comptime and initialized[i]) {
                         deinit_mod.deinit(field.type, allocator, @field(result, field.name));
                     }
                 }
@@ -97,25 +98,112 @@ fn deserializeValue(comptime T: type, allocator: std.mem.Allocator, decoder: any
                         const wire_name = comptime meta.fieldWireName(field.name, field_options, options);
                         if (!matched and std.mem.eql(u8, field_name, wire_name)) {
                             if (seen[i]) return error.DuplicateField;
-                            @field(result, field.name) = try deserializeValue(field.type, allocator, decoder);
                             seen[i] = true;
+                            if (comptime meta.shouldDeserialize(field_options)) {
+                                @field(result, field.name) = try deserializeValue(field.type, allocator, decoder);
+                                initialized[i] = true;
+                            } else {
+                                try decoder.skipValue();
+                            }
                             matched = true;
                         }
                     }
                 }
 
-                if (!matched) try decoder.skipValue();
+                if (!matched) {
+                    if (options.deny_unknown_fields) return error.UnknownField;
+                    try decoder.skipValue();
+                }
             }
             try decoder.endStruct();
 
             inline for (struct_info.fields, 0..) |field, i| {
-                if (!field.is_comptime and !seen[i]) return error.MissingField;
+                if (!field.is_comptime and !initialized[i]) {
+                    if (field.defaultValue()) |default| {
+                        @field(result, field.name) = try cloneDefaultValue(field.type, allocator, default);
+                        initialized[i] = true;
+                    } else if (comptime isOptional(field.type)) {
+                        @field(result, field.name) = null;
+                        initialized[i] = true;
+                    } else {
+                        return error.MissingField;
+                    }
+                }
             }
 
             return result;
         },
         else => unsupported(T),
     }
+}
+
+fn cloneDefaultValue(comptime T: type, allocator: std.mem.Allocator, value: T) !T {
+    switch (@typeInfo(T)) {
+        .bool, .int, .comptime_int, .float, .comptime_float, .null, .@"enum", .enum_literal => return value,
+        .optional => |optional_info| {
+            if (value) |child_value| return try cloneDefaultValue(optional_info.child, allocator, child_value);
+            return null;
+        },
+        .array => |array_info| {
+            var result: T = undefined;
+            var index: usize = 0;
+            errdefer for (result[0..index]) |item| deinit_mod.deinit(array_info.child, allocator, item);
+
+            while (index < array_info.len) : (index += 1) {
+                result[index] = try cloneDefaultValue(array_info.child, allocator, value[index]);
+            }
+            return result;
+        },
+        .pointer => |pointer_info| switch (pointer_info.size) {
+            .slice => {
+                var result = try allocator.alloc(pointer_info.child, value.len);
+                errdefer allocator.free(result);
+
+                if (pointer_info.child == u8) {
+                    @memcpy(result, value);
+                } else {
+                    var index: usize = 0;
+                    errdefer for (result[0..index]) |item| deinit_mod.deinit(pointer_info.child, allocator, item);
+
+                    while (index < value.len) : (index += 1) {
+                        result[index] = try cloneDefaultValue(pointer_info.child, allocator, value[index]);
+                    }
+                }
+                return result;
+            },
+            else => unsupported(T),
+        },
+        .@"struct" => |struct_info| {
+            if (struct_info.is_tuple) unsupported(T);
+
+            var result: T = undefined;
+            var initialized = [_]bool{false} ** struct_info.fields.len;
+            errdefer {
+                inline for (struct_info.fields, 0..) |field, i| {
+                    if (!field.is_comptime and initialized[i]) {
+                        deinit_mod.deinit(field.type, allocator, @field(result, field.name));
+                    }
+                }
+            }
+
+            inline for (struct_info.fields, 0..) |field, i| {
+                if (!field.is_comptime) {
+                    @field(result, field.name) = try cloneDefaultValue(field.type, allocator, @field(value, field.name));
+                    initialized[i] = true;
+                }
+            }
+
+            return result;
+        },
+        else => unsupported(T),
+    }
+}
+
+fn isOptional(comptime T: type) bool {
+    return switch (@typeInfo(T)) {
+        .optional => true,
+        else => false,
+    };
 }
 
 fn unsupported(comptime T: type) noreturn {

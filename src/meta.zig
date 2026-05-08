@@ -7,6 +7,7 @@ const rename = @import("rename.zig");
 /// Normalized type-level metadata options.
 pub const Options = struct {
     rename_all: rename.RenameRule = .none,
+    deny_unknown_fields: bool = false,
 };
 
 /// Normalized field-level metadata options.
@@ -14,6 +15,7 @@ pub const FieldOptions = struct {
     rename: ?[]const u8 = null,
     skip: bool = false,
     skip_serializing: bool = false,
+    skip_deserializing: bool = false,
 };
 
 /// Returns normalized metadata options for `T`.
@@ -28,6 +30,9 @@ pub fn optionsFor(comptime T: type) Options {
 
     if (@hasField(@TypeOf(metadata), "rename_all")) {
         options.rename_all = @field(metadata, "rename_all");
+    }
+    if (@hasField(@TypeOf(metadata), "deny_unknown_fields")) {
+        options.deny_unknown_fields = @field(metadata, "deny_unknown_fields");
     }
 
     return options;
@@ -79,6 +84,11 @@ pub fn shouldSerialize(comptime field_options: FieldOptions) bool {
     return !field_options.skip and !field_options.skip_serializing;
 }
 
+/// Returns true when a field should be read from input.
+pub fn shouldDeserialize(comptime field_options: FieldOptions) bool {
+    return !field_options.skip and !field_options.skip_deserializing;
+}
+
 /// Returns the serialized wire name for a field.
 pub fn fieldWireName(
     comptime field_name: []const u8,
@@ -96,6 +106,7 @@ fn parseFieldOptions(comptime metadata: anytype) FieldOptions {
     if (@hasField(Metadata, "rename")) options.rename = @field(metadata, "rename");
     if (@hasField(Metadata, "skip")) options.skip = @field(metadata, "skip");
     if (@hasField(Metadata, "skip_serializing")) options.skip_serializing = @field(metadata, "skip_serializing");
+    if (@hasField(Metadata, "skip_deserializing")) options.skip_deserializing = @field(metadata, "skip_deserializing");
 
     return options;
 }
@@ -135,8 +146,8 @@ fn countKnownOptions(comptime T: type, comptime allowed: MetadataOptionSet) usiz
 
 fn isKnownOptionName(comptime allowed: MetadataOptionSet, comptime name: []const u8) bool {
     return switch (allowed) {
-        .type_metadata => comptimeEql(name, "rename_all") or comptimeEql(name, "fields"),
-        .field_metadata => comptimeEql(name, "rename") or comptimeEql(name, "skip") or comptimeEql(name, "skip_serializing"),
+        .type_metadata => comptimeEql(name, "rename_all") or comptimeEql(name, "deny_unknown_fields") or comptimeEql(name, "fields"),
+        .field_metadata => comptimeEql(name, "rename") or comptimeEql(name, "skip") or comptimeEql(name, "skip_serializing") or comptimeEql(name, "skip_deserializing"),
     };
 }
 
@@ -163,6 +174,7 @@ test "metadata returns defaults without zerde decl" {
 
     const options = optionsFor(User);
     try std.testing.expectEqual(rename.RenameRule.none, options.rename_all);
+    try std.testing.expect(!options.deny_unknown_fields);
     try std.testing.expectEqual(FieldOptions{}, fieldOptionsFor(User, "id"));
 }
 
@@ -173,10 +185,12 @@ test "metadata parses type and field options" {
 
         pub const zerde = .{
             .rename_all = .camel_case,
+            .deny_unknown_fields = true,
             .fields = .{
                 .password_hash = .{
                     .rename = "password",
                     .skip_serializing = true,
+                    .skip_deserializing = true,
                 },
             },
         };
@@ -186,8 +200,10 @@ test "metadata parses type and field options" {
     const password_options = comptime fieldOptionsFor(User, "password_hash");
 
     try std.testing.expectEqual(rename.RenameRule.camel_case, options.rename_all);
+    try std.testing.expect(options.deny_unknown_fields);
     try std.testing.expectEqualStrings("password", password_options.rename.?);
     try std.testing.expect(password_options.skip_serializing);
+    try std.testing.expect(password_options.skip_deserializing);
     try std.testing.expectEqualStrings("userId", comptime fieldWireName("user_id", fieldOptionsFor(User, "user_id"), optionsFor(User)));
     try std.testing.expectEqualStrings("password", comptime fieldWireName("password_hash", password_options, optionsFor(User)));
 }
@@ -212,8 +228,11 @@ test "metadata parses skip and skip_serializing separately" {
     try std.testing.expect(!token_options.skip_serializing);
     try std.testing.expect(!password_options.skip);
     try std.testing.expect(password_options.skip_serializing);
+    try std.testing.expect(!password_options.skip_deserializing);
     try std.testing.expect(!shouldSerialize(token_options));
     try std.testing.expect(!shouldSerialize(password_options));
+    try std.testing.expect(!shouldDeserialize(token_options));
+    try std.testing.expect(shouldDeserialize(password_options));
 }
 
 test "metadata declarations do not affect value layout" {

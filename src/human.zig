@@ -316,3 +316,19 @@ test "human skip metadata handles empty and middle fields" {
     try expectHuman(Hidden{ .password_hash = "secret" }, "Hidden {}");
     try expectHuman(User{ .id = 1, .password_hash = "secret", .active = true }, "User { id: 1, active: true }");
 }
+
+test "human write includes skip_deserializing fields" {
+    const User = struct {
+        id: u8,
+        token: []const u8,
+
+        pub const zerde = .{
+            .deny_unknown_fields = true,
+            .fields = .{
+                .token = .{ .skip_deserializing = true },
+            },
+        };
+    };
+
+    try expectHuman(User{ .id = 1, .token = "visible" }, "User { id: 1, token: \"visible\" }");
+}
