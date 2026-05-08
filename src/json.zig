@@ -1634,3 +1634,189 @@ test "json compact and pretty roundtrip basic structs" {
     defer deinitValue(User, std.testing.allocator, pretty_parsed);
     try std.testing.expectEqualDeep(user, pretty_parsed);
 }
+
+test "json field with hook serializes and deserializes" {
+    const OffsetTimestamp = struct {
+        pub fn serialize(value: i64, enc: anytype) !void {
+            try enc.emitInt(value + 1000);
+        }
+
+        pub fn deserialize(comptime T: type, allocator: std.mem.Allocator, dec: anytype) !T {
+            _ = allocator;
+            return (try dec.readInt(T)) - 1000;
+        }
+    };
+
+    const Event = struct {
+        name: []const u8,
+        created_at: i64,
+
+        pub const zerde = .{
+            .fields = .{
+                .created_at = .{ .with = OffsetTimestamp },
+            },
+        };
+    };
+
+    try expectJson(Event{ .name = "deploy", .created_at = 42 }, "{\"name\":\"deploy\",\"created_at\":1042}");
+
+    const parsed = try readSlice(Event, std.testing.allocator, "{\"name\":\"deploy\",\"created_at\":1042}");
+    defer deinitValue(Event, std.testing.allocator, parsed);
+
+    try std.testing.expectEqualStrings("deploy", parsed.name);
+    try std.testing.expectEqual(@as(i64, 42), parsed.created_at);
+}
+
+test "json field hook serializes small binary packet to and from bytes" {
+    const Packet = struct {
+        opcode: u8,
+        flags: u8,
+        payload_len: u16,
+    };
+
+    const PacketBytes = struct {
+        pub fn serialize(value: Packet, enc: anytype) !void {
+            try enc.beginSeq(4);
+            try enc.emitInt(value.opcode);
+            try enc.emitInt(value.flags);
+            try enc.emitInt(@as(u8, @intCast(value.payload_len >> 8)));
+            try enc.emitInt(@as(u8, @intCast(value.payload_len & 0xff)));
+            try enc.endSeq();
+        }
+
+        pub fn deserialize(comptime T: type, allocator: std.mem.Allocator, dec: anytype) !T {
+            _ = allocator;
+
+            _ = try dec.beginSeq();
+            if (!try dec.hasNextSeqElem()) return error.InvalidArrayLength;
+            const opcode = try dec.readInt(u8);
+            if (!try dec.hasNextSeqElem()) return error.InvalidArrayLength;
+            const flags = try dec.readInt(u8);
+            if (!try dec.hasNextSeqElem()) return error.InvalidArrayLength;
+            const len_hi = try dec.readInt(u8);
+            if (!try dec.hasNextSeqElem()) return error.InvalidArrayLength;
+            const len_lo = try dec.readInt(u8);
+            if (try dec.hasNextSeqElem()) return error.InvalidArrayLength;
+            try dec.endSeq();
+
+            return T{
+                .opcode = opcode,
+                .flags = flags,
+                .payload_len = (@as(u16, len_hi) << 8) | len_lo,
+            };
+        }
+    };
+
+    const Message = struct {
+        id: u8,
+        packet: Packet,
+
+        pub const zerde = .{
+            .fields = .{
+                .packet = .{ .with = PacketBytes },
+            },
+        };
+    };
+
+    const message = Message{
+        .id = 9,
+        .packet = .{ .opcode = 0xa1, .flags = 0x05, .payload_len = 0x1234 },
+    };
+
+    try expectJson(message, "{\"id\":9,\"packet\":[161,5,18,52]}");
+
+    const parsed = try readSlice(Message, std.testing.allocator, "{\"id\":9,\"packet\":[161,5,18,52]}");
+    try std.testing.expectEqualDeep(message, parsed);
+}
+
+test "json serializes same small packet message without custom hooks" {
+    const Packet = struct {
+        opcode: u8,
+        flags: u8,
+        payload_len: u16,
+    };
+
+    const Message = struct {
+        id: u8,
+        packet: Packet,
+    };
+
+    const message = Message{
+        .id = 9,
+        .packet = .{ .opcode = 0xa1, .flags = 0x05, .payload_len = 0x1234 },
+    };
+
+    try expectJson(message, "{\"id\":9,\"packet\":{\"opcode\":161,\"flags\":5,\"payload_len\":4660}}");
+
+    const parsed = try readSlice(Message, std.testing.allocator, "{\"id\":9,\"packet\":{\"opcode\":161,\"flags\":5,\"payload_len\":4660}}");
+    try std.testing.expectEqualDeep(message, parsed);
+}
+
+test "json field split hooks can serialize or deserialize independently" {
+    const BoolAsYesNo = struct {
+        pub fn serialize(value: bool, enc: anytype) !void {
+            try enc.emitString(if (value) "yes" else "no");
+        }
+    };
+
+    const YesNoAsBool = struct {
+        pub fn deserialize(comptime T: type, allocator: std.mem.Allocator, dec: anytype) !T {
+            const value = try dec.readString(allocator);
+            defer allocator.free(value);
+            if (std.mem.eql(u8, value, "yes")) return true;
+            if (std.mem.eql(u8, value, "no")) return false;
+            return error.InvalidValue;
+        }
+    };
+
+    const Outbound = struct {
+        active: bool,
+
+        pub const zerde = .{
+            .fields = .{
+                .active = .{ .serialize_with = BoolAsYesNo },
+            },
+        };
+    };
+
+    const Inbound = struct {
+        active: bool,
+
+        pub const zerde = .{
+            .fields = .{
+                .active = .{ .deserialize_with = YesNoAsBool },
+            },
+        };
+    };
+
+    try expectJson(Outbound{ .active = true }, "{\"active\":\"yes\"}");
+
+    const parsed = try readSlice(Inbound, std.testing.allocator, "{\"active\":\"no\"}");
+    try std.testing.expect(!parsed.active);
+}
+
+test "json type-native serialize hook takes precedence over fields" {
+    const Value = struct {
+        raw: u8,
+
+        pub fn zerdeSerialize(self: @This(), enc: anytype) !void {
+            try enc.emitInt(self.raw + 1);
+        }
+    };
+
+    try expectJson(Value{ .raw = 7 }, "8");
+}
+
+test "json type-native deserialize hook takes precedence over fields" {
+    const Value = struct {
+        raw: u8,
+
+        pub fn zerdeDeserialize(allocator: std.mem.Allocator, dec: anytype) !@This() {
+            _ = allocator;
+            return .{ .raw = (try dec.readInt(u8)) - 1 };
+        }
+    };
+
+    const parsed = try readSlice(Value, std.testing.allocator, "8");
+    try std.testing.expectEqual(@as(u8, 7), parsed.raw);
+}

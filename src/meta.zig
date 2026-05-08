@@ -16,6 +16,9 @@ pub const FieldOptions = struct {
     skip: bool = false,
     skip_serializing: bool = false,
     skip_deserializing: bool = false,
+    with: ?type = null,
+    serialize_with: ?type = null,
+    deserialize_with: ?type = null,
 };
 
 /// Returns normalized metadata options for `T`.
@@ -62,7 +65,7 @@ pub fn validate(comptime T: type, comptime options: Options) void {
             validateMetadataStruct(@TypeOf(field_value), "metadata for field '" ++ field_metadata.name ++ "'");
             validateKnownOptions(@TypeOf(field_value), .field_metadata, "metadata for field '" ++ field_metadata.name ++ "'");
 
-            _ = parseFieldOptions(field_value);
+            validateFieldHooks(parseFieldOptions(field_value), "metadata for field '" ++ field_metadata.name ++ "'");
         }
     }
 }
@@ -90,6 +93,18 @@ pub fn shouldDeserialize(comptime field_options: FieldOptions) bool {
     return !field_options.skip and !field_options.skip_deserializing;
 }
 
+/// Returns the effective field serialization hook, if configured.
+pub fn serializeHook(comptime field_options: FieldOptions) ?type {
+    if (field_options.serialize_with) |Hook| return Hook;
+    return field_options.with;
+}
+
+/// Returns the effective field deserialization hook, if configured.
+pub fn deserializeHook(comptime field_options: FieldOptions) ?type {
+    if (field_options.deserialize_with) |Hook| return Hook;
+    return field_options.with;
+}
+
 /// Returns the serialized wire name for a field.
 pub fn fieldWireName(
     comptime field_name: []const u8,
@@ -108,8 +123,41 @@ fn parseFieldOptions(comptime metadata: anytype) FieldOptions {
     if (@hasField(Metadata, "skip")) options.skip = @field(metadata, "skip");
     if (@hasField(Metadata, "skip_serializing")) options.skip_serializing = @field(metadata, "skip_serializing");
     if (@hasField(Metadata, "skip_deserializing")) options.skip_deserializing = @field(metadata, "skip_deserializing");
+    if (@hasField(Metadata, "with")) options.with = @field(metadata, "with");
+    if (@hasField(Metadata, "serialize_with")) options.serialize_with = @field(metadata, "serialize_with");
+    if (@hasField(Metadata, "deserialize_with")) options.deserialize_with = @field(metadata, "deserialize_with");
 
     return options;
+}
+
+fn validateFieldHooks(comptime options: FieldOptions, comptime label: []const u8) void {
+    if (options.with) |Hook| {
+        validateHookMethod(Hook, "serialize", label);
+        validateHookMethod(Hook, "deserialize", label);
+    }
+    if (options.serialize_with) |Hook| validateHookMethod(Hook, "serialize", label);
+    if (options.deserialize_with) |Hook| validateHookMethod(Hook, "deserialize", label);
+}
+
+fn validateHookMethod(comptime Hook: type, comptime method_name: []const u8, comptime label: []const u8) void {
+    switch (@typeInfo(Hook)) {
+        .@"struct", .@"union", .@"enum", .@"opaque" => {},
+        else => @compileError("zerde " ++ label ++ " custom hook must be a container type"),
+    }
+
+    if (!@hasDecl(Hook, method_name)) {
+        @compileError("zerde " ++ label ++ " custom hook " ++ @typeName(Hook) ++ " is missing '" ++ method_name ++ "'");
+    }
+
+    switch (@typeInfo(@TypeOf(@field(Hook, method_name)))) {
+        .@"fn" => |fn_info| {
+            const expected_params = if (comptimeEql(method_name, "serialize")) 2 else 3;
+            if (fn_info.params.len != expected_params) {
+                @compileError("zerde " ++ label ++ " custom hook '" ++ method_name ++ "' has the wrong number of parameters");
+            }
+        },
+        else => @compileError("zerde " ++ label ++ " custom hook '" ++ method_name ++ "' must be a function"),
+    }
 }
 
 fn validateMetadataStruct(comptime T: type, comptime label: []const u8) void {
@@ -148,7 +196,7 @@ fn countKnownOptions(comptime T: type, comptime allowed: MetadataOptionSet) usiz
 fn isKnownOptionName(comptime allowed: MetadataOptionSet, comptime name: []const u8) bool {
     return switch (allowed) {
         .type_metadata => comptimeEql(name, "rename_all") or comptimeEql(name, "deny_unknown_fields") or comptimeEql(name, "fields"),
-        .field_metadata => comptimeEql(name, "rename") or comptimeEql(name, "skip") or comptimeEql(name, "skip_serializing") or comptimeEql(name, "skip_deserializing"),
+        .field_metadata => comptimeEql(name, "rename") or comptimeEql(name, "skip") or comptimeEql(name, "skip_serializing") or comptimeEql(name, "skip_deserializing") or comptimeEql(name, "with") or comptimeEql(name, "serialize_with") or comptimeEql(name, "deserialize_with"),
     };
 }
 
@@ -180,9 +228,21 @@ test "metadata returns defaults without zerde decl" {
 }
 
 test "metadata parses type and field options" {
+    const UnixTimestamp = struct {
+        pub fn serialize(value: i64, encoder: anytype) !void {
+            try encoder.emitInt(value);
+        }
+
+        pub fn deserialize(comptime T: type, allocator: std.mem.Allocator, decoder: anytype) !T {
+            _ = allocator;
+            return try decoder.readInt(T);
+        }
+    };
+
     const User = struct {
         user_id: u64,
         password_hash: []const u8,
+        created_at: i64,
 
         pub const zerde = .{
             .rename_all = .camel_case,
@@ -193,18 +253,23 @@ test "metadata parses type and field options" {
                     .skip_serializing = true,
                     .skip_deserializing = true,
                 },
+                .created_at = .{ .with = UnixTimestamp },
             },
         };
     };
 
     const options = optionsFor(User);
     const password_options = comptime fieldOptionsFor(User, "password_hash");
+    const timestamp_options = comptime fieldOptionsFor(User, "created_at");
 
     try std.testing.expectEqual(rename.RenameRule.camel_case, options.rename_all);
     try std.testing.expect(options.deny_unknown_fields);
     try std.testing.expectEqualStrings("password", password_options.rename.?);
     try std.testing.expect(password_options.skip_serializing);
     try std.testing.expect(password_options.skip_deserializing);
+    try std.testing.expectEqual(UnixTimestamp, timestamp_options.with.?);
+    try std.testing.expectEqual(UnixTimestamp, serializeHook(timestamp_options).?);
+    try std.testing.expectEqual(UnixTimestamp, deserializeHook(timestamp_options).?);
     try std.testing.expectEqualStrings("userId", comptime fieldWireName("user_id", fieldOptionsFor(User, "user_id"), optionsFor(User)));
     try std.testing.expectEqualStrings("password", comptime fieldWireName("password_hash", password_options, optionsFor(User)));
 }

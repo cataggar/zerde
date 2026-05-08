@@ -12,6 +12,10 @@ pub fn deserialize(comptime T: type, allocator: std.mem.Allocator, decoder: anyt
 }
 
 fn deserializeValue(comptime T: type, allocator: std.mem.Allocator, decoder: anytype) !T {
+    if (comptime hasTypeDeserializeHook(T)) {
+        return try T.zerdeDeserialize(allocator, decoder);
+    }
+
     switch (@typeInfo(T)) {
         .bool => return try decoder.readBool(),
         .int => return try decoder.readInt(T),
@@ -100,7 +104,11 @@ fn deserializeValue(comptime T: type, allocator: std.mem.Allocator, decoder: any
                             if (seen[i]) return error.DuplicateField;
                             seen[i] = true;
                             if (comptime meta.shouldDeserialize(field_options)) {
-                                @field(result, field.name) = try deserializeValue(field.type, allocator, decoder);
+                                if (comptime meta.deserializeHook(field_options)) |Hook| {
+                                    @field(result, field.name) = try Hook.deserialize(field.type, allocator, decoder);
+                                } else {
+                                    @field(result, field.name) = try deserializeValue(field.type, allocator, decoder);
+                                }
                                 initialized[i] = true;
                             } else {
                                 try decoder.skipValue();
@@ -135,6 +143,13 @@ fn deserializeValue(comptime T: type, allocator: std.mem.Allocator, decoder: any
         },
         else => unsupported(T),
     }
+}
+
+fn hasTypeDeserializeHook(comptime T: type) bool {
+    return switch (@typeInfo(T)) {
+        .@"struct", .@"union", .@"enum", .@"opaque" => @hasDecl(T, "zerdeDeserialize"),
+        else => false,
+    };
 }
 
 fn cloneDefaultValue(comptime T: type, allocator: std.mem.Allocator, value: T) !T {

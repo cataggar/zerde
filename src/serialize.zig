@@ -14,6 +14,11 @@ pub fn serialize(value: anytype, encoder: anytype) !void {
 }
 
 fn serializeValue(comptime T: type, value: T, encoder: anytype) !void {
+    if (comptime hasTypeSerializeHook(T)) {
+        try T.zerdeSerialize(value, encoder);
+        return;
+    }
+
     switch (@typeInfo(T)) {
         .bool => try encoder.emitBool(value),
         .int, .comptime_int => try encoder.emitInt(value),
@@ -83,13 +88,24 @@ fn serializeValue(comptime T: type, value: T, encoder: anytype) !void {
 
                     const wire_name = comptime meta.fieldWireName(field.name, field_options, options);
                     try encoder.emitFieldName(wire_name);
-                    try serializeValue(field.type, @field(value, field.name), encoder);
+                    if (comptime meta.serializeHook(field_options)) |Hook| {
+                        try Hook.serialize(@field(value, field.name), encoder);
+                    } else {
+                        try serializeValue(field.type, @field(value, field.name), encoder);
+                    }
                 }
             }
             try encoder.endStruct();
         },
         else => unsupported(T),
     }
+}
+
+fn hasTypeSerializeHook(comptime T: type) bool {
+    return switch (@typeInfo(T)) {
+        .@"struct", .@"union", .@"enum", .@"opaque" => @hasDecl(T, "zerdeSerialize"),
+        else => false,
+    };
 }
 
 fn unsupported(comptime T: type) noreturn {
