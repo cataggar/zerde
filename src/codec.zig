@@ -7,6 +7,7 @@ const rename = @import("rename.zig");
 const schema_mod = @import("schema.zig");
 const human = @import("human.zig");
 const json = @import("json.zig");
+const deinitValue = @import("deinit.zig").deinit;
 
 /// Formats supported by the simple codec dispatch API.
 pub const Format = enum {
@@ -56,8 +57,7 @@ pub fn Codec(comptime T: type) type {
 
         /// Cleans up allocations owned by a value produced by Zerde deserialization.
         pub fn deinit(allocator: std.mem.Allocator, value: T) void {
-            _ = allocator;
-            _ = value;
+            deinitValue(T, allocator, value);
         }
     };
 }
@@ -224,4 +224,31 @@ test "codec writes metadata consistently across formats" {
 
     try expectCodecWrite(User, user, .json, "{\"userId\":1,\"name\":\"Grant\"}");
     try expectCodecWrite(User, user, .human, "User { userId: 1, name: \"Grant\" }");
+}
+
+test "codec deinit frees json deserialized owned values" {
+    const Tag = struct {
+        name: []const u8,
+    };
+    const User = struct {
+        name: []const u8,
+        tags: []const Tag,
+        nickname: ?[]const u8,
+    };
+    const UserSerde = Codec(User);
+
+    const value = try json.readSlice(User, std.testing.allocator,
+        \\{
+        \\  "name": "Ada",
+        \\  "tags": [{"name":"admin"},{"name":"ops"}],
+        \\  "nickname": "a"
+        \\}
+    );
+    defer UserSerde.deinit(std.testing.allocator, value);
+
+    try std.testing.expectEqualStrings("Ada", value.name);
+    try std.testing.expectEqual(@as(usize, 2), value.tags.len);
+    try std.testing.expectEqualStrings("admin", value.tags[0].name);
+    try std.testing.expectEqualStrings("ops", value.tags[1].name);
+    try std.testing.expectEqualStrings("a", value.nickname.?);
 }

@@ -1506,6 +1506,41 @@ test "json reader reports struct duplicate missing and unknown-only fields" {
     try std.testing.expectError(error.MissingField, readSlice(User, std.testing.allocator, "{\"id\":1,\"name_extra\":\"Ada\"}"));
 }
 
+test "json read cleans up owned fields on missing required field" {
+    const User = struct {
+        name: []const u8,
+        id: u8,
+    };
+
+    try std.testing.expectError(error.MissingField, readSlice(User, std.testing.allocator, "{\"name\":\"Ada\"}"));
+}
+
+test "json read cleans up owned fields on duplicate field" {
+    const User = struct {
+        name: []const u8,
+    };
+
+    try std.testing.expectError(error.DuplicateField, readSlice(User, std.testing.allocator,
+        \\{"name":"Ada","name":"Grace"}
+    ));
+}
+
+test "json read cleans up owned array elements on invalid length" {
+    try std.testing.expectError(error.InvalidArrayLength, readSlice([2][]const u8, std.testing.allocator,
+        \\[
+        \\  "one",
+        \\  "two",
+        \\  "three"
+        \\]
+    ));
+
+    try std.testing.expectError(error.InvalidArrayLength, readSlice([2][]const u8, std.testing.allocator,
+        \\[
+        \\  "one"
+        \\]
+    ));
+}
+
 test "json reader rejects malformed literals and trailing tokens" {
     try expectReadFails(bool, "");
     try expectReadFails(bool, "tru");
