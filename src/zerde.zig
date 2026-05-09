@@ -4,6 +4,8 @@
 pub const json = @import("json.zig");
 /// TOML format API.
 pub const toml = @import("toml.zig");
+/// Zig Object Notation format API.
+pub const zon = @import("zon.zig");
 /// Binary format API.
 pub const binary = @import("binary.zig");
 /// Human-readable format API.
@@ -42,6 +44,7 @@ pub const deinit = @import("deinit.zig").deinit;
 test {
     _ = json;
     _ = toml;
+    _ = zon;
     _ = binary;
     _ = human;
     _ = base64;

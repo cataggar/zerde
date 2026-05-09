@@ -9,12 +9,14 @@ const binary = @import("binary.zig");
 const human = @import("human.zig");
 const json = @import("json.zig");
 const toml = @import("toml.zig");
+const zon = @import("zon.zig");
 const deinitValue = @import("deinit.zig").deinit;
 
 /// Formats supported by the simple codec dispatch API.
 pub const Format = enum {
     json,
     toml,
+    zon,
     binary,
     human,
 };
@@ -38,6 +40,7 @@ pub fn Codec(comptime T: type) type {
             switch (format) {
                 .json => try json.write(writer, value),
                 .toml => try toml.write(writer, value),
+                .zon => try zon.write(writer, value),
                 .binary => try binary.write(writer, value),
                 .human => try human.write(writer, value),
             }
@@ -48,6 +51,7 @@ pub fn Codec(comptime T: type) type {
             return switch (format) {
                 .json => try json.read(T, allocator, reader),
                 .toml => try toml.read(T, allocator, reader),
+                .zon => try zon.read(T, allocator, reader),
                 .binary => try binary.read(T, allocator, reader),
                 .human => @compileError("human format is write-only"),
             };
@@ -64,6 +68,7 @@ pub fn Codec(comptime T: type) type {
             switch (format) {
                 .json => try json.writeWithOptions(writer, value, coerceOptions(json.WriteOptions, format_options)),
                 .toml => try toml.writeWithOptions(allocator, writer, value, coerceOptions(toml.WriteOptions, format_options)),
+                .zon => try zon.writeWithOptions(writer, value, coerceOptions(zon.WriteOptions, format_options)),
                 .binary => try binary.writeWithOptions(writer, value, coerceOptions(binary.Options, format_options)),
                 .human => try human.writeWithOptions(writer, value, coerceOptions(human.WriteOptions, format_options)),
             }
@@ -80,6 +85,7 @@ pub fn Codec(comptime T: type) type {
                 .binary => try binary.readWithOptions(T, allocator, reader, coerceOptions(binary.Options, format_options)),
                 .json => @compileError("json read has no format options"),
                 .toml => @compileError("toml read has no format options"),
+                .zon => @compileError("zon read has no format options"),
                 .human => @compileError("human format is write-only"),
             };
         }
@@ -202,6 +208,29 @@ test "codec writes toml equivalent to format api" {
     ,
         codec_writer.buffered(),
     );
+}
+
+test "codec writes zon equivalent to format api" {
+    const Color = enum { red, green, blue };
+    const User = struct {
+        id: u64,
+        name: []const u8,
+        active: bool,
+        color: Color,
+    };
+
+    const user = User{ .id = 1, .name = "Grant", .active = true, .color = .green };
+
+    var format_buffer: [1024]u8 = undefined;
+    var format_writer: std.Io.Writer = .fixed(&format_buffer);
+    try zon.write(&format_writer, user);
+
+    var codec_buffer: [1024]u8 = undefined;
+    var codec_writer: std.Io.Writer = .fixed(&codec_buffer);
+    try Codec(User).write(&codec_writer, user, .zon);
+
+    try std.testing.expectEqualStrings(format_writer.buffered(), codec_writer.buffered());
+    try std.testing.expectEqualStrings(".{ .id = 1, .name = \"Grant\", .active = true, .color = .green }", codec_writer.buffered());
 }
 
 test "codec writes supported values through both milestone 3 formats" {
@@ -347,6 +376,29 @@ test "codec reads toml equivalent to format api" {
     try std.testing.expectEqual(format_value.id, codec_value.id);
     try std.testing.expectEqualStrings(format_value.name, codec_value.name);
     try std.testing.expectEqual(format_value.active, codec_value.active);
+}
+
+test "codec reads zon equivalent to format api" {
+    const Color = enum { red, green, blue };
+    const User = struct {
+        id: u64,
+        name: []const u8,
+        active: bool,
+        color: Color,
+    };
+    const input = ".{ .id = 1, .name = \"Grant\", .active = true, .color = .green }";
+
+    const format_value = try zon.readSlice(User, std.testing.allocator, input);
+    defer deinitValue(User, std.testing.allocator, format_value);
+
+    var reader: std.Io.Reader = .fixed(input);
+    const codec_value = try Codec(User).read(std.testing.allocator, &reader, .zon);
+    defer Codec(User).deinit(std.testing.allocator, codec_value);
+
+    try std.testing.expectEqual(format_value.id, codec_value.id);
+    try std.testing.expectEqualStrings(format_value.name, codec_value.name);
+    try std.testing.expectEqual(format_value.active, codec_value.active);
+    try std.testing.expectEqual(format_value.color, codec_value.color);
 }
 
 test "codec writes and reads binary equivalent to format api" {
