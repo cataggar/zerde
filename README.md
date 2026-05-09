@@ -245,6 +245,7 @@ const Blob = struct {
     name: []const u8,
     data: zerde.Bytes,
 }
+```
 
 JSON, TOML, and human encoders emit raw bytes as standard padded RFC 4648 base64 strings. The binary format writes raw bytes directly with its normal length-prefix rules for slices.
 
