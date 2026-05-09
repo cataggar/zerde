@@ -18,6 +18,25 @@ The current version is `0.1.0` and targets Zig `0.16.0` or newer. The API is usa
 
 ## Quick Start
 
+1. Add `zerde` to your Zig package dependencies:
+
+```sh
+zig fetch --save git+https://codeberg.org/gron/zerde#v0.1.0
+```
+
+2. Wire the dependency into your executable in `build.zig`:
+
+```zig
+const zerde_dep = b.dependency("zerde", .{
+    .target = target,
+    .optimize = optimize,
+});
+
+exe.root_module.addImport("zerde", zerde_dep.module("zerde"));
+```
+
+3. Import and use `zerde`
+
 ```zig
 const std = @import("std");
 const zerde = @import("zerde");
