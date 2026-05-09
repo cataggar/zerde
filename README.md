@@ -363,13 +363,18 @@ JSON:
 - Pretty output is controlled with `json.WriteOptions{ .pretty = true, .indent = 2 }`.
 - The decoder rejects trailing input and malformed syntax.
 
+Date/time:
+
+- Date/time helpers are exposed as `zerde.LocalDate`, `zerde.LocalTime`, `zerde.LocalDateTime`, `zerde.OffsetDateTime`, and `zerde.Timestamp`.
+- Temporal values use native format support when available, otherwise canonical string representations.
+
 TOML:
 
 - The root value must be a struct because TOML documents are tables.
 - TOML has no null value, so serializing null optionals returns `error.UnsupportedTomlNull`.
 - Integers are limited to TOML's signed 64-bit range.
 - Writer layout can be `.inline_tables` or `.sections`.
-- Date/time helpers are exposed as `zerde.LocalDate`, `zerde.LocalTime`, `zerde.LocalDateTime`, `zerde.OffsetDateTime`, and `zerde.Timestamp`.
+- `zerde.LocalDate`, `zerde.LocalTime`, `zerde.LocalDateTime`, and `zerde.OffsetDateTime` use native TOML date/time literals.
 
 MessagePack:
 

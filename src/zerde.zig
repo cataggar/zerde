@@ -25,13 +25,13 @@ pub const Bytes = base64.Bytes;
 /// Timestamp with seconds elapsed since the Unix epoch and nanosecond precision.
 pub const Timestamp = datetime.Timestamp;
 
-/// TOML local date: `YYYY-MM-DD`.
+/// Local date: `YYYY-MM-DD`.
 pub const LocalDate = datetime.LocalDate;
-/// TOML local time: `HH:MM:SS[.fraction]`.
+/// Local time: `HH:MM:SS[.fraction]`.
 pub const LocalTime = datetime.LocalTime;
-/// TOML local date-time: `YYYY-MM-DDTHH:MM:SS[.fraction]`.
+/// Local date-time: `YYYY-MM-DDTHH:MM:SS[.fraction]`.
 pub const LocalDateTime = datetime.LocalDateTime;
-/// TOML offset date-time: `YYYY-MM-DDTHH:MM:SS[.fraction]Z` or with `+/-HH:MM`.
+/// Offset date-time: `YYYY-MM-DDTHH:MM:SS[.fraction]Z` or with `+/-HH:MM`.
 pub const OffsetDateTime = datetime.OffsetDateTime;
 
 /// Type-specialized codec namespace factory.

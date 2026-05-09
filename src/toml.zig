@@ -201,9 +201,9 @@ pub const Encoder = struct {
         try self.writer.writeByte('"');
     }
 
-    pub fn emitTomlDateTime(self: *Self, value: []const u8) !void {
+    pub fn emitDateTime(self: *Self, comptime T: type, value: T) !void {
         try self.beforeValue();
-        try self.writer.writeAll(value);
+        try value.format(self.writer);
     }
 
     pub fn beginSeq(self: *Self, len: ?usize) !void {
@@ -415,8 +415,12 @@ const TreeEncoder = struct {
         try self.appendValue(.{ .string = bytes });
     }
 
-    pub fn emitTomlDateTime(self: *Self, value: []const u8) !void {
-        const bytes = try self.allocator.dupe(u8, value);
+    pub fn emitDateTime(self: *Self, comptime T: type, value: T) !void {
+        var out = std.Io.Writer.Allocating.init(self.allocator);
+        errdefer out.deinit();
+
+        try value.format(&out.writer);
+        const bytes = try out.toOwnedSlice();
         errdefer self.allocator.free(bytes);
         try self.appendValue(.{ .datetime = bytes });
     }
@@ -589,10 +593,10 @@ pub const Decoder = struct {
         };
     }
 
-    pub fn readTomlDateTime(self: *Self, allocator: std.mem.Allocator) ![]u8 {
+    pub fn readDateTime(self: *Self, comptime T: type) !T {
         const value = try self.consumeValue();
         return switch (value.*) {
-            .datetime => |bytes| try allocator.dupe(u8, bytes),
+            .datetime => |bytes| try T.parse(bytes),
             else => error.InvalidType,
         };
     }

@@ -1,4 +1,4 @@
-//! First-class TOML date and time value types.
+//! First-class date and time value types.
 
 const std = @import("std");
 
@@ -57,7 +57,7 @@ pub const Timestamp = struct {
     }
 };
 
-/// TOML local date: `YYYY-MM-DD`.
+/// Local date: `YYYY-MM-DD`.
 pub const LocalDate = struct {
     year: u16,
     month: u8,
@@ -75,20 +75,15 @@ pub const LocalDate = struct {
     }
 
     pub fn zerdeWrite(self: LocalDate, enc: anytype) !void {
-        var buffer: [16]u8 = undefined;
-        var writer: std.Io.Writer = .fixed(&buffer);
-        try self.format(&writer);
-        try emitDateTimeOrString(enc, writer.buffered());
+        try writeDateTimeScalar(LocalDate, self, enc, 16);
     }
 
     pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !LocalDate {
-        const bytes = try readDateTimeOrString(allocator, dec);
-        defer allocator.free(bytes);
-        return try parse(bytes);
+        return try readDateTimeScalar(LocalDate, allocator, dec);
     }
 };
 
-/// TOML local time: `HH:MM:SS[.fraction]`.
+/// Local time: `HH:MM:SS[.fraction]`.
 pub const LocalTime = struct {
     hour: u8,
     minute: u8,
@@ -108,20 +103,15 @@ pub const LocalTime = struct {
     }
 
     pub fn zerdeWrite(self: LocalTime, enc: anytype) !void {
-        var buffer: [32]u8 = undefined;
-        var writer: std.Io.Writer = .fixed(&buffer);
-        try self.format(&writer);
-        try emitDateTimeOrString(enc, writer.buffered());
+        try writeDateTimeScalar(LocalTime, self, enc, 32);
     }
 
     pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !LocalTime {
-        const bytes = try readDateTimeOrString(allocator, dec);
-        defer allocator.free(bytes);
-        return try parse(bytes);
+        return try readDateTimeScalar(LocalTime, allocator, dec);
     }
 };
 
-/// TOML local date-time: `YYYY-MM-DDTHH:MM:SS[.fraction]`.
+/// Local date-time: `YYYY-MM-DDTHH:MM:SS[.fraction]`.
 pub const LocalDateTime = struct {
     date: LocalDate,
     time: LocalTime,
@@ -140,20 +130,15 @@ pub const LocalDateTime = struct {
     }
 
     pub fn zerdeWrite(self: LocalDateTime, enc: anytype) !void {
-        var buffer: [48]u8 = undefined;
-        var writer: std.Io.Writer = .fixed(&buffer);
-        try self.format(&writer);
-        try emitDateTimeOrString(enc, writer.buffered());
+        try writeDateTimeScalar(LocalDateTime, self, enc, 48);
     }
 
     pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !LocalDateTime {
-        const bytes = try readDateTimeOrString(allocator, dec);
-        defer allocator.free(bytes);
-        return try parse(bytes);
+        return try readDateTimeScalar(LocalDateTime, allocator, dec);
     }
 };
 
-/// TOML offset date-time: `YYYY-MM-DDTHH:MM:SS[.fraction]Z` or with `+/-HH:MM`.
+/// Offset date-time: `YYYY-MM-DDTHH:MM:SS[.fraction]Z` or with `+/-HH:MM`.
 pub const OffsetDateTime = struct {
     date: LocalDate,
     time: LocalTime,
@@ -181,32 +166,34 @@ pub const OffsetDateTime = struct {
     }
 
     pub fn zerdeWrite(self: OffsetDateTime, enc: anytype) !void {
-        var buffer: [56]u8 = undefined;
-        var writer: std.Io.Writer = .fixed(&buffer);
-        try self.format(&writer);
-        try emitDateTimeOrString(enc, writer.buffered());
+        try writeDateTimeScalar(OffsetDateTime, self, enc, 56);
     }
 
     pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !OffsetDateTime {
-        const bytes = try readDateTimeOrString(allocator, dec);
-        defer allocator.free(bytes);
-        return try parse(bytes);
+        return try readDateTimeScalar(OffsetDateTime, allocator, dec);
     }
 };
 
-fn emitDateTimeOrString(enc: anytype, value: []const u8) !void {
-    if (comptime hasTomlDateTimeEmitter(@TypeOf(enc))) {
-        try enc.emitTomlDateTime(value);
-    } else {
-        try enc.emitString(value);
+fn writeDateTimeScalar(comptime T: type, value: T, enc: anytype, comptime buffer_len: usize) !void {
+    if (comptime hasDateTimeEmitter(@TypeOf(enc))) {
+        try enc.emitDateTime(T, value);
+        return;
     }
+
+    var buffer: [buffer_len]u8 = undefined;
+    var writer: std.Io.Writer = .fixed(&buffer);
+    try value.format(&writer);
+    try enc.emitString(writer.buffered());
 }
 
-fn readDateTimeOrString(allocator: std.mem.Allocator, dec: anytype) ![]u8 {
-    if (comptime hasTomlDateTimeReader(@TypeOf(dec))) {
-        return try dec.readTomlDateTime(allocator);
+fn readDateTimeScalar(comptime T: type, allocator: std.mem.Allocator, dec: anytype) !T {
+    if (comptime hasDateTimeReader(@TypeOf(dec))) {
+        return try dec.readDateTime(T);
     }
-    return try dec.readString(allocator);
+
+    const bytes = try dec.readString(allocator);
+    defer allocator.free(bytes);
+    return try T.parse(bytes);
 }
 
 fn hasTimestampEmitter(comptime T: type) bool {
@@ -225,20 +212,20 @@ fn hasTimestampReader(comptime T: type) bool {
     return @hasDecl(Target, "readTimestamp");
 }
 
-fn hasTomlDateTimeEmitter(comptime T: type) bool {
+fn hasDateTimeEmitter(comptime T: type) bool {
     const Target = switch (@typeInfo(T)) {
         .pointer => |pointer| pointer.child,
         else => T,
     };
-    return @hasDecl(Target, "emitTomlDateTime");
+    return @hasDecl(Target, "emitDateTime");
 }
 
-fn hasTomlDateTimeReader(comptime T: type) bool {
+fn hasDateTimeReader(comptime T: type) bool {
     const Target = switch (@typeInfo(T)) {
         .pointer => |pointer| pointer.child,
         else => T,
     };
-    return @hasDecl(Target, "readTomlDateTime");
+    return @hasDecl(Target, "readDateTime");
 }
 
 fn formatFraction(writer: *std.Io.Writer, nanosecond: u32) !void {
