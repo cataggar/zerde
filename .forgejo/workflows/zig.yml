@@ -1,0 +1,38 @@
+name: Zig
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: docker
+
+    container:
+      image: node:24-bookworm-slim
+
+    steps:
+      - name: Install system dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git \
+            ca-certificates \
+            tar \
+            xz-utils
+          rm -rf /var/lib/apt/lists/*
+
+      - name: Checkout
+        uses: https://code.forgejo.org/actions/checkout@v4
+
+      - name: Set up Zig
+        uses: https://codeberg.org/mlugg/setup-zig@v2.2.1
+        with:
+          use-cache: true
+
+      - name: Show Zig version
+        run: zig version
+
+      - name: Build and test
+        run: zig build test
