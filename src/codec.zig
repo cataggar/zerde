@@ -269,7 +269,7 @@ test "codec validates metadata and writes renamed fields" {
         pub const zerde = .{
             .rename_all = .camel_case,
             .fields = .{
-                .password_hash = .{ .skip_serializing = true },
+                .password_hash = .{ .skip_writing = true },
             },
         };
     };
@@ -388,7 +388,7 @@ test "codec reads json using metadata rules" {
             .deny_unknown_fields = true,
             .fields = .{
                 .display_name = .{ .rename = "name" },
-                .password_hash = .{ .skip_deserializing = true },
+                .password_hash = .{ .skip_reading = true },
             },
         };
     };

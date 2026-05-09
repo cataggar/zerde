@@ -951,7 +951,7 @@ test "json writes metadata renamed and skipped fields" {
         pub const zerde = .{
             .rename_all = .camel_case,
             .fields = .{
-                .password_hash = .{ .skip_serializing = true },
+                .password_hash = .{ .skip_writing = true },
             },
         };
     };
@@ -1021,7 +1021,7 @@ test "json skip metadata omits fields from field count" {
     try expectJson(Hidden{ .password_hash = "secret" }, "{}");
 }
 
-test "json skip_serializing omits middle field without extra commas" {
+test "json skip_writing omits middle field without extra commas" {
     const User = struct {
         id: u64,
         password_hash: []const u8,
@@ -1029,7 +1029,7 @@ test "json skip_serializing omits middle field without extra commas" {
 
         pub const zerde = .{
             .fields = .{
-                .password_hash = .{ .skip_serializing = true },
+                .password_hash = .{ .skip_writing = true },
             },
         };
     };
@@ -1715,7 +1715,7 @@ test "json denies unknown fields when metadata requests it" {
     try std.testing.expectError(error.UnknownField, readSlice(User, std.testing.allocator, "{\"id\":1,\"extra\":2}"));
 }
 
-test "json read honors skip and skip_deserializing metadata" {
+test "json read honors skip and skip_reading metadata" {
     const User = struct {
         id: u8,
         password_hash: []const u8,
@@ -1724,8 +1724,8 @@ test "json read honors skip and skip_deserializing metadata" {
 
         pub const zerde = .{
             .fields = .{
-                .password_hash = .{ .skip_serializing = true },
-                .token = .{ .skip_deserializing = true },
+                .password_hash = .{ .skip_writing = true },
+                .token = .{ .skip_reading = true },
                 .cached_score = .{ .skip = true },
             },
         };
@@ -1747,14 +1747,14 @@ test "json read honors skip and skip_deserializing metadata" {
     try std.testing.expectEqual(@as(u8, 42), value.cached_score);
 }
 
-test "json skip_deserializing required field remains missing" {
+test "json skip_reading required field remains missing" {
     const User = struct {
         id: u8,
         token: []const u8,
 
         pub const zerde = .{
             .fields = .{
-                .token = .{ .skip_deserializing = true },
+                .token = .{ .skip_reading = true },
             },
         };
     };
@@ -1787,14 +1787,14 @@ test "json deny_unknown_fields respects renamed wire names" {
     try std.testing.expectError(error.UnknownField, readSlice(User, std.testing.allocator, "{\"userId\":1,\"name\":\"Ada\",\"extra\":true}"));
 }
 
-test "json detects duplicate skipped deserialization fields" {
+test "json detects duplicate skipped read fields" {
     const User = struct {
         id: u8,
         token: []const u8 = "default-token",
 
         pub const zerde = .{
             .fields = .{
-                .token = .{ .skip_deserializing = true },
+                .token = .{ .skip_reading = true },
             },
         };
     };
@@ -2018,13 +2018,13 @@ test "json roundtrips tagged unions with owned payloads" {
     try std.testing.expectEqualDeep(none, none_parsed);
 }
 
-test "json field with hook serializes and deserializes" {
+test "json field with hook writes and reads" {
     const OffsetTimestamp = struct {
-        pub fn serialize(value: i64, enc: anytype) !void {
+        pub fn write(value: i64, enc: anytype) !void {
             try enc.emitInt(value + 1000);
         }
 
-        pub fn deserialize(comptime T: type, allocator: std.mem.Allocator, dec: anytype) !T {
+        pub fn read(comptime T: type, allocator: std.mem.Allocator, dec: anytype) !T {
             _ = allocator;
             return (try dec.readInt(T)) - 1000;
         }
@@ -2050,7 +2050,7 @@ test "json field with hook serializes and deserializes" {
     try std.testing.expectEqual(@as(i64, 42), parsed.created_at);
 }
 
-test "json field hook serializes small binary packet to and from bytes" {
+test "json field hook writes small binary packet to and from bytes" {
     const Packet = struct {
         opcode: u8,
         flags: u8,
@@ -2058,7 +2058,7 @@ test "json field hook serializes small binary packet to and from bytes" {
     };
 
     const PacketBytes = struct {
-        pub fn serialize(value: Packet, enc: anytype) !void {
+        pub fn write(value: Packet, enc: anytype) !void {
             try enc.beginSeq(4);
             try enc.emitInt(value.opcode);
             try enc.emitInt(value.flags);
@@ -2067,7 +2067,7 @@ test "json field hook serializes small binary packet to and from bytes" {
             try enc.endSeq();
         }
 
-        pub fn deserialize(comptime T: type, allocator: std.mem.Allocator, dec: anytype) !T {
+        pub fn read(comptime T: type, allocator: std.mem.Allocator, dec: anytype) !T {
             _ = allocator;
 
             _ = try dec.beginSeq();
@@ -2135,15 +2135,15 @@ test "json serializes same small packet message without custom hooks" {
     try std.testing.expectEqualDeep(message, parsed);
 }
 
-test "json field split hooks can serialize or deserialize independently" {
+test "json field split hooks can write or read independently" {
     const BoolAsYesNo = struct {
-        pub fn serialize(value: bool, enc: anytype) !void {
+        pub fn write(value: bool, enc: anytype) !void {
             try enc.emitString(if (value) "yes" else "no");
         }
     };
 
     const YesNoAsBool = struct {
-        pub fn deserialize(comptime T: type, allocator: std.mem.Allocator, dec: anytype) !T {
+        pub fn read(comptime T: type, allocator: std.mem.Allocator, dec: anytype) !T {
             const value = try dec.readString(allocator);
             defer allocator.free(value);
             if (std.mem.eql(u8, value, "yes")) return true;
@@ -2157,7 +2157,7 @@ test "json field split hooks can serialize or deserialize independently" {
 
         pub const zerde = .{
             .fields = .{
-                .active = .{ .serialize_with = BoolAsYesNo },
+                .active = .{ .write_with = BoolAsYesNo },
             },
         };
     };
@@ -2167,7 +2167,7 @@ test "json field split hooks can serialize or deserialize independently" {
 
         pub const zerde = .{
             .fields = .{
-                .active = .{ .deserialize_with = YesNoAsBool },
+                .active = .{ .read_with = YesNoAsBool },
             },
         };
     };
@@ -2178,11 +2178,11 @@ test "json field split hooks can serialize or deserialize independently" {
     try std.testing.expect(!parsed.active);
 }
 
-test "json type-native serialize hook takes precedence over fields" {
+test "json type-native write hook takes precedence over fields" {
     const Value = struct {
         raw: u8,
 
-        pub fn zerdeSerialize(self: @This(), enc: anytype) !void {
+        pub fn zerdeWrite(self: @This(), enc: anytype) !void {
             try enc.emitInt(self.raw + 1);
         }
     };
@@ -2190,11 +2190,11 @@ test "json type-native serialize hook takes precedence over fields" {
     try expectJson(Value{ .raw = 7 }, "8");
 }
 
-test "json type-native deserialize hook takes precedence over fields" {
+test "json type-native read hook takes precedence over fields" {
     const Value = struct {
         raw: u8,
 
-        pub fn zerdeDeserialize(allocator: std.mem.Allocator, dec: anytype) !@This() {
+        pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !@This() {
             _ = allocator;
             return .{ .raw = (try dec.readInt(u8)) - 1 };
         }

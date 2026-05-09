@@ -15,8 +15,8 @@ pub fn serialize(value: anytype, encoder: anytype) !void {
 }
 
 fn serializeValue(comptime T: type, value: T, encoder: anytype) !void {
-    if (comptime hasTypeSerializeHook(T)) {
-        try T.zerdeSerialize(value, encoder);
+    if (comptime hasTypeWriteHook(T)) {
+        try T.zerdeWrite(value, encoder);
         return;
     }
 
@@ -204,8 +204,8 @@ fn serializeStructFields(comptime T: type, value: T, encoder: anytype) !void {
 
             const wire_name = comptime meta.fieldWireName(field.name, field_options, options);
             try encoder.emitFieldName(wire_name);
-            if (comptime meta.serializeHook(field_options)) |Hook| {
-                try Hook.serialize(@field(value, field.name), encoder);
+            if (comptime meta.writeHook(field_options)) |Hook| {
+                try Hook.write(@field(value, field.name), encoder);
             } else if (comptime field_options.bytes) {
                 try serializeBytesValue(field.type, @field(value, field.name), encoder);
             } else {
@@ -237,9 +237,9 @@ fn serializeBytesValue(comptime T: type, value: T, encoder: anytype) !void {
     }
 }
 
-fn hasTypeSerializeHook(comptime T: type) bool {
+fn hasTypeWriteHook(comptime T: type) bool {
     return switch (@typeInfo(T)) {
-        .@"struct", .@"union", .@"enum", .@"opaque" => @hasDecl(T, "zerdeSerialize"),
+        .@"struct", .@"union", .@"enum", .@"opaque" => @hasDecl(T, "zerdeWrite"),
         else => false,
     };
 }

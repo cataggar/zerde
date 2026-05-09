@@ -19,14 +19,14 @@ pub const LocalDate = struct {
         try writer.print("{d:0>4}-{d:0>2}-{d:0>2}", .{ self.year, self.month, self.day });
     }
 
-    pub fn zerdeSerialize(self: LocalDate, enc: anytype) !void {
+    pub fn zerdeWrite(self: LocalDate, enc: anytype) !void {
         var buffer: [16]u8 = undefined;
         var writer: std.Io.Writer = .fixed(&buffer);
         try self.format(&writer);
         try emitDateTimeOrString(enc, writer.buffered());
     }
 
-    pub fn zerdeDeserialize(allocator: std.mem.Allocator, dec: anytype) !LocalDate {
+    pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !LocalDate {
         const bytes = try readDateTimeOrString(allocator, dec);
         defer allocator.free(bytes);
         return try parse(bytes);
@@ -52,14 +52,14 @@ pub const LocalTime = struct {
         try formatFraction(writer, self.nanosecond);
     }
 
-    pub fn zerdeSerialize(self: LocalTime, enc: anytype) !void {
+    pub fn zerdeWrite(self: LocalTime, enc: anytype) !void {
         var buffer: [32]u8 = undefined;
         var writer: std.Io.Writer = .fixed(&buffer);
         try self.format(&writer);
         try emitDateTimeOrString(enc, writer.buffered());
     }
 
-    pub fn zerdeDeserialize(allocator: std.mem.Allocator, dec: anytype) !LocalTime {
+    pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !LocalTime {
         const bytes = try readDateTimeOrString(allocator, dec);
         defer allocator.free(bytes);
         return try parse(bytes);
@@ -84,14 +84,14 @@ pub const LocalDateTime = struct {
         try self.time.format(writer);
     }
 
-    pub fn zerdeSerialize(self: LocalDateTime, enc: anytype) !void {
+    pub fn zerdeWrite(self: LocalDateTime, enc: anytype) !void {
         var buffer: [48]u8 = undefined;
         var writer: std.Io.Writer = .fixed(&buffer);
         try self.format(&writer);
         try emitDateTimeOrString(enc, writer.buffered());
     }
 
-    pub fn zerdeDeserialize(allocator: std.mem.Allocator, dec: anytype) !LocalDateTime {
+    pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !LocalDateTime {
         const bytes = try readDateTimeOrString(allocator, dec);
         defer allocator.free(bytes);
         return try parse(bytes);
@@ -125,14 +125,14 @@ pub const OffsetDateTime = struct {
         try writer.print("{c}{d:0>2}:{d:0>2}", .{ sign, abs_minutes / 60, abs_minutes % 60 });
     }
 
-    pub fn zerdeSerialize(self: OffsetDateTime, enc: anytype) !void {
+    pub fn zerdeWrite(self: OffsetDateTime, enc: anytype) !void {
         var buffer: [56]u8 = undefined;
         var writer: std.Io.Writer = .fixed(&buffer);
         try self.format(&writer);
         try emitDateTimeOrString(enc, writer.buffered());
     }
 
-    pub fn zerdeDeserialize(allocator: std.mem.Allocator, dec: anytype) !OffsetDateTime {
+    pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !OffsetDateTime {
         const bytes = try readDateTimeOrString(allocator, dec);
         defer allocator.free(bytes);
         return try parse(bytes);

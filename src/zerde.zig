@@ -13,8 +13,19 @@ pub const base64 = @import("base64.zig");
 /// Shared numeric parsing and conversion helpers.
 pub const number = @import("number.zig");
 
+const datetime = @import("datetime.zig");
+
 /// Wrapper type for serializing raw bytes as bytes rather than UTF-8 strings.
 pub const Bytes = base64.Bytes;
+
+/// TOML local date: `YYYY-MM-DD`.
+pub const LocalDate = datetime.LocalDate;
+/// TOML local time: `HH:MM:SS[.fraction]`.
+pub const LocalTime = datetime.LocalTime;
+/// TOML local date-time: `YYYY-MM-DDTHH:MM:SS[.fraction]`.
+pub const LocalDateTime = datetime.LocalDateTime;
+/// TOML offset date-time: `YYYY-MM-DDTHH:MM:SS[.fraction]Z` or with `+/-HH:MM`.
+pub const OffsetDateTime = datetime.OffsetDateTime;
 
 /// Type-specialized codec namespace factory.
 pub const Codec = @import("codec.zig").Codec;
@@ -36,7 +47,10 @@ test {
     _ = base64;
     _ = number;
     _ = Bytes;
-    _ = @import("datetime.zig");
+    _ = LocalDate;
+    _ = LocalTime;
+    _ = LocalDateTime;
+    _ = OffsetDateTime;
     _ = Codec;
     _ = Format;
     _ = serialize;

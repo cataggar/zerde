@@ -140,14 +140,10 @@ pub const Kind = enum {
     struct_,
 };
 
-/// TOML local date: `YYYY-MM-DD`.
-pub const LocalDate = datetime.LocalDate;
-/// TOML local time: `HH:MM:SS[.fraction]`.
-pub const LocalTime = datetime.LocalTime;
-/// TOML local date-time: `YYYY-MM-DDTHH:MM:SS[.fraction]`.
-pub const LocalDateTime = datetime.LocalDateTime;
-/// TOML offset date-time: `YYYY-MM-DDTHH:MM:SS[.fraction]Z` or with `+/-HH:MM`.
-pub const OffsetDateTime = datetime.OffsetDateTime;
+const LocalDate = datetime.LocalDate;
+const LocalTime = datetime.LocalTime;
+const LocalDateTime = datetime.LocalDateTime;
+const OffsetDateTime = datetime.OffsetDateTime;
 
 /// Low-level TOML encoder used by the generic serializer.
 pub const Encoder = struct {
@@ -1756,7 +1752,7 @@ test "toml writes metadata renamed and skipped fields" {
             .rename_all = .camel_case,
             .fields = .{
                 .display_name = .{ .rename = "name" },
-                .password_hash = .{ .skip_serializing = true },
+                .password_hash = .{ .skip_writing = true },
             },
         };
     };
@@ -1840,7 +1836,7 @@ test "toml reads metadata renamed skipped and defaulted fields" {
             .rename_all = .camel_case,
             .fields = .{
                 .display_name = .{ .rename = "name" },
-                .token = .{ .skip_deserializing = true },
+                .token = .{ .skip_reading = true },
             },
         };
     };
@@ -2275,13 +2271,13 @@ test "toml low-level decoder works with deserialize" {
     try std.testing.expectEqualStrings("Ada", value.name);
 }
 
-test "toml field hook serializes and deserializes" {
+test "toml field hook writes and reads" {
     const BoolAsYesNo = struct {
-        pub fn serialize(value: bool, enc: anytype) !void {
+        pub fn write(value: bool, enc: anytype) !void {
             try enc.emitString(if (value) "yes" else "no");
         }
 
-        pub fn deserialize(comptime T: type, allocator: std.mem.Allocator, dec: anytype) !T {
+        pub fn read(comptime T: type, allocator: std.mem.Allocator, dec: anytype) !T {
             const value = try dec.readString(allocator);
             defer allocator.free(value);
             if (std.mem.eql(u8, value, "yes")) return true;

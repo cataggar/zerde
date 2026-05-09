@@ -1,7 +1,7 @@
 const zerde = @import("zerde");
 
 const BadHook = struct {
-    pub fn serialize(value: u64, encoder: anytype) !void {
+    pub fn write(value: u64, encoder: anytype) !void {
         try encoder.emitInt(value);
     }
 };

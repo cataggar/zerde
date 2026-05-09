@@ -322,7 +322,7 @@ test "human writes metadata renamed and skipped fields" {
         pub const zerde = .{
             .rename_all = .camel_case,
             .fields = .{
-                .password_hash = .{ .skip_serializing = true },
+                .password_hash = .{ .skip_writing = true },
             },
         };
     };
@@ -367,7 +367,7 @@ test "human skip metadata handles empty and middle fields" {
 
         pub const zerde = .{
             .fields = .{
-                .password_hash = .{ .skip_serializing = true },
+                .password_hash = .{ .skip_writing = true },
             },
         };
     };
@@ -376,7 +376,7 @@ test "human skip metadata handles empty and middle fields" {
     try expectHuman(User{ .id = 1, .password_hash = "secret", .active = true }, "User { id: 1, active: true }");
 }
 
-test "human write includes skip_deserializing fields" {
+test "human write includes skip_reading fields" {
     const User = struct {
         id: u8,
         token: []const u8,
@@ -384,7 +384,7 @@ test "human write includes skip_deserializing fields" {
         pub const zerde = .{
             .deny_unknown_fields = true,
             .fields = .{
-                .token = .{ .skip_deserializing = true },
+                .token = .{ .skip_reading = true },
             },
         };
     };

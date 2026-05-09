@@ -248,9 +248,15 @@ pub const Encoder = struct {
     }
 
     fn writeInt(self: *Self, comptime T: type, value: T) !void {
-        comptime if (@bitSizeOf(T) % 8 != 0) @compileError("binary integer fields must use a byte-aligned integer type");
-        var bytes: [@sizeOf(T)]u8 = undefined;
-        std.mem.writeInt(T, &bytes, value, self.options.endian);
+        const byte_count = comptime intByteCount(T);
+        if (comptime byte_count == 0) return;
+
+        const Unsigned = std.meta.Int(.unsigned, @bitSizeOf(T));
+        const Storage = std.meta.Int(.unsigned, byte_count * 8);
+        const raw: Unsigned = @bitCast(value);
+        const storage: Storage = @intCast(raw);
+        var bytes: [byte_count]u8 = undefined;
+        std.mem.writeInt(Storage, &bytes, storage, self.options.endian);
         try self.writer.writeAll(&bytes);
     }
 
@@ -352,10 +358,16 @@ pub const Decoder = struct {
     }
 
     pub fn readInt(self: *Self, comptime T: type) !T {
-        comptime if (@bitSizeOf(T) % 8 != 0) @compileError("binary integer fields must use a byte-aligned integer type");
-        var bytes: [@sizeOf(T)]u8 = undefined;
+        const byte_count = comptime intByteCount(T);
+        if (comptime byte_count == 0) return @intCast(0);
+
+        const Storage = std.meta.Int(.unsigned, byte_count * 8);
+        const Unsigned = std.meta.Int(.unsigned, @bitSizeOf(T));
+        var bytes: [byte_count]u8 = undefined;
         try self.readExact(&bytes);
-        return std.mem.readInt(T, &bytes, self.options.endian);
+        const storage = std.mem.readInt(Storage, &bytes, self.options.endian);
+        const raw: Unsigned = @truncate(storage);
+        return @bitCast(raw);
     }
 
     pub fn readFloat(self: *Self, comptime T: type) !T {
@@ -629,6 +641,10 @@ fn tagByteCount(comptime T: type) usize {
     return @max(1, (bits + 7) / 8);
 }
 
+fn intByteCount(comptime T: type) usize {
+    return (@bitSizeOf(T) + 7) / 8;
+}
+
 fn tagRawValue(comptime T: type, value: anytype) u64 {
     const Int = switch (@typeInfo(T)) {
         .@"enum" => |enum_info| enum_info.tag_type,
@@ -653,6 +669,95 @@ test "binary writes known primitive bytes" {
     const bool_bytes = try writeAlloc(std.testing.allocator, true);
     defer std.testing.allocator.free(bool_bytes);
     try std.testing.expectEqualSlices(u8, &.{1}, bool_bytes);
+}
+
+test "binary rounds integer fields up to whole bytes" {
+    const unsigned_bytes = try writeAlloc(std.testing.allocator, @as(u12, 0xabc));
+    defer std.testing.allocator.free(unsigned_bytes);
+    try std.testing.expectEqualSlices(u8, &.{ 0xbc, 0x0a }, unsigned_bytes);
+    try std.testing.expectEqual(@as(u12, 0xabc), try readSlice(u12, std.testing.allocator, unsigned_bytes));
+
+    const signed_bytes = try writeAlloc(std.testing.allocator, @as(i12, -2));
+    defer std.testing.allocator.free(signed_bytes);
+    try std.testing.expectEqualSlices(u8, &.{ 0xfe, 0x0f }, signed_bytes);
+    try std.testing.expectEqual(@as(i12, -2), try readSlice(i12, std.testing.allocator, signed_bytes));
+}
+
+test "binary roundtrips mixed non-byte-aligned integer fields" {
+    const Packed = struct {
+        a: u1,
+        b: u3,
+        c: i5,
+        d: u9,
+        e: i12,
+        f: u17,
+        g: i20,
+    };
+
+    const original = Packed{
+        .a = 1,
+        .b = 0b101,
+        .c = -7,
+        .d = 0x101,
+        .e = -33,
+        .f = 0x1ffff,
+        .g = -0x1234,
+    };
+    const bytes = try writeAlloc(std.testing.allocator, original);
+    defer std.testing.allocator.free(bytes);
+
+    try std.testing.expectEqualSlices(u8, &.{
+        0x01,
+        0x05,
+        0x19,
+        0x01,
+        0x01,
+        0xdf,
+        0x0f,
+        0xff,
+        0xff,
+        0x01,
+        0xcc,
+        0xed,
+        0x0f,
+    }, bytes);
+
+    const parsed = try readSlice(Packed, std.testing.allocator, bytes);
+    try std.testing.expectEqual(original.a, parsed.a);
+    try std.testing.expectEqual(original.b, parsed.b);
+    try std.testing.expectEqual(original.c, parsed.c);
+    try std.testing.expectEqual(original.d, parsed.d);
+    try std.testing.expectEqual(original.e, parsed.e);
+    try std.testing.expectEqual(original.f, parsed.f);
+    try std.testing.expectEqual(original.g, parsed.g);
+
+    const big_bytes = try writeAllocWithOptions(std.testing.allocator, original, .{ .endian = .big });
+    defer std.testing.allocator.free(big_bytes);
+
+    try std.testing.expectEqualSlices(u8, &.{
+        0x01,
+        0x05,
+        0x19,
+        0x01,
+        0x01,
+        0x0f,
+        0xdf,
+        0x01,
+        0xff,
+        0xff,
+        0x0f,
+        0xed,
+        0xcc,
+    }, big_bytes);
+
+    const parsed_big = try readSliceWithOptions(Packed, std.testing.allocator, big_bytes, .{ .endian = .big });
+    try std.testing.expectEqual(original.a, parsed_big.a);
+    try std.testing.expectEqual(original.b, parsed_big.b);
+    try std.testing.expectEqual(original.c, parsed_big.c);
+    try std.testing.expectEqual(original.d, parsed_big.d);
+    try std.testing.expectEqual(original.e, parsed_big.e);
+    try std.testing.expectEqual(original.f, parsed_big.f);
+    try std.testing.expectEqual(original.g, parsed_big.g);
 }
 
 test "binary writes arrays without length prefix" {

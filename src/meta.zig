@@ -26,11 +26,11 @@ pub const union_content_field_name = "value";
 pub const FieldOptions = struct {
     rename: ?[]const u8 = null,
     skip: bool = false,
-    skip_serializing: bool = false,
-    skip_deserializing: bool = false,
+    skip_writing: bool = false,
+    skip_reading: bool = false,
     with: ?type = null,
-    serialize_with: ?type = null,
-    deserialize_with: ?type = null,
+    write_with: ?type = null,
+    read_with: ?type = null,
     bytes: bool = false,
 };
 
@@ -148,23 +148,23 @@ pub fn fieldOptionsFor(comptime T: type, comptime field_name: []const u8) FieldO
 
 /// Returns true when a field should be included in serialized output.
 pub fn shouldSerialize(comptime field_options: FieldOptions) bool {
-    return !field_options.skip and !field_options.skip_serializing;
+    return !field_options.skip and !field_options.skip_writing;
 }
 
 /// Returns true when a field should be read from input.
 pub fn shouldDeserialize(comptime field_options: FieldOptions) bool {
-    return !field_options.skip and !field_options.skip_deserializing;
+    return !field_options.skip and !field_options.skip_reading;
 }
 
-/// Returns the effective field serialization hook, if configured.
-pub fn serializeHook(comptime field_options: FieldOptions) ?type {
-    if (field_options.serialize_with) |Hook| return Hook;
+/// Returns the effective field write hook, if configured.
+pub fn writeHook(comptime field_options: FieldOptions) ?type {
+    if (field_options.write_with) |Hook| return Hook;
     return field_options.with;
 }
 
-/// Returns the effective field deserialization hook, if configured.
-pub fn deserializeHook(comptime field_options: FieldOptions) ?type {
-    if (field_options.deserialize_with) |Hook| return Hook;
+/// Returns the effective field read hook, if configured.
+pub fn readHook(comptime field_options: FieldOptions) ?type {
+    if (field_options.read_with) |Hook| return Hook;
     return field_options.with;
 }
 
@@ -184,11 +184,11 @@ fn parseFieldOptions(comptime metadata: anytype) FieldOptions {
 
     if (@hasField(Metadata, "rename")) options.rename = @field(metadata, "rename");
     if (@hasField(Metadata, "skip")) options.skip = @field(metadata, "skip");
-    if (@hasField(Metadata, "skip_serializing")) options.skip_serializing = @field(metadata, "skip_serializing");
-    if (@hasField(Metadata, "skip_deserializing")) options.skip_deserializing = @field(metadata, "skip_deserializing");
+    if (@hasField(Metadata, "skip_writing")) options.skip_writing = @field(metadata, "skip_writing");
+    if (@hasField(Metadata, "skip_reading")) options.skip_reading = @field(metadata, "skip_reading");
     if (@hasField(Metadata, "with")) options.with = @field(metadata, "with");
-    if (@hasField(Metadata, "serialize_with")) options.serialize_with = @field(metadata, "serialize_with");
-    if (@hasField(Metadata, "deserialize_with")) options.deserialize_with = @field(metadata, "deserialize_with");
+    if (@hasField(Metadata, "write_with")) options.write_with = @field(metadata, "write_with");
+    if (@hasField(Metadata, "read_with")) options.read_with = @field(metadata, "read_with");
     if (@hasField(Metadata, "bytes")) options.bytes = @field(metadata, "bytes");
 
     return options;
@@ -196,11 +196,11 @@ fn parseFieldOptions(comptime metadata: anytype) FieldOptions {
 
 fn validateFieldHooks(comptime options: FieldOptions, comptime label: []const u8) void {
     if (options.with) |Hook| {
-        validateHookMethod(Hook, "serialize", label);
-        validateHookMethod(Hook, "deserialize", label);
+        validateHookMethod(Hook, "write", label);
+        validateHookMethod(Hook, "read", label);
     }
-    if (options.serialize_with) |Hook| validateHookMethod(Hook, "serialize", label);
-    if (options.deserialize_with) |Hook| validateHookMethod(Hook, "deserialize", label);
+    if (options.write_with) |Hook| validateHookMethod(Hook, "write", label);
+    if (options.read_with) |Hook| validateHookMethod(Hook, "read", label);
 }
 
 fn validateHookMethod(comptime Hook: type, comptime method_name: []const u8, comptime label: []const u8) void {
@@ -215,7 +215,7 @@ fn validateHookMethod(comptime Hook: type, comptime method_name: []const u8, com
 
     switch (@typeInfo(@TypeOf(@field(Hook, method_name)))) {
         .@"fn" => |fn_info| {
-            const expected_params = if (comptimeEql(method_name, "serialize")) 2 else 3;
+            const expected_params = if (comptimeEql(method_name, "write")) 2 else 3;
             if (fn_info.params.len != expected_params) {
                 @compileError("zerde " ++ label ++ " custom hook '" ++ method_name ++ "' has the wrong number of parameters");
             }
@@ -265,7 +265,7 @@ fn countKnownOptions(comptime T: type, comptime allowed: MetadataOptionSet) usiz
 fn isKnownOptionName(comptime allowed: MetadataOptionSet, comptime name: []const u8) bool {
     return switch (allowed) {
         .type_metadata => comptimeEql(name, "rename_all") or comptimeEql(name, "deny_unknown_fields") or comptimeEql(name, "union_repr") or comptimeEql(name, "fields"),
-        .field_metadata => comptimeEql(name, "rename") or comptimeEql(name, "skip") or comptimeEql(name, "skip_serializing") or comptimeEql(name, "skip_deserializing") or comptimeEql(name, "with") or comptimeEql(name, "serialize_with") or comptimeEql(name, "deserialize_with") or comptimeEql(name, "bytes"),
+        .field_metadata => comptimeEql(name, "rename") or comptimeEql(name, "skip") or comptimeEql(name, "skip_writing") or comptimeEql(name, "skip_reading") or comptimeEql(name, "with") or comptimeEql(name, "write_with") or comptimeEql(name, "read_with") or comptimeEql(name, "bytes"),
     };
 }
 
@@ -306,11 +306,11 @@ test "metadata returns defaults without zerde decl" {
 
 test "metadata parses type and field options" {
     const UnixTimestamp = struct {
-        pub fn serialize(value: i64, encoder: anytype) !void {
+        pub fn write(value: i64, encoder: anytype) !void {
             try encoder.emitInt(value);
         }
 
-        pub fn deserialize(comptime T: type, allocator: std.mem.Allocator, decoder: anytype) !T {
+        pub fn read(comptime T: type, allocator: std.mem.Allocator, decoder: anytype) !T {
             _ = allocator;
             return try decoder.readInt(T);
         }
@@ -327,8 +327,8 @@ test "metadata parses type and field options" {
             .fields = .{
                 .password_hash = .{
                     .rename = "password",
-                    .skip_serializing = true,
-                    .skip_deserializing = true,
+                    .skip_writing = true,
+                    .skip_reading = true,
                 },
                 .created_at = .{ .with = UnixTimestamp },
             },
@@ -342,11 +342,11 @@ test "metadata parses type and field options" {
     try std.testing.expectEqual(rename.RenameRule.camel_case, options.rename_all);
     try std.testing.expect(options.deny_unknown_fields);
     try std.testing.expectEqualStrings("password", password_options.rename.?);
-    try std.testing.expect(password_options.skip_serializing);
-    try std.testing.expect(password_options.skip_deserializing);
+    try std.testing.expect(password_options.skip_writing);
+    try std.testing.expect(password_options.skip_reading);
     try std.testing.expectEqual(UnixTimestamp, timestamp_options.with.?);
-    try std.testing.expectEqual(UnixTimestamp, serializeHook(timestamp_options).?);
-    try std.testing.expectEqual(UnixTimestamp, deserializeHook(timestamp_options).?);
+    try std.testing.expectEqual(UnixTimestamp, writeHook(timestamp_options).?);
+    try std.testing.expectEqual(UnixTimestamp, readHook(timestamp_options).?);
     try std.testing.expectEqualStrings("userId", comptime fieldWireName("user_id", fieldOptionsFor(User, "user_id"), optionsFor(User)));
     try std.testing.expectEqualStrings("password", comptime fieldWireName("password_hash", password_options, optionsFor(User)));
 }
@@ -362,7 +362,7 @@ test "metadata parses union representation" {
     try std.testing.expectEqual(UnionRepr.internal, optionsFor(Event).union_repr);
 }
 
-test "metadata parses skip and skip_serializing separately" {
+test "metadata parses skip and skip_writing separately" {
     const User = struct {
         token: []const u8,
         password_hash: []const u8,
@@ -370,7 +370,7 @@ test "metadata parses skip and skip_serializing separately" {
         pub const zerde = .{
             .fields = .{
                 .token = .{ .skip = true },
-                .password_hash = .{ .skip_serializing = true },
+                .password_hash = .{ .skip_writing = true },
             },
         };
     };
@@ -379,10 +379,10 @@ test "metadata parses skip and skip_serializing separately" {
     const password_options = comptime fieldOptionsFor(User, "password_hash");
 
     try std.testing.expect(token_options.skip);
-    try std.testing.expect(!token_options.skip_serializing);
+    try std.testing.expect(!token_options.skip_writing);
     try std.testing.expect(!password_options.skip);
-    try std.testing.expect(password_options.skip_serializing);
-    try std.testing.expect(!password_options.skip_deserializing);
+    try std.testing.expect(password_options.skip_writing);
+    try std.testing.expect(!password_options.skip_reading);
     try std.testing.expect(!shouldSerialize(token_options));
     try std.testing.expect(!shouldSerialize(password_options));
     try std.testing.expect(!shouldDeserialize(token_options));

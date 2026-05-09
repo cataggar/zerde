@@ -13,8 +13,8 @@ pub fn deserialize(comptime T: type, allocator: std.mem.Allocator, decoder: anyt
 }
 
 fn deserializeValue(comptime T: type, allocator: std.mem.Allocator, decoder: anytype) !T {
-    if (comptime hasTypeDeserializeHook(T)) {
-        return try T.zerdeDeserialize(allocator, decoder);
+    if (comptime hasTypeReadHook(T)) {
+        return try T.zerdeRead(allocator, decoder);
     }
 
     if (comptime T == base64.Bytes) return try deserializeBytesValue(T, allocator, decoder);
@@ -140,8 +140,8 @@ fn deserializeStructFromFields(comptime T: type, allocator: std.mem.Allocator, d
                     if (seen[i]) return error.DuplicateField;
                     seen[i] = true;
                     if (comptime meta.shouldDeserialize(field_options)) {
-                        if (comptime meta.deserializeHook(field_options)) |Hook| {
-                            @field(result, field.name) = try Hook.deserialize(field.type, allocator, decoder);
+                        if (comptime meta.readHook(field_options)) |Hook| {
+                            @field(result, field.name) = try Hook.read(field.type, allocator, decoder);
                         } else if (comptime field_options.bytes) {
                             @field(result, field.name) = try deserializeBytesValue(field.type, allocator, decoder);
                         } else {
@@ -345,9 +345,9 @@ fn deserializeUnionPayload(comptime T: type, comptime field: std.builtin.Type.Un
     return @unionInit(T, field.name, payload);
 }
 
-fn hasTypeDeserializeHook(comptime T: type) bool {
+fn hasTypeReadHook(comptime T: type) bool {
     return switch (@typeInfo(T)) {
-        .@"struct", .@"union", .@"enum", .@"opaque" => @hasDecl(T, "zerdeDeserialize"),
+        .@"struct", .@"union", .@"enum", .@"opaque" => @hasDecl(T, "zerdeRead"),
         else => false,
     };
 }
