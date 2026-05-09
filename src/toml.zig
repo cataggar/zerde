@@ -4,6 +4,7 @@ const std = @import("std");
 
 const serialize = @import("serialize.zig").serialize;
 const deserialize = @import("deserialize.zig").deserialize;
+const base64 = @import("base64.zig");
 const deinitValue = @import("deinit.zig").deinit;
 const datetime = @import("datetime.zig");
 const number = @import("number.zig");
@@ -194,6 +195,13 @@ pub const Encoder = struct {
         if (!std.unicode.utf8ValidateSlice(value)) return error.InvalidUtf8;
         try self.beforeValue();
         try self.writeEscapedString(value);
+    }
+
+    pub fn emitBytes(self: *Self, value: []const u8) !void {
+        try self.beforeValue();
+        try self.writer.writeByte('"');
+        try base64.writeEncoded(self.writer, value);
+        try self.writer.writeByte('"');
     }
 
     pub fn emitTomlDateTime(self: *Self, value: []const u8) !void {
@@ -400,6 +408,12 @@ const TreeEncoder = struct {
     pub fn emitString(self: *Self, value: []const u8) !void {
         if (!std.unicode.utf8ValidateSlice(value)) return error.InvalidUtf8;
         const bytes = try self.allocator.dupe(u8, value);
+        errdefer self.allocator.free(bytes);
+        try self.appendValue(.{ .string = bytes });
+    }
+
+    pub fn emitBytes(self: *Self, value: []const u8) !void {
+        const bytes = try base64.encodeAlloc(self.allocator, value);
         errdefer self.allocator.free(bytes);
         try self.appendValue(.{ .string = bytes });
     }
@@ -1611,6 +1625,74 @@ test "toml writes strings arrays and nested structs" {
         \\scores = [9, 10]
         \\profile = { bio = "Zig", tags = ["admin", "ops"] }
     );
+}
+
+test "toml writes and reads Bytes wrapper as base64" {
+    const Blob = struct {
+        data: base64.Bytes,
+    };
+    const bytes = [_]u8{ 'H', 'e', 'l', 'l', 'o' };
+
+    try expectToml(Blob{ .data = .{ .value = bytes[0..] } }, "data = \"SGVsbG8=\"");
+
+    const parsed = try readSlice(Blob, std.testing.allocator, "data = \"SGVsbG8=\"");
+    defer deinitValue(Blob, std.testing.allocator, parsed);
+    try std.testing.expectEqualSlices(u8, bytes[0..], parsed.data.value);
+}
+
+test "toml writes and reads bytes metadata as base64" {
+    const Blob = struct {
+        name: []const u8,
+        data: []const u8,
+
+        pub const zerde = .{
+            .fields = .{
+                .data = .{ .bytes = true },
+            },
+        };
+    };
+    const bytes = [_]u8{ 0, 1, 2, 3 };
+
+    try expectToml(Blob{ .name = "raw", .data = bytes[0..] },
+        \\name = "raw"
+        \\data = "AAECAw=="
+    );
+
+    const parsed = try readSlice(Blob, std.testing.allocator,
+        \\name = "raw"
+        \\data = "AAECAw=="
+    );
+    defer deinitValue(Blob, std.testing.allocator, parsed);
+    try std.testing.expectEqualStrings("raw", parsed.name);
+    try std.testing.expectEqualSlices(u8, bytes[0..], parsed.data);
+}
+
+test "toml roundtrips fixed byte arrays with bytes metadata" {
+    const Packet = struct {
+        data: [4]u8,
+
+        pub const zerde = .{
+            .fields = .{
+                .data = .{ .bytes = true },
+            },
+        };
+    };
+    const packet = Packet{ .data = .{ 1, 2, 3, 4 } };
+
+    const encoded = try writeAlloc(std.testing.allocator, packet);
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expectEqualStrings("data = \"AQIDBA==\"", encoded);
+
+    const parsed = try readSlice(Packet, std.testing.allocator, encoded);
+    try std.testing.expectEqualDeep(packet, parsed);
+}
+
+test "toml rejects invalid base64 bytes" {
+    const Blob = struct {
+        data: base64.Bytes,
+    };
+
+    try std.testing.expectError(error.InvalidBase64, readSlice(Blob, std.testing.allocator, "data = \"not base64!\""));
 }
 
 test "toml writes metadata renamed and skipped fields" {

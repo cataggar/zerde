@@ -2,6 +2,7 @@
 
 const std = @import("std");
 
+const base64 = @import("base64.zig");
 const rename = @import("rename.zig");
 
 /// Normalized type-level metadata options.
@@ -30,6 +31,7 @@ pub const FieldOptions = struct {
     with: ?type = null,
     serialize_with: ?type = null,
     deserialize_with: ?type = null,
+    bytes: bool = false,
 };
 
 /// Returns normalized metadata options for `T`.
@@ -76,11 +78,14 @@ pub fn validate(comptime T: type, comptime options: Options) void {
                 @compileError("zerde metadata references unknown field '" ++ field_metadata.name ++ "' on " ++ @typeName(T));
             }
 
+            const field = fieldByName(T, field_metadata.name);
             const field_value = @field(fields_metadata, field_metadata.name);
             validateMetadataStruct(@TypeOf(field_value), "metadata for field '" ++ field_metadata.name ++ "'");
             validateKnownOptions(@TypeOf(field_value), .field_metadata, "metadata for field '" ++ field_metadata.name ++ "'");
 
-            validateFieldHooks(parseFieldOptions(field_value), "metadata for field '" ++ field_metadata.name ++ "'");
+            const field_options = parseFieldOptions(field_value);
+            validateFieldHooks(field_options, "metadata for field '" ++ field_metadata.name ++ "'");
+            validateBytesField(field.type, field_options, "metadata for field '" ++ field_metadata.name ++ "'");
         }
     }
 }
@@ -163,6 +168,7 @@ fn parseFieldOptions(comptime metadata: anytype) FieldOptions {
     if (@hasField(Metadata, "with")) options.with = @field(metadata, "with");
     if (@hasField(Metadata, "serialize_with")) options.serialize_with = @field(metadata, "serialize_with");
     if (@hasField(Metadata, "deserialize_with")) options.deserialize_with = @field(metadata, "deserialize_with");
+    if (@hasField(Metadata, "bytes")) options.bytes = @field(metadata, "bytes");
 
     return options;
 }
@@ -195,6 +201,11 @@ fn validateHookMethod(comptime Hook: type, comptime method_name: []const u8, com
         },
         else => @compileError("zerde " ++ label ++ " custom hook '" ++ method_name ++ "' must be a function"),
     }
+}
+
+fn validateBytesField(comptime T: type, comptime options: FieldOptions, comptime label: []const u8) void {
+    if (!options.bytes) return;
+    if (!base64.isByteType(T)) @compileError("zerde " ++ label ++ " bytes option requires Bytes, [N]u8, []u8, or []const u8");
 }
 
 fn validateMetadataStruct(comptime T: type, comptime label: []const u8) void {
@@ -233,7 +244,7 @@ fn countKnownOptions(comptime T: type, comptime allowed: MetadataOptionSet) usiz
 fn isKnownOptionName(comptime allowed: MetadataOptionSet, comptime name: []const u8) bool {
     return switch (allowed) {
         .type_metadata => comptimeEql(name, "rename_all") or comptimeEql(name, "deny_unknown_fields") or comptimeEql(name, "union_repr") or comptimeEql(name, "fields"),
-        .field_metadata => comptimeEql(name, "rename") or comptimeEql(name, "skip") or comptimeEql(name, "skip_serializing") or comptimeEql(name, "skip_deserializing") or comptimeEql(name, "with") or comptimeEql(name, "serialize_with") or comptimeEql(name, "deserialize_with"),
+        .field_metadata => comptimeEql(name, "rename") or comptimeEql(name, "skip") or comptimeEql(name, "skip_serializing") or comptimeEql(name, "skip_deserializing") or comptimeEql(name, "with") or comptimeEql(name, "serialize_with") or comptimeEql(name, "deserialize_with") or comptimeEql(name, "bytes"),
     };
 }
 
@@ -251,6 +262,14 @@ fn hasField(comptime T: type, comptime field_name: []const u8) bool {
         },
         else => return false,
     }
+}
+
+fn fieldByName(comptime T: type, comptime field_name: []const u8) std.builtin.Type.StructField {
+    const struct_info = @typeInfo(T).@"struct";
+    inline for (struct_info.fields) |field| {
+        if (comptime std.mem.eql(u8, field.name, field_name)) return field;
+    }
+    unreachable;
 }
 
 test "metadata returns defaults without zerde decl" {

@@ -2,6 +2,7 @@
 
 const std = @import("std");
 
+const base64 = @import("base64.zig");
 const serialize = @import("serialize.zig").serialize;
 
 /// Serializes `value` to a compact human-readable representation.
@@ -63,6 +64,14 @@ pub const Encoder = struct {
     pub fn emitString(self: *Self, value: []const u8) !void {
         try self.beforeValue();
         try self.writeEscapedString(value);
+    }
+
+    /// Emits raw bytes as a base64 string.
+    pub fn emitBytes(self: *Self, value: []const u8) !void {
+        try self.beforeValue();
+        try self.writer.writeByte('"');
+        try base64.writeEncoded(self.writer, value);
+        try self.writer.writeByte('"');
     }
 
     /// Begins a sequence.
@@ -204,6 +213,15 @@ test "human writes strings" {
     try expectHuman(mutable_slice, "\"Zig\"");
 
     try expectHuman(@as([]const u8, "quote: \" slash: \\ newline:\n"), "\"quote: \\\" slash: \\\\ newline:\\n\"");
+}
+
+test "human writes bytes as base64 strings" {
+    const Blob = struct {
+        data: base64.Bytes,
+    };
+    const bytes = [_]u8{ 0, 1, 2, 3 };
+
+    try expectHuman(Blob{ .data = .{ .value = bytes[0..] } }, "Blob { data: \"AAECAw==\" }");
 }
 
 test "human writes arrays and slices" {

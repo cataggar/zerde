@@ -2,6 +2,7 @@
 
 const std = @import("std");
 
+const base64 = @import("base64.zig");
 const meta = @import("meta.zig");
 
 const branch_quota = 100_000;
@@ -18,6 +19,7 @@ pub const Shape = union(enum) {
     int: IntInfo,
     float: FloatInfo,
     string,
+    bytes,
     optional: *const Schema,
     seq: SeqInfo,
     struct_: StructInfo,
@@ -93,6 +95,8 @@ fn buildSchema(comptime T: type) Schema {
 }
 
 fn buildShape(comptime T: type) Shape {
+    if (T == base64.Bytes) return .bytes;
+
     return switch (@typeInfo(T)) {
         .bool => .bool,
         .int => |int_info| .{ .int = .{
@@ -156,7 +160,7 @@ fn buildStructFields(comptime T: type) [fieldCount(T)]FieldInfo {
                 fields[out] = .{
                     .zig_name = field.name,
                     .wire_name = meta.fieldWireName(field.name, field_options, options),
-                    .schema = schemaFor(field.type),
+                    .schema = if (field_options.bytes) bytesSchemaFor(field.type) else schemaFor(field.type),
                     .required = isRequiredField(field, field_options),
                     .has_default = field.defaultValue() != null,
                     .serializes = meta.shouldSerialize(field_options),
@@ -168,6 +172,16 @@ fn buildStructFields(comptime T: type) [fieldCount(T)]FieldInfo {
     }
 
     return fields;
+}
+
+fn bytesSchemaFor(comptime T: type) *const Schema {
+    const Holder = struct {
+        const value = Schema{
+            .type_name = @typeName(T),
+            .shape = .bytes,
+        };
+    };
+    return &Holder.value;
 }
 
 fn fieldCount(comptime T: type) usize {
@@ -244,6 +258,24 @@ test "schema describes primitive shapes" {
 
     const string_schema = forType([]const u8);
     try std.testing.expectEqual(.string, string_schema.shape);
+
+    const bytes_schema = forType(base64.Bytes);
+    try std.testing.expectEqual(.bytes, bytes_schema.shape);
+}
+
+test "schema describes byte metadata fields as bytes" {
+    const Blob = struct {
+        data: []const u8,
+
+        pub const zerde = .{
+            .fields = .{
+                .data = .{ .bytes = true },
+            },
+        };
+    };
+
+    const blob_schema = forType(Blob);
+    try std.testing.expectEqual(.bytes, blob_schema.shape.struct_.fields[0].schema.shape);
 }
 
 test "schema describes structs with metadata and nested fields" {

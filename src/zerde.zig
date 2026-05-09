@@ -6,8 +6,13 @@ pub const json = @import("json.zig");
 pub const toml = @import("toml.zig");
 /// Human-readable format API.
 pub const human = @import("human.zig");
+/// Base64 helpers and byte wrapper type.
+pub const base64 = @import("base64.zig");
 /// Shared numeric parsing and conversion helpers.
 pub const number = @import("number.zig");
+
+/// Wrapper type for serializing raw bytes as bytes rather than UTF-8 strings.
+pub const Bytes = base64.Bytes;
 
 /// Type-specialized codec namespace factory.
 pub const Codec = @import("codec.zig").Codec;
@@ -25,7 +30,9 @@ test {
     _ = json;
     _ = toml;
     _ = human;
+    _ = base64;
     _ = number;
+    _ = Bytes;
     _ = @import("datetime.zig");
     _ = Codec;
     _ = Format;

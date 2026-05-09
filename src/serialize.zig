@@ -2,6 +2,7 @@
 
 const std = @import("std");
 
+const base64 = @import("base64.zig");
 const meta = @import("meta.zig");
 
 /// Serializes `value` by walking its Zig type at comptime and calling methods
@@ -16,6 +17,11 @@ pub fn serialize(value: anytype, encoder: anytype) !void {
 fn serializeValue(comptime T: type, value: T, encoder: anytype) !void {
     if (comptime hasTypeSerializeHook(T)) {
         try T.zerdeSerialize(value, encoder);
+        return;
+    }
+
+    if (comptime T == base64.Bytes) {
+        try encoder.emitBytes(value.value);
         return;
     }
 
@@ -178,10 +184,34 @@ fn serializeStructFields(comptime T: type, value: T, encoder: anytype) !void {
             try encoder.emitFieldName(wire_name);
             if (comptime meta.serializeHook(field_options)) |Hook| {
                 try Hook.serialize(@field(value, field.name), encoder);
+            } else if (comptime field_options.bytes) {
+                try serializeBytesValue(field.type, @field(value, field.name), encoder);
             } else {
                 try serializeValue(field.type, @field(value, field.name), encoder);
             }
         }
+    }
+}
+
+fn serializeBytesValue(comptime T: type, value: T, encoder: anytype) !void {
+    if (T == base64.Bytes) {
+        try encoder.emitBytes(value.value);
+        return;
+    }
+
+    switch (@typeInfo(T)) {
+        .array => |array_info| {
+            if (array_info.child != u8) unsupported(T);
+            try encoder.emitBytes(value[0..]);
+        },
+        .pointer => |pointer_info| switch (pointer_info.size) {
+            .slice => {
+                if (pointer_info.child != u8) unsupported(T);
+                try encoder.emitBytes(value);
+            },
+            else => unsupported(T),
+        },
+        else => unsupported(T),
     }
 }
 

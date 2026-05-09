@@ -4,6 +4,7 @@ const std = @import("std");
 
 const serialize = @import("serialize.zig").serialize;
 const deserialize = @import("deserialize.zig").deserialize;
+const base64 = @import("base64.zig");
 const deinitValue = @import("deinit.zig").deinit;
 const number = @import("number.zig");
 
@@ -541,6 +542,14 @@ pub const Encoder = struct {
         try self.writeEscapedString(value);
     }
 
+    /// Emits raw bytes as a base64 JSON string.
+    pub fn emitBytes(self: *Self, value: []const u8) !void {
+        try self.beforeValue();
+        try self.writer.writeByte('"');
+        try base64.writeEncoded(self.writer, value);
+        try self.writer.writeByte('"');
+    }
+
     /// Begins a JSON array.
     ///
     /// `len` is accepted for the generic encoder protocol but is not required
@@ -745,6 +754,68 @@ test "json writes arrays and slices" {
     const values = [_]u16{ 10, 20, 30 };
     const slice: []const u16 = values[0..];
     try expectJson(slice, "[10,20,30]");
+}
+
+test "json writes and reads Bytes wrapper as base64" {
+    const Blob = struct {
+        data: base64.Bytes,
+    };
+    const bytes = [_]u8{ 'H', 'e', 'l', 'l', 'o' };
+
+    try expectJson(Blob{ .data = .{ .value = bytes[0..] } }, "{\"data\":\"SGVsbG8=\"}");
+
+    const parsed = try readSlice(Blob, std.testing.allocator, "{\"data\":\"SGVsbG8=\"}");
+    defer deinitValue(Blob, std.testing.allocator, parsed);
+    try std.testing.expectEqualSlices(u8, bytes[0..], parsed.data.value);
+}
+
+test "json writes and reads bytes metadata as base64" {
+    const Blob = struct {
+        name: []const u8,
+        data: []const u8,
+
+        pub const zerde = .{
+            .fields = .{
+                .data = .{ .bytes = true },
+            },
+        };
+    };
+    const bytes = [_]u8{ 0, 1, 2, 3 };
+
+    try expectJson(Blob{ .name = "raw", .data = bytes[0..] }, "{\"name\":\"raw\",\"data\":\"AAECAw==\"}");
+
+    const parsed = try readSlice(Blob, std.testing.allocator, "{\"name\":\"raw\",\"data\":\"AAECAw==\"}");
+    defer deinitValue(Blob, std.testing.allocator, parsed);
+    try std.testing.expectEqualStrings("raw", parsed.name);
+    try std.testing.expectEqualSlices(u8, bytes[0..], parsed.data);
+}
+
+test "json roundtrips fixed byte arrays with bytes metadata" {
+    const Packet = struct {
+        data: [4]u8,
+
+        pub const zerde = .{
+            .fields = .{
+                .data = .{ .bytes = true },
+            },
+        };
+    };
+    const packet = Packet{ .data = .{ 1, 2, 3, 4 } };
+
+    const encoded = try writeAlloc(std.testing.allocator, packet);
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expectEqualStrings("{\"data\":\"AQIDBA==\"}", encoded);
+
+    const parsed = try readSlice(Packet, std.testing.allocator, encoded);
+    try std.testing.expectEqualDeep(packet, parsed);
+}
+
+test "json rejects invalid base64 bytes" {
+    const Blob = struct {
+        data: base64.Bytes,
+    };
+
+    try std.testing.expectError(error.InvalidBase64, readSlice(Blob, std.testing.allocator, "{\"data\":\"not base64!\"}"));
 }
 
 test "json writes empty containers" {

@@ -2,6 +2,7 @@
 
 const std = @import("std");
 
+const base64 = @import("base64.zig");
 const deinit_mod = @import("deinit.zig");
 const meta = @import("meta.zig");
 
@@ -15,6 +16,8 @@ fn deserializeValue(comptime T: type, allocator: std.mem.Allocator, decoder: any
     if (comptime hasTypeDeserializeHook(T)) {
         return try T.zerdeDeserialize(allocator, decoder);
     }
+
+    if (comptime T == base64.Bytes) return try deserializeBytesValue(T, allocator, decoder);
 
     switch (@typeInfo(T)) {
         .bool => return try decoder.readBool(),
@@ -128,6 +131,8 @@ fn deserializeStructFromFields(comptime T: type, allocator: std.mem.Allocator, d
                     if (comptime meta.shouldDeserialize(field_options)) {
                         if (comptime meta.deserializeHook(field_options)) |Hook| {
                             @field(result, field.name) = try Hook.deserialize(field.type, allocator, decoder);
+                        } else if (comptime field_options.bytes) {
+                            @field(result, field.name) = try deserializeBytesValue(field.type, allocator, decoder);
                         } else {
                             @field(result, field.name) = try deserializeValue(field.type, allocator, decoder);
                         }
@@ -268,6 +273,28 @@ fn deserializeInternalUnion(comptime T: type, allocator: std.mem.Allocator, deco
     }
     try decoder.endStruct();
     return error.UnknownUnionTag;
+}
+
+fn deserializeBytesValue(comptime T: type, allocator: std.mem.Allocator, decoder: anytype) !T {
+    const encoded = try decoder.readString(allocator);
+    defer allocator.free(encoded);
+
+    if (T == base64.Bytes) return .{ .value = try base64.decodeAlloc(allocator, encoded) };
+
+    return switch (@typeInfo(T)) {
+        .array => |array_info| blk: {
+            if (array_info.child != u8) unsupported(T);
+            break :blk try base64.decodeArray(T, encoded);
+        },
+        .pointer => |pointer_info| switch (pointer_info.size) {
+            .slice => blk: {
+                if (pointer_info.child != u8) unsupported(T);
+                break :blk try base64.decodeAlloc(allocator, encoded);
+            },
+            else => unsupported(T),
+        },
+        else => unsupported(T),
+    };
 }
 
 fn deserializeUnionPayload(comptime T: type, comptime field: std.builtin.Type.UnionField, allocator: std.mem.Allocator, decoder: anytype) !T {
