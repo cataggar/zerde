@@ -38,7 +38,7 @@ pub const FieldOptions = struct {
 pub fn optionsFor(comptime T: type) Options {
     var options = Options{};
 
-    if (!@hasDecl(T, "zerde")) return options;
+    if (comptime !hasZerdeDecl(T)) return options;
 
     const metadata = T.zerde;
     validateMetadataStruct(@TypeOf(metadata), "type metadata");
@@ -62,7 +62,7 @@ pub fn validate(comptime T: type, comptime options: Options) void {
     @setEvalBranchQuota(100_000);
     _ = options;
 
-    if (!@hasDecl(T, "zerde")) return;
+    if (comptime !hasZerdeDecl(T)) return;
 
     const metadata = T.zerde;
     validateMetadataStruct(@TypeOf(metadata), "type metadata");
@@ -135,7 +135,7 @@ fn validateInternalUnionPayload(comptime Union: type, comptime variant: std.buil
 
 /// Returns normalized metadata options for one field of `T`.
 pub fn fieldOptionsFor(comptime T: type, comptime field_name: []const u8) FieldOptions {
-    if (!@hasDecl(T, "zerde")) return .{};
+    if (comptime !hasZerdeDecl(T)) return .{};
 
     const metadata = T.zerde;
     if (!@hasField(@TypeOf(metadata), "fields")) return .{};
@@ -192,6 +192,13 @@ fn parseFieldOptions(comptime metadata: anytype) FieldOptions {
     if (@hasField(Metadata, "bytes")) options.bytes = @field(metadata, "bytes");
 
     return options;
+}
+
+fn hasZerdeDecl(comptime T: type) bool {
+    return switch (@typeInfo(T)) {
+        .@"struct", .@"union", .@"enum", .@"opaque" => @hasDecl(T, "zerde"),
+        else => false,
+    };
 }
 
 fn validateFieldHooks(comptime options: FieldOptions, comptime label: []const u8) void {

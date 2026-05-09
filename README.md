@@ -90,6 +90,7 @@ Available format modules:
 - `zerde.msgpack`
 - `zerde.zon`
 - `zerde.binary`
+- `zerde.csv`
 - `zerde.human` no read/readSlice API
 
 Common helpers:
@@ -118,9 +119,9 @@ const schema = comptime UserCodec.schema();
 _ = schema;
 ```
 
-Supported `zerde.Format` values are `.json`, `.toml`, `.msgpack`, `.zon`, `.binary`, and `.human`. The human format is write-only, so codec reads from `.human` fail at compile time.
+Supported `zerde.Format` values are `.json`, `.toml`, `.msgpack`, `.zon`, `.binary`, `.csv`, and `.human`. The human format is write-only, so codec reads from `.human` fail at compile time.
 
-Use `writeWithOptions` when a format has write options. Binary also supports `readWithOptions` for endianness.
+Use `writeWithOptions` when a format has write options. Binary and CSV also support `readWithOptions`.
 
 ```zig
 try UserCodec.writeWithOptions(allocator, &writer, user, .json, .{
@@ -130,6 +131,11 @@ try UserCodec.writeWithOptions(allocator, &writer, user, .json, .{
 
 try UserCodec.writeWithOptions(allocator, &writer, user, .binary, .{
     .endian = .big,
+});
+
+const UsersCodec = zerde.Codec([]const User);
+try UsersCodec.writeWithOptions(allocator, &writer, users, .csv, .{
+    .delimiter = .tab,
 });
 ```
 
@@ -405,6 +411,18 @@ Binary:
 - Optionals use a one-byte presence marker.
 - Struct fields are encoded in declaration order using the effective serializable field set.
 - The decoder rejects trailing data.
+
+CSV:
+
+- The root value must be an array, slice, or supported std list container of structs.
+- Fields must be scalar-ish values, nested structs, or optionals of those. Scalar-ish values are bools, integers, finite floats, enums, strings, or bytes.
+- Nested structs are flattened with dotted column paths, such as `created.seconds` and `created.nanoseconds`.
+- Headers are written and read by default using effective wire names from metadata.
+- Writer output defaults to RFC 4180-style comma-separated records with CRLF record terminators.
+- Set `csv.Options{ .delimiter = .tab }` to read or write TSV-style tab-delimited records.
+- Strings are quoted only when needed; embedded quotes are escaped by doubling them.
+- Raw byte fields are represented as standard padded base64.
+- Empty cells decode as null for optional fields.
 
 Human:
 

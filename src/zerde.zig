@@ -10,6 +10,8 @@ pub const msgpack = @import("msgpack.zig");
 pub const zon = @import("zon.zig");
 /// Binary format API.
 pub const binary = @import("binary.zig");
+/// CSV and tab-delimited format API.
+pub const csv = @import("csv.zig");
 /// Human-readable format API.
 pub const human = @import("human.zig");
 /// Base64 helpers and byte wrapper type.
@@ -54,6 +56,7 @@ test {
     _ = msgpack;
     _ = zon;
     _ = binary;
+    _ = csv;
     _ = human;
     _ = base64;
     _ = number;

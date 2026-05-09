@@ -6,6 +6,7 @@ const meta = @import("meta.zig");
 const rename = @import("rename.zig");
 const schema_mod = @import("schema.zig");
 const binary = @import("binary.zig");
+const csv = @import("csv.zig");
 const human = @import("human.zig");
 const json = @import("json.zig");
 const msgpack = @import("msgpack.zig");
@@ -20,6 +21,7 @@ pub const Format = enum {
     msgpack,
     zon,
     binary,
+    csv,
     human,
 };
 
@@ -45,6 +47,7 @@ pub fn Codec(comptime T: type) type {
                 .msgpack => try msgpack.write(writer, value),
                 .zon => try zon.write(writer, value),
                 .binary => try binary.write(writer, value),
+                .csv => try csv.write(writer, value),
                 .human => try human.write(writer, value),
             }
         }
@@ -57,6 +60,7 @@ pub fn Codec(comptime T: type) type {
                 .msgpack => try msgpack.read(T, allocator, reader),
                 .zon => try zon.read(T, allocator, reader),
                 .binary => try binary.read(T, allocator, reader),
+                .csv => try csv.read(T, allocator, reader),
                 .human => @compileError("human format is write-only"),
             };
         }
@@ -75,6 +79,7 @@ pub fn Codec(comptime T: type) type {
                 .msgpack => try msgpack.writeWithOptions(writer, value, coerceOptions(msgpack.WriteOptions, format_options)),
                 .zon => try zon.writeWithOptions(writer, value, coerceOptions(zon.WriteOptions, format_options)),
                 .binary => try binary.writeWithOptions(writer, value, coerceOptions(binary.Options, format_options)),
+                .csv => try csv.writeWithOptions(writer, value, coerceOptions(csv.Options, format_options)),
                 .human => try human.writeWithOptions(writer, value, coerceOptions(human.WriteOptions, format_options)),
             }
         }
@@ -88,6 +93,7 @@ pub fn Codec(comptime T: type) type {
         ) !T {
             return switch (format) {
                 .binary => try binary.readWithOptions(T, allocator, reader, coerceOptions(binary.Options, format_options)),
+                .csv => try csv.readWithOptions(T, allocator, reader, coerceOptions(csv.Options, format_options)),
                 .json => @compileError("json read has no format options"),
                 .toml => @compileError("toml read has no format options"),
                 .msgpack => @compileError("msgpack read has no format options"),
@@ -680,6 +686,33 @@ test "codec writeWithOptions supports format options" {
     try std.testing.expectEqual(@as(u16, 0x1234), parsed.id);
     try std.testing.expectEqualStrings("Ada", parsed.name);
     try std.testing.expect(parsed.active);
+}
+
+test "codec writes and reads csv with delimiter options" {
+    const User = struct {
+        id: u8,
+        name: []const u8,
+    };
+    const UsersSerde = Codec([]const User);
+    const users = [_]User{
+        .{ .id = 1, .name = "Ada" },
+        .{ .id = 2, .name = "has\ttab" },
+    };
+
+    var buffer: [128]u8 = undefined;
+    var writer: std.Io.Writer = .fixed(&buffer);
+    try UsersSerde.writeWithOptions(std.testing.allocator, &writer, users[0..], .csv, .{
+        .delimiter = .tab,
+        .record_terminator = .lf,
+    });
+    try std.testing.expectEqualStrings("id\tname\n1\tAda\n2\t\"has\ttab\"", writer.buffered());
+
+    var reader: std.Io.Reader = .fixed(writer.buffered());
+    const parsed = try UsersSerde.readWithOptions(std.testing.allocator, &reader, .csv, .{ .delimiter = .tab });
+    defer UsersSerde.deinit(std.testing.allocator, parsed);
+    try std.testing.expectEqual(@as(usize, 2), parsed.len);
+    try std.testing.expectEqual(@as(u8, 2), parsed[1].id);
+    try std.testing.expectEqualStrings("has\ttab", parsed[1].name);
 }
 
 test "codec writeWithOptions supports toml sections" {
