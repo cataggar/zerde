@@ -3,6 +3,7 @@
 const std = @import("std");
 
 const base64 = @import("base64.zig");
+const containers = @import("containers.zig");
 const deinit_mod = @import("deinit.zig");
 const meta = @import("meta.zig");
 
@@ -89,6 +90,9 @@ fn deserializeValue(comptime T: type, allocator: std.mem.Allocator, decoder: any
             else => unsupported(T),
         },
         .@"struct" => |struct_info| {
+            if (comptime containers.isList(T)) return try deserializeList(T, allocator, decoder);
+            if (comptime containers.isMap(T)) return try deserializeMap(T, allocator, decoder);
+
             if (struct_info.is_tuple) unsupported(T);
 
             const options = comptime meta.optionsFor(T);
@@ -111,6 +115,44 @@ fn deserializeValue(comptime T: type, allocator: std.mem.Allocator, decoder: any
         },
         else => unsupported(T),
     }
+}
+
+fn deserializeList(comptime T: type, allocator: std.mem.Allocator, decoder: anytype) !T {
+    const Child = comptime containers.listChild(T);
+    const len = try decoder.beginSeq();
+    var result = try containers.initList(T, allocator, len);
+    errdefer deinit_mod.deinit(T, allocator, result);
+
+    while (try decoder.hasNextSeqElem()) {
+        const item = try deserializeValue(Child, allocator, decoder);
+        errdefer deinit_mod.deinit(Child, allocator, item);
+        try containers.appendList(T, &result, allocator, item);
+    }
+    try decoder.endSeq();
+
+    return result;
+}
+
+fn deserializeMap(comptime T: type, allocator: std.mem.Allocator, decoder: anytype) !T {
+    const K = comptime containers.mapKey(T);
+    const V = comptime containers.mapValue(T);
+    const Entry = struct {
+        key: K,
+        value: V,
+    };
+
+    var result = try containers.initMap(T, allocator);
+    errdefer deinit_mod.deinit(T, allocator, result);
+
+    _ = try decoder.beginSeq();
+    while (try decoder.hasNextSeqElem()) {
+        const entry = try deserializeValue(Entry, allocator, decoder);
+        errdefer deinit_mod.deinit(Entry, allocator, entry);
+        try containers.putMapEntry(T, &result, allocator, entry.key, entry.value);
+    }
+    try decoder.endSeq();
+
+    return result;
 }
 
 fn deserializeStructFromFields(comptime T: type, allocator: std.mem.Allocator, decoder: anytype) !T {
@@ -389,6 +431,9 @@ fn cloneDefaultValue(comptime T: type, allocator: std.mem.Allocator, value: T) !
             else => unsupported(T),
         },
         .@"struct" => |struct_info| {
+            if (comptime containers.isList(T)) return try cloneListValue(T, allocator, value);
+            if (comptime containers.isMap(T)) return try cloneMapValue(T, allocator, value);
+
             if (struct_info.is_tuple) unsupported(T);
 
             var result: T = undefined;
@@ -427,6 +472,42 @@ fn cloneDefaultValue(comptime T: type, allocator: std.mem.Allocator, value: T) !
         },
         else => unsupported(T),
     }
+}
+
+fn cloneListValue(comptime T: type, allocator: std.mem.Allocator, value: T) !T {
+    const Child = comptime containers.listChild(T);
+    const len = containers.listLen(T, value);
+    var result = try containers.initList(T, allocator, len);
+    errdefer deinit_mod.deinit(T, allocator, result);
+
+    for (0..len) |i| {
+        const item = try cloneDefaultValue(Child, allocator, containers.listItem(T, value, i));
+        errdefer deinit_mod.deinit(Child, allocator, item);
+        try containers.appendList(T, &result, allocator, item);
+    }
+
+    return result;
+}
+
+fn cloneMapValue(comptime T: type, allocator: std.mem.Allocator, value: T) !T {
+    const K = comptime containers.mapKey(T);
+    const V = comptime containers.mapValue(T);
+    var result = try containers.initMap(T, allocator);
+    errdefer deinit_mod.deinit(T, allocator, result);
+
+    var copy = value;
+    var it = copy.iterator();
+    while (it.next()) |entry| {
+        const key = try cloneDefaultValue(K, allocator, if (K == void) {} else entry.key_ptr.*);
+        errdefer deinit_mod.deinit(K, allocator, key);
+
+        const map_value = try cloneDefaultValue(V, allocator, if (V == void) {} else entry.value_ptr.*);
+        errdefer deinit_mod.deinit(V, allocator, map_value);
+
+        try containers.putMapEntry(T, &result, allocator, key, map_value);
+    }
+
+    return result;
 }
 
 fn isOptional(comptime T: type) bool {

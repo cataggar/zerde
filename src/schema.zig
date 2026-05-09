@@ -3,6 +3,7 @@
 const std = @import("std");
 
 const base64 = @import("base64.zig");
+const containers = @import("containers.zig");
 const meta = @import("meta.zig");
 
 const branch_quota = 100_000;
@@ -22,6 +23,7 @@ pub const Shape = union(enum) {
     bytes,
     optional: *const Schema,
     seq: SeqInfo,
+    map: MapInfo,
     struct_: StructInfo,
     enum_: EnumInfo,
     union_: UnionInfo,
@@ -39,6 +41,11 @@ pub const FloatInfo = struct {
 pub const SeqInfo = struct {
     child: *const Schema,
     len: ?usize,
+};
+
+pub const MapInfo = struct {
+    key: *const Schema,
+    value: *const Schema,
 };
 
 pub const FieldInfo = struct {
@@ -124,6 +131,16 @@ fn buildShape(comptime T: type) Shape {
             else => unsupported(T),
         },
         .@"struct" => |struct_info| blk: {
+            if (comptime containers.isList(T)) {
+                break :blk .{ .seq = .{ .child = schemaFor(containers.listChild(T)), .len = null } };
+            }
+            if (comptime containers.isMap(T)) {
+                break :blk .{ .map = .{
+                    .key = schemaFor(containers.mapKey(T)),
+                    .value = schemaFor(containers.mapValue(T)),
+                } };
+            }
+
             if (struct_info.is_tuple) unsupported(T);
             comptime meta.validate(T, meta.optionsFor(T));
             break :blk .{ .struct_ = .{ .fields = structFields(T) } };
@@ -323,6 +340,23 @@ test "schema describes sequences and enums" {
     try std.testing.expectEqual(@as(?usize, null), colors_schema.shape.seq.len);
     try std.testing.expectEqualStrings("red", colors_schema.shape.seq.child.shape.enum_.tags[0]);
     try std.testing.expectEqualStrings("green", colors_schema.shape.seq.child.shape.enum_.tags[1]);
+}
+
+test "schema describes std containers" {
+    const list_schema = forType(std.ArrayList(u16));
+    try std.testing.expectEqual(@as(?usize, null), list_schema.shape.seq.len);
+    try std.testing.expectEqual(@as(u16, 16), list_schema.shape.seq.child.shape.int.bits);
+
+    const multi_schema = forType(std.MultiArrayList(struct { name: []const u8 }));
+    try std.testing.expectEqual(std.meta.Tag(Shape).struct_, std.meta.activeTag(multi_schema.shape.seq.child.shape));
+
+    const map_schema = forType(std.StringHashMap(u8));
+    try std.testing.expectEqual(.string, map_schema.shape.map.key.shape);
+    try std.testing.expectEqual(@as(u16, 8), map_schema.shape.map.value.shape.int.bits);
+
+    const unmanaged_schema = forType(std.AutoHashMapUnmanaged(u16, []const u8));
+    try std.testing.expectEqual(@as(u16, 16), unmanaged_schema.shape.map.key.shape.int.bits);
+    try std.testing.expectEqual(.string, unmanaged_schema.shape.map.value.shape);
 }
 
 test "schema describes tagged unions" {

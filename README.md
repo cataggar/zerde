@@ -142,6 +142,7 @@ Zerde currently supports:
 - `null` and optionals
 - enums
 - arrays and slices
+- `std.ArrayList`, `std.MultiArrayList`, `std.HashMap`, and `std.ArrayHashMap` families
 - `[]u8`, `[]const u8`, and string literals as strings by default
 - plain non-tuple structs
 - tagged unions
@@ -149,6 +150,8 @@ Zerde currently supports:
 - custom types that implement native Zerde hooks
 
 Unsupported types fail at compile time when used through the generic traversal or `Codec(T)` schema validation.
+
+Std list containers serialize as sequences. Std map containers serialize as sequences of `{ key, value }` entries so the same representation works for string and non-string keys across JSON, TOML, MessagePack, ZON, and binary formats. Deserialization rebuilds allocator-backed std containers with the allocator passed to the read API.
 
 ## Metadata
 

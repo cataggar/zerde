@@ -960,6 +960,22 @@ test "msgpack writes strings arrays and maps" {
     try expectMsgpack("Ada", &.{ 0xa3, 'A', 'd', 'a' });
     try expectMsgpack([3]u8{ 1, 2, 3 }, &.{ 0x93, 0x01, 0x02, 0x03 });
 
+    var list: std.ArrayList(u8) = .empty;
+    defer list.deinit(std.testing.allocator);
+    try list.append(std.testing.allocator, 4);
+    try list.append(std.testing.allocator, 5);
+    try expectMsgpack(list, &.{ 0x92, 0x04, 0x05 });
+
+    var ordered: std.array_hash_map.Auto(u8, u8) = .empty;
+    defer ordered.deinit(std.testing.allocator);
+    try ordered.put(std.testing.allocator, 1, 2);
+    try ordered.put(std.testing.allocator, 3, 4);
+    try expectMsgpack(ordered, &.{
+        0x92,
+        0x82, 0xa3, 'k', 'e', 'y', 0x01, 0xa5, 'v', 'a', 'l', 'u', 'e', 0x02,
+        0x82, 0xa3, 'k', 'e', 'y', 0x03, 0xa5, 'v', 'a', 'l', 'u', 'e', 0x04,
+    });
+
     const User = struct {
         id: u8,
         name: []const u8,
@@ -980,6 +996,38 @@ test "msgpack writes strings arrays and maps" {
         'd',
         'a',
     });
+}
+
+test "msgpack roundtrips std containers" {
+    const Value = struct {
+        items: std.ArrayList([]const u8),
+        names: std.array_hash_map.String(u8),
+    };
+    const allocator = std.testing.allocator;
+
+    var original = Value{
+        .items = .empty,
+        .names = .empty,
+    };
+    defer original.items.deinit(allocator);
+    defer original.names.deinit(allocator);
+    try original.items.append(allocator, "alpha");
+    try original.items.append(allocator, "beta");
+    try original.names.put(allocator, "one", 1);
+    try original.names.put(allocator, "two", 2);
+
+    const bytes = try writeAlloc(allocator, original);
+    defer allocator.free(bytes);
+
+    const parsed = try readSlice(Value, allocator, bytes);
+    defer deinitValue(Value, allocator, parsed);
+
+    try std.testing.expectEqual(@as(usize, 2), parsed.items.items.len);
+    try std.testing.expectEqualStrings("alpha", parsed.items.items[0]);
+    try std.testing.expectEqualStrings("beta", parsed.items.items[1]);
+    try std.testing.expectEqualStrings("one", parsed.names.keys()[0]);
+    try std.testing.expectEqualStrings("two", parsed.names.keys()[1]);
+    try std.testing.expectEqualSlices(u8, &.{ 1, 2 }, parsed.names.values());
 }
 
 test "msgpack roundtrips structs with owned slices and optionals" {

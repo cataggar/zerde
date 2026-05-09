@@ -2,6 +2,8 @@
 
 const std = @import("std");
 
+const containers = @import("containers.zig");
+
 /// Releases allocations owned by `value` when it was produced by Zerde
 /// deserialization.
 pub fn deinit(comptime T: type, allocator: std.mem.Allocator, value: T) void {
@@ -23,8 +25,25 @@ pub fn deinit(comptime T: type, allocator: std.mem.Allocator, value: T) void {
             else => {},
         },
         .@"struct" => |struct_info| {
-            inline for (struct_info.fields) |field| {
-                if (!field.is_comptime) deinit(field.type, allocator, @field(value, field.name));
+            if (comptime containers.isList(T)) {
+                const Child = comptime containers.listChild(T);
+                const len = containers.listLen(T, value);
+                for (0..len) |i| deinit(Child, allocator, containers.listItem(T, value, i));
+                containers.deinitListStorage(T, allocator, value);
+            } else if (comptime containers.isMap(T)) {
+                const K = comptime containers.mapKey(T);
+                const V = comptime containers.mapValue(T);
+                var copy = value;
+                var it = copy.iterator();
+                while (it.next()) |entry| {
+                    deinit(K, allocator, if (K == void) {} else entry.key_ptr.*);
+                    deinit(V, allocator, if (V == void) {} else entry.value_ptr.*);
+                }
+                containers.deinitMapStorage(T, allocator, value);
+            } else {
+                inline for (struct_info.fields) |field| {
+                    if (!field.is_comptime) deinit(field.type, allocator, @field(value, field.name));
+                }
             }
         },
         .@"union" => |union_info| {

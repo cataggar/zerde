@@ -16,6 +16,8 @@ pub const human = @import("human.zig");
 pub const base64 = @import("base64.zig");
 /// Shared numeric parsing and conversion helpers.
 pub const number = @import("number.zig");
+/// Trait helpers for types supported by Zerde.
+pub const traits = @import("traits.zig");
 
 const datetime = @import("datetime.zig");
 
@@ -70,5 +72,6 @@ test {
     _ = @import("schema.zig");
     _ = @import("rename.zig");
     _ = @import("testing.zig");
-    _ = @import("traits.zig");
+    _ = traits;
+    _ = @import("containers.zig");
 }

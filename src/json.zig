@@ -756,6 +756,103 @@ test "json writes arrays and slices" {
     try expectJson(slice, "[10,20,30]");
 }
 
+test "json roundtrips std ArrayList values as sequences" {
+    const allocator = std.testing.allocator;
+
+    var list: std.ArrayList(u16) = .empty;
+    defer list.deinit(allocator);
+    try list.append(allocator, 10);
+    try list.append(allocator, 20);
+
+    try expectJson(list, "[10,20]");
+
+    const parsed = try readSlice(std.ArrayList(u16), allocator, "[30,40]");
+    defer deinitValue(std.ArrayList(u16), allocator, parsed);
+    try std.testing.expectEqualSlices(u16, &.{ 30, 40 }, parsed.items);
+}
+
+test "json roundtrips std MultiArrayList values as sequences" {
+    const Item = struct {
+        id: u8,
+        name: []const u8,
+    };
+    const List = std.MultiArrayList(Item);
+    const allocator = std.testing.allocator;
+
+    var list: List = .empty;
+    defer list.deinit(allocator);
+    try list.append(allocator, .{ .id = 1, .name = "one" });
+    try list.append(allocator, .{ .id = 2, .name = "two" });
+
+    try expectJson(list, "[{\"id\":1,\"name\":\"one\"},{\"id\":2,\"name\":\"two\"}]");
+
+    const parsed = try readSlice(List, allocator, "[{\"id\":3,\"name\":\"three\"}]");
+    defer deinitValue(List, allocator, parsed);
+    try std.testing.expectEqual(@as(usize, 1), parsed.len);
+    const item = parsed.get(0);
+    try std.testing.expectEqual(@as(u8, 3), item.id);
+    try std.testing.expectEqualStrings("three", item.name);
+}
+
+test "json handles std map containers as key value sequences" {
+    const allocator = std.testing.allocator;
+
+    var ordered: std.array_hash_map.String(u8) = .empty;
+    defer ordered.deinit(allocator);
+    try ordered.put(allocator, "one", 1);
+    try ordered.put(allocator, "two", 2);
+    try expectJson(ordered, "[{\"key\":\"one\",\"value\":1},{\"key\":\"two\",\"value\":2}]");
+
+    const Map = std.StringHashMap([]const u8);
+    const parsed = try readSlice(Map, allocator,
+        \\[{"key":"one","value":"uno"},{"key":"two","value":"dos"}]
+    );
+    defer deinitValue(Map, allocator, parsed);
+
+    try std.testing.expectEqualStrings("uno", parsed.get("one").?);
+    try std.testing.expectEqualStrings("dos", parsed.get("two").?);
+}
+
+test "json reads unmanaged and ordered std maps" {
+    const allocator = std.testing.allocator;
+
+    const Unmanaged = std.AutoHashMapUnmanaged(u8, []const u8);
+    const unmanaged = try readSlice(Unmanaged, allocator,
+        \\[{"key":7,"value":"seven"},{"key":9,"value":"nine"}]
+    );
+    defer deinitValue(Unmanaged, allocator, unmanaged);
+    try std.testing.expectEqualStrings("seven", unmanaged.get(7).?);
+    try std.testing.expectEqualStrings("nine", unmanaged.get(9).?);
+
+    const Ordered = std.array_hash_map.Auto(u8, []const u8);
+    const ordered = try readSlice(Ordered, allocator,
+        \\[{"key":2,"value":"two"},{"key":1,"value":"one"}]
+    );
+    defer deinitValue(Ordered, allocator, ordered);
+    try std.testing.expectEqualSlices(u8, &.{ 2, 1 }, ordered.keys());
+    try std.testing.expectEqualStrings("two", ordered.values()[0]);
+    try std.testing.expectEqualStrings("one", ordered.values()[1]);
+}
+
+test "json rejects duplicate std map keys and cleans up owned values" {
+    const Map = std.StringHashMap([]const u8);
+    try std.testing.expectError(error.DuplicateField, readSlice(Map, std.testing.allocator,
+        \\[{"key":"dup","value":"one"},{"key":"dup","value":"two"}]
+    ));
+}
+
+test "json reads defaulted std container fields" {
+    const Value = struct {
+        list: std.ArrayList([]const u8) = .empty,
+        map: std.array_hash_map.String([]const u8) = .empty,
+    };
+
+    const parsed = try readSlice(Value, std.testing.allocator, "{}");
+    defer deinitValue(Value, std.testing.allocator, parsed);
+    try std.testing.expectEqual(@as(usize, 0), parsed.list.items.len);
+    try std.testing.expectEqual(@as(usize, 0), parsed.map.count());
+}
+
 test "json writes and reads Bytes wrapper as base64" {
     const Blob = struct {
         data: base64.Bytes,

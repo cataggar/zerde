@@ -811,6 +811,55 @@ test "binary roundtrips structs with owned slices" {
     try std.testing.expectEqualStrings(original.nickname.?, parsed.nickname.?);
 }
 
+test "binary roundtrips std list containers" {
+    const Value = struct {
+        numbers: std.ArrayList(u16),
+        names: std.ArrayList([]const u8),
+    };
+    const allocator = std.testing.allocator;
+
+    var original = Value{
+        .numbers = .empty,
+        .names = .empty,
+    };
+    defer original.numbers.deinit(allocator);
+    defer original.names.deinit(allocator);
+    try original.numbers.append(allocator, 10);
+    try original.numbers.append(allocator, 20);
+    try original.names.append(allocator, "Ada");
+    try original.names.append(allocator, "Zig");
+
+    const bytes = try writeAlloc(allocator, original);
+    defer allocator.free(bytes);
+
+    const parsed = try readSlice(Value, allocator, bytes);
+    defer deinitValue(Value, allocator, parsed);
+
+    try std.testing.expectEqualSlices(u16, &.{ 10, 20 }, parsed.numbers.items);
+    try std.testing.expectEqualStrings("Ada", parsed.names.items[0]);
+    try std.testing.expectEqualStrings("Zig", parsed.names.items[1]);
+}
+
+test "binary roundtrips std map containers" {
+    const Map = std.array_hash_map.Auto(u8, []const u8);
+    const allocator = std.testing.allocator;
+
+    var original: Map = .empty;
+    defer original.deinit(allocator);
+    try original.put(allocator, 1, "one");
+    try original.put(allocator, 2, "two");
+
+    const bytes = try writeAlloc(allocator, original);
+    defer allocator.free(bytes);
+
+    const parsed = try readSlice(Map, allocator, bytes);
+    defer deinitValue(Map, allocator, parsed);
+
+    try std.testing.expectEqualSlices(u8, &.{ 1, 2 }, parsed.keys());
+    try std.testing.expectEqualStrings("one", parsed.values()[0]);
+    try std.testing.expectEqualStrings("two", parsed.values()[1]);
+}
+
 test "binary encodes slice length prefix and optional presence" {
     const Value = struct {
         items: []const u8,

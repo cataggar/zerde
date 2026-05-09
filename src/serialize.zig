@@ -3,6 +3,7 @@
 const std = @import("std");
 
 const base64 = @import("base64.zig");
+const containers = @import("containers.zig");
 const meta = @import("meta.zig");
 
 /// Serializes `value` by walking its Zig type at comptime and calling methods
@@ -95,6 +96,15 @@ fn serializeValue(comptime T: type, value: T, encoder: anytype) !void {
             else => unsupported(T),
         },
         .@"struct" => |struct_info| {
+            if (comptime containers.isList(T)) {
+                try serializeList(T, value, encoder);
+                return;
+            }
+            if (comptime containers.isMap(T)) {
+                try serializeMap(T, value, encoder);
+                return;
+            }
+
             if (struct_info.is_tuple) unsupported(T);
 
             const field_count = comptime serializableStructFieldCount(T);
@@ -117,6 +127,42 @@ fn serializeValue(comptime T: type, value: T, encoder: anytype) !void {
         },
         else => unsupported(T),
     }
+}
+
+fn serializeList(comptime T: type, value: T, encoder: anytype) !void {
+    const Child = comptime containers.listChild(T);
+    const len = containers.listLen(T, value);
+
+    try encoder.beginSeq(len);
+    for (0..len) |i| {
+        try serializeValue(Child, containers.listItem(T, value, i), encoder);
+    }
+    try encoder.endSeq();
+}
+
+fn serializeMap(comptime T: type, value: T, encoder: anytype) !void {
+    const K = comptime containers.mapKey(T);
+    const V = comptime containers.mapValue(T);
+    const Entry = struct {
+        key: K,
+        value: V,
+    };
+
+    const len: usize = @intCast(value.count());
+    try encoder.beginSeq(len);
+
+    var copy = value;
+    var it = copy.iterator();
+    while (it.next()) |entry| {
+        try encoder.beginStruct(Entry, 2);
+        try encoder.emitFieldName("key");
+        try serializeValue(K, if (K == void) {} else entry.key_ptr.*, encoder);
+        try encoder.emitFieldName("value");
+        try serializeValue(V, if (V == void) {} else entry.value_ptr.*, encoder);
+        try encoder.endStruct();
+    }
+
+    try encoder.endSeq();
 }
 
 fn serializeExternalUnion(comptime T: type, value: T, active_name: []const u8, encoder: anytype) !void {
