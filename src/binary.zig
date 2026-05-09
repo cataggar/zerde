@@ -255,7 +255,7 @@ pub const Encoder = struct {
     }
 
     fn writeEnumTag(self: *Self, comptime T: type, value: anytype) !void {
-        try self.writeTagValue(comptime tagByteCount(T), @as(u64, @intCast(value)));
+        try self.writeTagValue(comptime tagByteCount(T), tagRawValue(T, value));
     }
 
     fn writeTagValue(self: *Self, bytes: usize, value: u64) !void {
@@ -385,7 +385,7 @@ pub const Decoder = struct {
         const value = try self.readTagValue(comptime tagByteCount(T));
         const enum_info = @typeInfo(T).@"enum";
         inline for (enum_info.fields) |field| {
-            if (field.value == value) return @enumFromInt(field.value);
+            if ((comptime tagRawValue(T, field.value)) == value) return @enumFromInt(field.value);
         }
         return error.InvalidEnumTag;
     }
@@ -596,7 +596,7 @@ fn unionTagEntries(comptime T: type) []const TagEntry {
     inline for (union_info.fields, 0..) |field, i| {
         var value: u64 = 0;
         inline for (enum_info.fields) |enum_field| {
-            if (std.mem.eql(u8, enum_field.name, field.name)) value = enum_field.value;
+            if (std.mem.eql(u8, enum_field.name, field.name)) value = comptime tagRawValue(Tag, enum_field.value);
         }
         entries[i] = .{
             .name = field.name,
@@ -627,6 +627,18 @@ fn tagByteCount(comptime T: type) usize {
         else => @compileError("binary tags require enum or integer types"),
     };
     return @max(1, (bits + 7) / 8);
+}
+
+fn tagRawValue(comptime T: type, value: anytype) u64 {
+    const Int = switch (@typeInfo(T)) {
+        .@"enum" => |enum_info| enum_info.tag_type,
+        .int => T,
+        else => @compileError("binary tags require enum or integer types"),
+    };
+    const Unsigned = std.meta.Int(.unsigned, @bitSizeOf(Int));
+    const typed: Int = @intCast(value);
+    const raw: Unsigned = @bitCast(typed);
+    return @intCast(raw);
 }
 
 test "binary writes known primitive bytes" {
@@ -726,6 +738,31 @@ test "binary roundtrips raw bytes" {
     try std.testing.expectEqualSlices(u8, &raw, parsed.data.value);
 }
 
+test "binary rejects malformed primitive input" {
+    try std.testing.expectError(error.InvalidValue, readSlice(bool, std.testing.allocator, &.{2}));
+    try std.testing.expectError(error.InvalidValue, readSlice(?u8, std.testing.allocator, &.{2}));
+    try std.testing.expectError(error.EndOfStream, readSlice(u16, std.testing.allocator, &.{0x01}));
+    try std.testing.expectError(error.InvalidBinaryTrailingData, readSlice(u8, std.testing.allocator, &.{ 1, 2 }));
+}
+
+test "binary rejects truncated string payload" {
+    try std.testing.expectError(error.EndOfStream, readSlice([]const u8, std.testing.allocator, &.{
+        0x03, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+        'a',  'b',
+    }));
+}
+
+test "binary frees owned values when trailing data is rejected" {
+    const User = struct { name: []const u8 };
+
+    try std.testing.expectError(error.InvalidBinaryTrailingData, readSlice(User, std.testing.allocator, &.{
+        0x03, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+        'A',  'd',  'a',  0xff,
+    }));
+}
+
 test "binary roundtrips enums and tagged unions" {
     const Color = enum { red, green, blue };
     const Shape = union(enum) {
@@ -748,6 +785,45 @@ test "binary roundtrips enums and tagged unions" {
     switch (parsed.shape) {
         .circle => |circle| try std.testing.expectEqual(@as(u16, 10), circle.radius),
         .point => return error.InvalidValue,
+    }
+}
+
+test "binary roundtrips signed negative enum tags" {
+    const Signed = enum(i8) { neg = -1, zero = 0, pos = 1 };
+
+    const bytes = try writeAlloc(std.testing.allocator, Signed.neg);
+    defer std.testing.allocator.free(bytes);
+    try std.testing.expectEqualSlices(u8, &.{0xff}, bytes);
+
+    const parsed = try readSlice(Signed, std.testing.allocator, bytes);
+    try std.testing.expectEqual(Signed.neg, parsed);
+}
+
+test "binary roundtrips signed negative tagged union tags" {
+    const Tag = enum(i8) { neg = -1, pos = 1 };
+    const Value = union(Tag) {
+        neg,
+        pos: u8,
+    };
+
+    const neg_bytes = try writeAlloc(std.testing.allocator, Value{ .neg = {} });
+    defer std.testing.allocator.free(neg_bytes);
+    try std.testing.expectEqualSlices(u8, &.{0xff}, neg_bytes);
+
+    const parsed_neg = try readSlice(Value, std.testing.allocator, neg_bytes);
+    switch (parsed_neg) {
+        .neg => {},
+        .pos => return error.InvalidValue,
+    }
+
+    const pos_bytes = try writeAlloc(std.testing.allocator, Value{ .pos = 7 });
+    defer std.testing.allocator.free(pos_bytes);
+    try std.testing.expectEqualSlices(u8, &.{ 0x01, 0x07 }, pos_bytes);
+
+    const parsed_pos = try readSlice(Value, std.testing.allocator, pos_bytes);
+    switch (parsed_pos) {
+        .pos => |pos| try std.testing.expectEqual(@as(u8, 7), pos),
+        .neg => return error.InvalidValue,
     }
 }
 

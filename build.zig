@@ -23,6 +23,7 @@ pub fn build(b: *std.Build) void {
     addCompileErrorTest(b, test_step, mod, target, optimize, "test/compile_errors/bad_field_option.zig", "error: unknown zerde metadata for field 'id' option");
     addCompileErrorTest(b, test_step, mod, target, optimize, "test/compile_errors/bad_custom_hook.zig", "error: zerde metadata for field 'id' custom hook bad_custom_hook.BadHook is missing 'deserialize'");
     addCompileErrorTest(b, test_step, mod, target, optimize, "test/compile_errors/human_codec_read.zig", "error: human format is write-only");
+    addCompileErrorTest(b, test_step, mod, target, optimize, "test/compile_errors/internal_union_tag_collision.zig", "error: zerde internal union_repr payload field 'kind' conflicts with tag field on internal_union_tag_collision.Event");
 }
 
 fn addCompileErrorTest(

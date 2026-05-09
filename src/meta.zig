@@ -105,10 +105,31 @@ fn validateUnionOptions(comptime T: type, comptime metadata: anytype) void {
                     if (field.type != void and @typeInfo(field.type) != .@"struct") {
                         @compileError("zerde internal union_repr requires struct or void variants on " ++ @typeName(T));
                     }
+                    validateInternalUnionPayload(T, field);
                 }
             }
         },
         else => @compileError("zerde union_repr is only valid on tagged unions"),
+    }
+}
+
+fn validateInternalUnionPayload(comptime Union: type, comptime variant: std.builtin.Type.UnionField) void {
+    if (variant.type == void) return;
+
+    const Payload = variant.type;
+    const payload_info = @typeInfo(Payload).@"struct";
+    const payload_options = optionsFor(Payload);
+
+    inline for (payload_info.fields) |field| {
+        if (!field.is_comptime) {
+            const field_options = fieldOptionsFor(Payload, field.name);
+            if (shouldSerialize(field_options) or shouldDeserialize(field_options)) {
+                const wire_name = fieldWireName(field.name, field_options, payload_options);
+                if (comptime std.mem.eql(u8, wire_name, union_tag_field_name)) {
+                    @compileError("zerde internal union_repr payload field '" ++ field.name ++ "' conflicts with tag field on " ++ @typeName(Union));
+                }
+            }
+        }
     }
 }
 

@@ -182,8 +182,9 @@ pub const Encoder = struct {
     }
 
     pub fn emitInt(self: *Self, value: anytype) !void {
+        const toml_value = try tomlInteger(value);
         try self.beforeValue();
-        try self.writer.print("{d}", .{value});
+        try self.writer.print("{d}", .{toml_value});
     }
 
     pub fn emitFloat(self: *Self, value: anytype) !void {
@@ -336,7 +337,7 @@ pub const Encoder = struct {
                 '\r' => try self.writeEscapedByte(value, &run_start, i, "\\r"),
                 '"' => try self.writeEscapedByte(value, &run_start, i, "\\\""),
                 '\\' => try self.writeEscapedByte(value, &run_start, i, "\\\\"),
-                0x00...0x07, 0x0b, 0x0e...0x1f => {
+                0x00...0x07, 0x0b, 0x0e...0x1f, 0x7f => {
                     const digits = "0123456789abcdef";
                     try self.writer.writeAll(value[run_start..i]);
                     try self.writer.writeAll("\\u00");
@@ -394,7 +395,7 @@ const TreeEncoder = struct {
     }
 
     pub fn emitInt(self: *Self, value: anytype) !void {
-        const bytes = try std.fmt.allocPrint(self.allocator, "{d}", .{value});
+        const bytes = try std.fmt.allocPrint(self.allocator, "{d}", .{try tomlInteger(value)});
         errdefer self.allocator.free(bytes);
         try self.appendValue(.{ .int = .{ .bytes = bytes, .base = 10 } });
     }
@@ -715,6 +716,7 @@ const Table = struct {
     fields: std.ArrayList(Field) = .empty,
     explicit: bool = false,
     is_inline: bool = false,
+    is_array_item: bool = false,
 
     fn deinit(self: *Table, allocator: std.mem.Allocator) void {
         for (self.fields.items) |*field| field.deinit(allocator);
@@ -1021,7 +1023,7 @@ const Parser = struct {
                     return result;
                 },
                 '\\' => try self.parseEscape(&out.writer),
-                0x00...0x08, 0x0a...0x1f => return error.InvalidTomlSyntax,
+                0x00...0x08, 0x0a...0x1f, 0x7f => return error.InvalidTomlSyntax,
                 else => try out.writer.writeByte(byte),
             }
         }
@@ -1033,8 +1035,7 @@ const Parser = struct {
         errdefer out.deinit();
 
         while (true) {
-            if (self.startsWith("\"\"\"")) {
-                self.index += 3;
+            if (try self.consumeMultilineStringEnd('"', &out.writer)) {
                 const result = try out.toOwnedSlice();
                 errdefer self.allocator.free(result);
                 if (!std.unicode.utf8ValidateSlice(result)) return error.InvalidUtf8;
@@ -1044,7 +1045,7 @@ const Parser = struct {
             const byte = try self.takeByte();
             switch (byte) {
                 '\\' => try self.parseMultilineEscape(&out.writer),
-                0x00...0x08, 0x0b...0x0c, 0x0e...0x1f => return error.InvalidTomlSyntax,
+                0x00...0x08, 0x0b...0x0c, 0x0e...0x1f, 0x7f => return error.InvalidTomlSyntax,
                 else => try out.writer.writeByte(byte),
             }
         }
@@ -1066,7 +1067,7 @@ const Parser = struct {
                 if (!std.unicode.utf8ValidateSlice(result)) return error.InvalidUtf8;
                 return result;
             }
-            if (byte < 0x20 and byte != '\t') return error.InvalidTomlSyntax;
+            if ((byte < 0x20 and byte != '\t') or byte == 0x7f) return error.InvalidTomlSyntax;
         }
     }
 
@@ -1076,8 +1077,7 @@ const Parser = struct {
         errdefer out.deinit();
 
         while (true) {
-            if (self.startsWith("'''")) {
-                self.index += 3;
+            if (try self.consumeMultilineStringEnd('\'', &out.writer)) {
                 const result = try out.toOwnedSlice();
                 errdefer self.allocator.free(result);
                 if (!std.unicode.utf8ValidateSlice(result)) return error.InvalidUtf8;
@@ -1085,7 +1085,7 @@ const Parser = struct {
             }
 
             const byte = try self.takeByte();
-            if (byte < 0x20 and byte != '\t' and byte != '\n' and byte != '\r') return error.InvalidTomlSyntax;
+            if ((byte < 0x20 and byte != '\t' and byte != '\n' and byte != '\r') or byte == 0x7f) return error.InvalidTomlSyntax;
             try out.writer.writeByte(byte);
         }
     }
@@ -1132,6 +1132,19 @@ const Parser = struct {
 
         self.index = saved;
         return false;
+    }
+
+    fn consumeMultilineStringEnd(self: *Parser, quote: u8, writer: *std.Io.Writer) !bool {
+        if (self.eof() or self.peekByte() != quote) return false;
+
+        var count: usize = 0;
+        while (self.index + count < self.input.len and self.input[self.index + count] == quote) count += 1;
+        if (count < 3) return false;
+        if (count > 5) return error.InvalidTomlSyntax;
+
+        for (0..count - 3) |_| try writer.writeByte(quote);
+        self.index += count;
+        return true;
     }
 
     fn trimFirstMultilineNewline(self: *Parser) void {
@@ -1198,7 +1211,8 @@ const Parser = struct {
         if (table.findField(name)) |field| {
             switch (field.value) {
                 .array => |*array| {
-                    var new_value = Value{ .table = .{ .explicit = true } };
+                    if (!isArrayTable(array)) return error.InvalidTomlSyntax;
+                    var new_value = Value{ .table = .{ .explicit = true, .is_array_item = true } };
                     errdefer new_value.deinit(self.allocator);
                     try array.append(self.allocator, new_value);
                     return &array.items[array.items.len - 1].table;
@@ -1214,7 +1228,7 @@ const Parser = struct {
             for (array.items) |*item| item.deinit(self.allocator);
             array.deinit(self.allocator);
         }
-        try array.append(self.allocator, .{ .table = .{ .explicit = true } });
+        try array.append(self.allocator, .{ .table = .{ .explicit = true, .is_array_item = true } });
         try table.fields.append(self.allocator, .{ .name = field_name, .value = .{ .array = array } });
         return &table.fields.items[table.fields.items.len - 1].value.array.items[0].table;
     }
@@ -1349,6 +1363,17 @@ fn markInlineTable(table: *Table) void {
             else => {},
         }
     }
+}
+
+fn isArrayTable(array: *const std.ArrayList(Value)) bool {
+    if (array.items.len == 0) return false;
+    for (array.items) |item| {
+        switch (item) {
+            .table => |table| if (!table.is_array_item) return false,
+            else => return false,
+        }
+    }
+    return true;
 }
 
 fn kindOf(value: *const Value) Kind {
@@ -1537,7 +1562,7 @@ fn writeTomlString(writer: *std.Io.Writer, value: []const u8) !void {
             '\r' => try writeEscapedTomlByte(writer, value, &run_start, i, "\\r"),
             '"' => try writeEscapedTomlByte(writer, value, &run_start, i, "\\\""),
             '\\' => try writeEscapedTomlByte(writer, value, &run_start, i, "\\\\"),
-            0x00...0x07, 0x0b, 0x0e...0x1f => {
+            0x00...0x07, 0x0b, 0x0e...0x1f, 0x7f => {
                 const digits = "0123456789abcdef";
                 try writer.writeAll(value[run_start..i]);
                 try writer.writeAll("\\u00");
@@ -1556,6 +1581,10 @@ fn writeEscapedTomlByte(writer: *std.Io.Writer, value: []const u8, run_start: *u
     try writer.writeAll(value[run_start.*..index]);
     try writer.writeAll(escaped);
     run_start.* = index + 1;
+}
+
+fn tomlInteger(value: anytype) !i64 {
+    return std.math.cast(i64, value) orelse error.IntegerOverflow;
 }
 
 fn expectToml(value: anytype, expected: []const u8) !void {
@@ -1625,6 +1654,28 @@ test "toml writes strings arrays and nested structs" {
         \\scores = [9, 10]
         \\profile = { bio = "Zig", tags = ["admin", "ops"] }
     );
+}
+
+test "toml escapes DEL control character" {
+    const Document = struct { value: []const u8 };
+
+    try expectToml(Document{ .value = "a\x7fb" }, "value = \"a\\u007fb\"");
+    try expectTomlWithOptions(Document{ .value = "a\x7fb" }, .{ .layout = .sections }, "value = \"a\\u007fb\"");
+}
+
+test "toml rejects integers outside signed 64-bit range" {
+    const Document = struct { value: u64 };
+
+    var buffer: [128]u8 = undefined;
+    var writer: std.Io.Writer = .fixed(&buffer);
+    try std.testing.expectError(error.IntegerOverflow, write(&writer, Document{ .value = std.math.maxInt(u64) }));
+
+    var sections_buffer: [128]u8 = undefined;
+    var sections_writer: std.Io.Writer = .fixed(&sections_buffer);
+    try std.testing.expectError(error.IntegerOverflow, writeWithOptions(std.testing.allocator, &sections_writer, Document{ .value = std.math.maxInt(u64) }, .{ .layout = .sections }));
+
+    const Max = struct { value: i64 };
+    try expectToml(Max{ .value = std.math.maxInt(i64) }, "value = 9223372036854775807");
 }
 
 test "toml writes and reads Bytes wrapper as base64" {
@@ -1881,6 +1932,26 @@ test "toml rejects duplicate keys and invalid table redefinitions" {
     ));
 }
 
+test "toml rejects array table headers after ordinary arrays" {
+    const Empty = struct {};
+
+    try std.testing.expectError(error.InvalidTomlSyntax, readSlice(Empty, std.testing.allocator,
+        \\x = [1]
+        \\[[x]]
+        \\a = 1
+    ));
+    try std.testing.expectError(error.InvalidTomlSyntax, readSlice(Empty, std.testing.allocator,
+        \\x = []
+        \\[[x]]
+        \\a = 1
+    ));
+    try std.testing.expectError(error.InvalidTomlSyntax, readSlice(Empty, std.testing.allocator,
+        \\x = [{ a = 1 }]
+        \\[[x]]
+        \\a = 2
+    ));
+}
+
 test "toml writes and reads arrays of tables" {
     const Server = struct {
         host: []const u8,
@@ -1989,6 +2060,23 @@ test "toml reads multiline basic and literal strings" {
     );
 }
 
+test "toml reads multiline strings ending with quote characters" {
+    const Document = struct { value: []const u8 };
+
+    try expectRead(Document,
+        \\value = """ends with quote """"
+    , .{ .value = "ends with quote \"" });
+    try expectRead(Document,
+        \\value = """ends with two quotes """""
+    , .{ .value = "ends with two quotes \"\"" });
+    try expectRead(Document,
+        \\value = '''ends with quote ''''
+    , .{ .value = "ends with quote '" });
+    try expectRead(Document,
+        \\value = '''ends with two quotes '''''
+    , .{ .value = "ends with two quotes ''" });
+}
+
 test "toml rejects malformed multiline strings" {
     const Document = struct { value: []const u8 };
 
@@ -1996,6 +2084,15 @@ test "toml rejects malformed multiline strings" {
     try expectReadFails(Document, "value = '''unterminated");
     try expectReadFails(Document, "value = \"\"\"bad\\q\"\"\"");
     try expectReadFails(Document, "\"\"\"bad\"\"\" = 1");
+}
+
+test "toml rejects raw DEL in strings" {
+    const Document = struct { value: []const u8 };
+
+    try expectReadFails(Document, "value = \"a\x7fb\"");
+    try expectReadFails(Document, "value = \"\"\"a\x7fb\"\"\"");
+    try expectReadFails(Document, "value = 'a\x7fb'");
+    try expectReadFails(Document, "value = '''a\x7fb'''");
 }
 
 test "toml reads all integer number formats" {
