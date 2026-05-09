@@ -5,6 +5,7 @@ const std = @import("std");
 const meta = @import("meta.zig");
 const rename = @import("rename.zig");
 const schema_mod = @import("schema.zig");
+const binary = @import("binary.zig");
 const human = @import("human.zig");
 const json = @import("json.zig");
 const toml = @import("toml.zig");
@@ -14,6 +15,7 @@ const deinitValue = @import("deinit.zig").deinit;
 pub const Format = enum {
     json,
     toml,
+    binary,
     human,
 };
 
@@ -36,6 +38,7 @@ pub fn Codec(comptime T: type) type {
             switch (format) {
                 .json => try json.write(writer, value),
                 .toml => try toml.write(writer, value),
+                .binary => try binary.write(writer, value),
                 .human => try human.write(writer, value),
             }
         }
@@ -45,6 +48,38 @@ pub fn Codec(comptime T: type) type {
             return switch (format) {
                 .json => try json.read(T, allocator, reader),
                 .toml => try toml.read(T, allocator, reader),
+                .binary => try binary.read(T, allocator, reader),
+                .human => @compileError("human format is write-only"),
+            };
+        }
+
+        /// Serializes `value` in the selected format with explicit format options.
+        pub fn writeWithOptions(
+            allocator: std.mem.Allocator,
+            writer: *std.Io.Writer,
+            value: T,
+            comptime format: Format,
+            format_options: anytype,
+        ) !void {
+            switch (format) {
+                .json => try json.writeWithOptions(writer, value, coerceOptions(json.WriteOptions, format_options)),
+                .toml => try toml.writeWithOptions(allocator, writer, value, coerceOptions(toml.WriteOptions, format_options)),
+                .binary => try binary.writeWithOptions(writer, value, coerceOptions(binary.Options, format_options)),
+                .human => try human.writeWithOptions(writer, value, coerceOptions(human.WriteOptions, format_options)),
+            }
+        }
+
+        /// Deserializes a `Type` value with explicit format options where supported.
+        pub fn readWithOptions(
+            allocator: std.mem.Allocator,
+            reader: *std.Io.Reader,
+            comptime format: Format,
+            format_options: anytype,
+        ) !T {
+            return switch (format) {
+                .binary => try binary.readWithOptions(T, allocator, reader, coerceOptions(binary.Options, format_options)),
+                .json => @compileError("json read has no format options"),
+                .toml => @compileError("toml read has no format options"),
                 .human => @compileError("human format is write-only"),
             };
         }
@@ -65,6 +100,18 @@ pub fn Codec(comptime T: type) type {
             deinitValue(T, allocator, value);
         }
     };
+}
+
+fn coerceOptions(comptime Options: type, options: anytype) Options {
+    const Actual = @TypeOf(options);
+    if (@typeInfo(Actual) != .@"struct") @compileError("format options must be a struct literal");
+
+    var result = Options{};
+    inline for (@typeInfo(Actual).@"struct".fields) |field| {
+        if (!@hasField(Options, field.name)) @compileError("unknown format option '" ++ field.name ++ "'");
+        @field(result, field.name) = @field(options, field.name);
+    }
+    return result;
 }
 
 fn expectCodecWrite(comptime T: type, value: T, comptime format: Format, expected: []const u8) !void {
@@ -302,6 +349,34 @@ test "codec reads toml equivalent to format api" {
     try std.testing.expectEqual(format_value.active, codec_value.active);
 }
 
+test "codec writes and reads binary equivalent to format api" {
+    const User = struct {
+        id: u16,
+        name: []const u8,
+        active: bool,
+    };
+
+    const user = User{ .id = 0x1234, .name = "Ada", .active = true };
+
+    var format_buffer: [128]u8 = undefined;
+    var format_writer: std.Io.Writer = .fixed(&format_buffer);
+    try binary.write(&format_writer, user);
+
+    var codec_buffer: [128]u8 = undefined;
+    var codec_writer: std.Io.Writer = .fixed(&codec_buffer);
+    try Codec(User).write(&codec_writer, user, .binary);
+
+    try std.testing.expectEqualSlices(u8, format_writer.buffered(), codec_writer.buffered());
+
+    var reader: std.Io.Reader = .fixed(codec_writer.buffered());
+    const parsed = try Codec(User).read(std.testing.allocator, &reader, .binary);
+    defer Codec(User).deinit(std.testing.allocator, parsed);
+
+    try std.testing.expectEqual(user.id, parsed.id);
+    try std.testing.expectEqualStrings(user.name, parsed.name);
+    try std.testing.expectEqual(user.active, parsed.active);
+}
+
 test "codec reads json using metadata rules" {
     const ApiUser = struct {
         user_id: u64,
@@ -431,4 +506,97 @@ test "codec schema compiles for supported types" {
     try std.testing.expectEqualStrings("admin", fields[1].schema.shape.seq.child.shape.enum_.tags[0]);
     try std.testing.expect(!fields[2].required);
     try std.testing.expect(fields[3].has_default);
+}
+
+test "codec writeWithOptions supports format options" {
+    const User = struct {
+        id: u16,
+        name: []const u8,
+        active: bool,
+    };
+    const UserSerde = Codec(User);
+
+    var json_buffer: [128]u8 = undefined;
+    var json_writer: std.Io.Writer = .fixed(&json_buffer);
+    try UserSerde.writeWithOptions(
+        std.testing.allocator,
+        &json_writer,
+        .{ .id = 0x1234, .name = "Ada", .active = true },
+        .json,
+        .{ .pretty = true },
+    );
+    try std.testing.expectEqualStrings(
+        \\{
+        \\  "id": 4660,
+        \\  "name": "Ada",
+        \\  "active": true
+        \\}
+    , json_writer.buffered());
+
+    var human_buffer: [128]u8 = undefined;
+    var human_writer: std.Io.Writer = .fixed(&human_buffer);
+    try UserSerde.writeWithOptions(
+        std.testing.allocator,
+        &human_writer,
+        .{ .id = 0x1234, .name = "Ada", .active = true },
+        .human,
+        .{},
+    );
+    try std.testing.expectEqualStrings("User { id: 4660, name: \"Ada\", active: true }", human_writer.buffered());
+
+    var binary_buffer: [128]u8 = undefined;
+    var binary_writer: std.Io.Writer = .fixed(&binary_buffer);
+    try UserSerde.writeWithOptions(
+        std.testing.allocator,
+        &binary_writer,
+        .{ .id = 0x1234, .name = "Ada", .active = true },
+        .binary,
+        .{ .endian = .big },
+    );
+    try std.testing.expectEqualSlices(u8, &.{
+        0x12, 0x34,
+        0x00, 0x00,
+        0x00, 0x00,
+        0x00, 0x00,
+        0x00, 0x03,
+        'A',  'd',
+        'a',  0x01,
+    }, binary_writer.buffered());
+
+    var binary_reader: std.Io.Reader = .fixed(binary_writer.buffered());
+    const parsed = try UserSerde.readWithOptions(std.testing.allocator, &binary_reader, .binary, .{ .endian = .big });
+    defer UserSerde.deinit(std.testing.allocator, parsed);
+
+    try std.testing.expectEqual(@as(u16, 0x1234), parsed.id);
+    try std.testing.expectEqualStrings("Ada", parsed.name);
+    try std.testing.expect(parsed.active);
+}
+
+test "codec writeWithOptions supports toml sections" {
+    const Database = struct {
+        host: []const u8,
+        port: u16,
+    };
+    const Config = struct {
+        name: []const u8,
+        database: Database,
+    };
+
+    var buffer: [256]u8 = undefined;
+    var writer: std.Io.Writer = .fixed(&buffer);
+    try Codec(Config).writeWithOptions(
+        std.testing.allocator,
+        &writer,
+        .{ .name = "app", .database = .{ .host = "localhost", .port = 5432 } },
+        .toml,
+        .{ .layout = .sections },
+    );
+
+    try std.testing.expectEqualStrings(
+        \\name = "app"
+        \\
+        \\[database]
+        \\host = "localhost"
+        \\port = 5432
+    , writer.buffered());
 }

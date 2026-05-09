@@ -24,13 +24,20 @@ fn deserializeValue(comptime T: type, allocator: std.mem.Allocator, decoder: any
         .int => return try decoder.readInt(T),
         .float => return try decoder.readFloat(T),
         .optional => |optional_info| {
-            if (try decoder.peek() == .null) {
-                try decoder.readNull();
-                return null;
+            if (comptime hasMethod(@TypeOf(decoder), "readOptionalPresent")) {
+                if (!try decoder.readOptionalPresent()) return null;
+                return try deserializeValue(optional_info.child, allocator, decoder);
+            } else {
+                if (try decoder.peek() == .null) {
+                    try decoder.readNull();
+                    return null;
+                }
+                return try deserializeValue(optional_info.child, allocator, decoder);
             }
-            return try deserializeValue(optional_info.child, allocator, decoder);
         },
         .@"enum" => |enum_info| {
+            if (comptime hasMethod(@TypeOf(decoder), "readEnum")) return try decoder.readEnum(T);
+
             const tag = try decoder.readString(allocator);
             defer allocator.free(tag);
 
@@ -44,7 +51,11 @@ fn deserializeValue(comptime T: type, allocator: std.mem.Allocator, decoder: any
             var index: usize = 0;
             errdefer for (result[0..index]) |item| deinit_mod.deinit(array_info.child, allocator, item);
 
-            _ = try decoder.beginSeq();
+            if (comptime hasMethod(@TypeOf(decoder), "beginArray")) {
+                _ = try decoder.beginArray(T);
+            } else {
+                _ = try decoder.beginSeq();
+            }
             while (try decoder.hasNextSeqElem()) {
                 if (index == array_info.len) return error.InvalidArrayLength;
                 result[index] = try deserializeValue(array_info.child, allocator, decoder);
@@ -276,6 +287,32 @@ fn deserializeInternalUnion(comptime T: type, allocator: std.mem.Allocator, deco
 }
 
 fn deserializeBytesValue(comptime T: type, allocator: std.mem.Allocator, decoder: anytype) !T {
+    if (comptime hasMethod(@TypeOf(decoder), "readBytes")) {
+        const bytes = try decoder.readBytes(allocator);
+        errdefer allocator.free(bytes);
+
+        if (T == base64.Bytes) return .{ .value = bytes };
+
+        return switch (@typeInfo(T)) {
+            .array => |array_info| blk: {
+                if (array_info.child != u8) unsupported(T);
+                if (bytes.len != array_info.len) return error.InvalidArrayLength;
+                var out: T = undefined;
+                @memcpy(out[0..], bytes);
+                allocator.free(bytes);
+                break :blk out;
+            },
+            .pointer => |pointer_info| switch (pointer_info.size) {
+                .slice => blk: {
+                    if (pointer_info.child != u8) unsupported(T);
+                    break :blk bytes;
+                },
+                else => unsupported(T),
+            },
+            else => unsupported(T),
+        };
+    }
+
     const encoded = try decoder.readString(allocator);
     defer allocator.free(encoded);
 
@@ -395,6 +432,18 @@ fn cloneDefaultValue(comptime T: type, allocator: std.mem.Allocator, value: T) !
 fn isOptional(comptime T: type) bool {
     return switch (@typeInfo(T)) {
         .optional => true,
+        else => false,
+    };
+}
+
+fn hasMethod(comptime MaybePtr: type, comptime name: []const u8) bool {
+    const T = switch (@typeInfo(MaybePtr)) {
+        .pointer => |pointer_info| pointer_info.child,
+        else => MaybePtr,
+    };
+
+    return switch (@typeInfo(T)) {
+        .@"struct", .@"union", .@"enum", .@"opaque" => @hasDecl(T, name),
         else => false,
     };
 }

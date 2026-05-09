@@ -4,6 +4,8 @@
 pub const json = @import("json.zig");
 /// TOML format API.
 pub const toml = @import("toml.zig");
+/// Binary format API.
+pub const binary = @import("binary.zig");
 /// Human-readable format API.
 pub const human = @import("human.zig");
 /// Base64 helpers and byte wrapper type.
@@ -29,6 +31,7 @@ pub const deinit = @import("deinit.zig").deinit;
 test {
     _ = json;
     _ = toml;
+    _ = binary;
     _ = human;
     _ = base64;
     _ = number;

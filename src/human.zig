@@ -5,8 +5,17 @@ const std = @import("std");
 const base64 = @import("base64.zig");
 const serialize = @import("serialize.zig").serialize;
 
+/// Human writer configuration. Reserved for future formatting options.
+pub const WriteOptions = struct {};
+
 /// Serializes `value` to a compact human-readable representation.
 pub fn write(writer: *std.Io.Writer, value: anytype) !void {
+    try writeWithOptions(writer, value, .{});
+}
+
+/// Serializes `value` to a compact human-readable representation with options.
+pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void {
+    _ = options;
     var enc = encoder(writer);
     try serialize(value, &enc);
 }

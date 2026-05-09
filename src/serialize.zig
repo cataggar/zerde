@@ -31,15 +31,33 @@ fn serializeValue(comptime T: type, value: T, encoder: anytype) !void {
         .float, .comptime_float => try encoder.emitFloat(value),
         .null => try encoder.emitNull(),
         .optional => |optional_info| {
-            if (value) |child_value| {
+            if (comptime hasMethod(@TypeOf(encoder), "beginOptional")) {
+                if (value) |child_value| {
+                    try encoder.beginOptional(true);
+                    try serializeValue(optional_info.child, child_value, encoder);
+                } else {
+                    try encoder.beginOptional(false);
+                }
+            } else if (value) |child_value| {
                 try serializeValue(optional_info.child, child_value, encoder);
             } else {
                 try encoder.emitNull();
             }
         },
-        .@"enum", .enum_literal => try encoder.emitEnumTag(@tagName(value)),
+        .@"enum" => {
+            if (comptime hasMethod(@TypeOf(encoder), "emitEnum")) {
+                try encoder.emitEnum(T, value);
+            } else {
+                try encoder.emitEnumTag(@tagName(value));
+            }
+        },
+        .enum_literal => try encoder.emitEnumTag(@tagName(value)),
         .array => |array_info| {
-            try encoder.beginSeq(array_info.len);
+            if (comptime hasMethod(@TypeOf(encoder), "beginArray")) {
+                try encoder.beginArray(T, array_info.len);
+            } else {
+                try encoder.beginSeq(array_info.len);
+            }
             for (value) |item| {
                 try serializeValue(array_info.child, item, encoder);
             }
@@ -50,7 +68,11 @@ fn serializeValue(comptime T: type, value: T, encoder: anytype) !void {
                 if (pointer_info.child == u8) {
                     try encoder.emitString(value);
                 } else {
-                    try encoder.beginSeq(value.len);
+                    if (comptime hasMethod(@TypeOf(encoder), "beginSlice")) {
+                        try encoder.beginSlice(pointer_info.child, value.len);
+                    } else {
+                        try encoder.beginSeq(value.len);
+                    }
                     for (value) |item| {
                         try serializeValue(pointer_info.child, item, encoder);
                     }
@@ -218,6 +240,18 @@ fn serializeBytesValue(comptime T: type, value: T, encoder: anytype) !void {
 fn hasTypeSerializeHook(comptime T: type) bool {
     return switch (@typeInfo(T)) {
         .@"struct", .@"union", .@"enum", .@"opaque" => @hasDecl(T, "zerdeSerialize"),
+        else => false,
+    };
+}
+
+fn hasMethod(comptime MaybePtr: type, comptime name: []const u8) bool {
+    const T = switch (@typeInfo(MaybePtr)) {
+        .pointer => |pointer_info| pointer_info.child,
+        else => MaybePtr,
+    };
+
+    return switch (@typeInfo(T)) {
+        .@"struct", .@"union", .@"enum", .@"opaque" => @hasDecl(T, name),
         else => false,
     };
 }
