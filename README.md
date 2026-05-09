@@ -66,6 +66,7 @@ Available format modules:
 
 - `zerde.json`
 - `zerde.toml`
+- `zerde.zon`
 - `zerde.binary`
 - `zerde.human` no read/readSlice API
 
@@ -95,7 +96,7 @@ const schema = comptime UserCodec.schema();
 _ = schema;
 ```
 
-Supported `zerde.Format` values are `.json`, `.toml`, `.binary`, and `.human`. The human format is write-only, so codec reads from `.human` fail at compile time.
+Supported `zerde.Format` values are `.json`, `.toml`, `.zon`, `.binary`, and `.human`. The human format is write-only, so codec reads from `.human` fail at compile time.
 
 Use `writeWithOptions` when a format has write options. Binary also supports `readWithOptions` for endianness.
 
@@ -225,7 +226,7 @@ JSON output:
 
 ## Raw Bytes
 
-Plain `[]const u8` is treated as a UTF-8 string in JSON, TOML, and human output. Use `zerde.Bytes` or `.bytes = true` when the bytes are arbitrary binary data.
+Plain `[]const u8` is treated as a UTF-8 string in JSON, TOML, ZON, and human output. Use `zerde.Bytes` or `.bytes = true` when the bytes are arbitrary binary data.
 
 ```zig
 const Blob = struct {
@@ -247,7 +248,7 @@ const Blob = struct {
 }
 ```
 
-JSON, TOML, and human encoders emit raw bytes as standard padded RFC 4648 base64 strings. The binary format writes raw bytes directly with its normal length-prefix rules for slices.
+JSON, TOML, ZON, and human encoders emit raw bytes as standard padded RFC 4648 base64 strings. The binary format writes raw bytes directly with its normal length-prefix rules for slices.
 
 
 ## Custom Hooks
@@ -347,6 +348,14 @@ TOML:
 - Integers are limited to TOML's signed 64-bit range.
 - Writer layout can be `.inline_tables` or `.sections`.
 - Date/time helpers are exposed as `zerde.LocalDate`, `zerde.LocalTime`, `zerde.LocalDateTime`, and `zerde.OffsetDateTime`.
+
+ZON:
+
+- Structs and sequences are emitted with Zig object notation syntax such as `.{ .id = 1 }` and `.{ 1, 2, 3 }`.
+- Enums are emitted as enum literals such as `.green`; renamed fields or tags that are not bare identifiers use escaped identifier syntax such as `.@"display-name"`.
+- Numeric input accepts Zig-style separators, `0b`/`0o`/`0x` integer prefixes, and `inf`/`nan` float tokens.
+- Line and block comments are accepted while reading, and trailing commas are accepted in structs and sequences.
+- Pretty output is controlled with `zon.WriteOptions{ .pretty = true, .indent = 4 }`.
 
 Binary:
 
