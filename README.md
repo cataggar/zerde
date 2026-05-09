@@ -7,6 +7,7 @@ Zerde is a small Zig 0.16 serialization framework built around comptime reflecti
 - JSON read/write with compact and pretty output.
 - TOML read/write with inline-table or section-oriented output.
 - MessagePack read/write with native string, binary, array, and map encodings.
+- ZON read/write with configurable pretty output.
 - Compact binary read/write with configurable endianness.
 - Type-specialized `Codec(T)` namespaces for format dispatch, schema inspection, validation, and cleanup.
 - Field metadata for renaming, `rename_all`, skipping, unknown-field denial, byte fields, and custom hooks.
