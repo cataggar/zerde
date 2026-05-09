@@ -4,6 +4,8 @@
 pub const json = @import("json.zig");
 /// TOML format API.
 pub const toml = @import("toml.zig");
+/// MessagePack format API.
+pub const msgpack = @import("msgpack.zig");
 /// Zig Object Notation format API.
 pub const zon = @import("zon.zig");
 /// Binary format API.
@@ -19,6 +21,9 @@ const datetime = @import("datetime.zig");
 
 /// Wrapper type for serializing raw bytes as bytes rather than UTF-8 strings.
 pub const Bytes = base64.Bytes;
+
+/// Timestamp with seconds elapsed since the Unix epoch and nanosecond precision.
+pub const Timestamp = datetime.Timestamp;
 
 /// TOML local date: `YYYY-MM-DD`.
 pub const LocalDate = datetime.LocalDate;
@@ -44,12 +49,14 @@ pub const deinit = @import("deinit.zig").deinit;
 test {
     _ = json;
     _ = toml;
+    _ = msgpack;
     _ = zon;
     _ = binary;
     _ = human;
     _ = base64;
     _ = number;
     _ = Bytes;
+    _ = Timestamp;
     _ = LocalDate;
     _ = LocalTime;
     _ = LocalDateTime;

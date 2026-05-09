@@ -6,6 +6,7 @@ Zerde is a small Zig 0.16 serialization framework built around comptime reflecti
 
 - JSON read/write with compact and pretty output.
 - TOML read/write with inline-table or section-oriented output.
+- MessagePack read/write with native string, binary, array, and map encodings.
 - Compact binary read/write with configurable endianness.
 - Type-specialized `Codec(T)` namespaces for format dispatch, schema inspection, validation, and cleanup.
 - Field metadata for renaming, `rename_all`, skipping, unknown-field denial, byte fields, and custom hooks.
@@ -85,6 +86,7 @@ Available format modules:
 
 - `zerde.json`
 - `zerde.toml`
+- `zerde.msgpack`
 - `zerde.zon`
 - `zerde.binary`
 - `zerde.human` no read/readSlice API
@@ -115,7 +117,7 @@ const schema = comptime UserCodec.schema();
 _ = schema;
 ```
 
-Supported `zerde.Format` values are `.json`, `.toml`, `.zon`, `.binary`, and `.human`. The human format is write-only, so codec reads from `.human` fail at compile time.
+Supported `zerde.Format` values are `.json`, `.toml`, `.msgpack`, `.zon`, `.binary`, and `.human`. The human format is write-only, so codec reads from `.human` fail at compile time.
 
 Use `writeWithOptions` when a format has write options. Binary also supports `readWithOptions` for endianness.
 
@@ -268,6 +270,7 @@ const Blob = struct {
 ```
 
 JSON, TOML, ZON, and human encoders emit raw bytes as standard padded RFC 4648 base64 strings. The binary format writes raw bytes directly with its normal length-prefix rules for slices.
+MessagePack writes raw bytes with the native bin family.
 
 
 ## Custom Hooks
@@ -366,7 +369,16 @@ TOML:
 - TOML has no null value, so serializing null optionals returns `error.UnsupportedTomlNull`.
 - Integers are limited to TOML's signed 64-bit range.
 - Writer layout can be `.inline_tables` or `.sections`.
-- Date/time helpers are exposed as `zerde.LocalDate`, `zerde.LocalTime`, `zerde.LocalDateTime`, and `zerde.OffsetDateTime`.
+- Date/time helpers are exposed as `zerde.LocalDate`, `zerde.LocalTime`, `zerde.LocalDateTime`, `zerde.OffsetDateTime`, and `zerde.Timestamp`.
+
+MessagePack:
+
+- Structs and tagged unions are encoded as maps with string keys.
+- Strings are encoded with the str family and must be valid UTF-8.
+- Raw byte fields use the bin family instead of base64.
+- `zerde.Timestamp` uses the MessagePack timestamp extension type.
+- Integer, string, binary, array, map, and extension headers use the smallest valid MessagePack format.
+- The decoder rejects trailing data, malformed syntax, invalid UTF-8 strings, and unsupported extension values unless handled through low-level custom hooks.
 
 ZON:
 

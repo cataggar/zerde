@@ -2,6 +2,61 @@
 
 const std = @import("std");
 
+/// Timestamp with seconds elapsed since the Unix epoch and nanosecond precision.
+pub const Timestamp = struct {
+    /// Seconds elapsed since 1970-01-01 00:00:00 UTC.
+    seconds: i64,
+    /// Nanoseconds within the current second.
+    nanoseconds: u32 = 0,
+
+    /// Serializes as a MessagePack timestamp extension when supported, otherwise as a struct.
+    pub fn zerdeWrite(self: Timestamp, enc: anytype) !void {
+        if (comptime hasTimestampEmitter(@TypeOf(enc))) {
+            try enc.emitTimestamp(self);
+            return;
+        }
+
+        try enc.beginStruct(Timestamp, 2);
+        try enc.emitFieldName("seconds");
+        try enc.emitInt(self.seconds);
+        try enc.emitFieldName("nanoseconds");
+        try enc.emitInt(self.nanoseconds);
+        try enc.endStruct();
+    }
+
+    /// Deserializes from a MessagePack timestamp extension when supported, otherwise from a struct.
+    pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !Timestamp {
+        if (comptime hasTimestampReader(@TypeOf(dec))) {
+            return try dec.readTimestamp();
+        }
+
+        var result = Timestamp{ .seconds = 0 };
+        var seen_seconds = false;
+        var seen_nanoseconds = false;
+
+        try dec.beginStruct(Timestamp);
+        while (try dec.nextField()) |field_name| {
+            defer allocator.free(field_name);
+            if (std.mem.eql(u8, field_name, "seconds")) {
+                if (seen_seconds) return error.DuplicateField;
+                result.seconds = try dec.readInt(i64);
+                seen_seconds = true;
+            } else if (std.mem.eql(u8, field_name, "nanoseconds")) {
+                if (seen_nanoseconds) return error.DuplicateField;
+                result.nanoseconds = try dec.readInt(u32);
+                seen_nanoseconds = true;
+            } else {
+                try dec.skipValue();
+            }
+        }
+        try dec.endStruct();
+
+        if (!seen_seconds) return error.MissingField;
+        if (result.nanoseconds > 999_999_999) return error.InvalidTimestamp;
+        return result;
+    }
+};
+
 /// TOML local date: `YYYY-MM-DD`.
 pub const LocalDate = struct {
     year: u16,
@@ -152,6 +207,22 @@ fn readDateTimeOrString(allocator: std.mem.Allocator, dec: anytype) ![]u8 {
         return try dec.readTomlDateTime(allocator);
     }
     return try dec.readString(allocator);
+}
+
+fn hasTimestampEmitter(comptime T: type) bool {
+    const Target = switch (@typeInfo(T)) {
+        .pointer => |pointer| pointer.child,
+        else => T,
+    };
+    return @hasDecl(Target, "emitTimestamp");
+}
+
+fn hasTimestampReader(comptime T: type) bool {
+    const Target = switch (@typeInfo(T)) {
+        .pointer => |pointer| pointer.child,
+        else => T,
+    };
+    return @hasDecl(Target, "readTimestamp");
 }
 
 fn hasTomlDateTimeEmitter(comptime T: type) bool {
