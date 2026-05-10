@@ -23,6 +23,27 @@ pub fn build(b: *std.Build) void {
     const docs_step = b.step("docs", "Generate project documentation");
     docs_step.dependOn(&install_docs.step);
 
+    const docs_md_exe = b.addExecutable(.{
+        .name = "docs-md",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/docs-md.zig"),
+            .target = b.graph.host,
+            .optimize = optimize,
+        }),
+    });
+    const run_docs_md = b.addRunArtifact(docs_md_exe);
+    run_docs_md.addArgs(&.{
+        "--root", "src/zerde.zig",
+        "--out", "docs",
+        "--project-root", ".",
+        "--name", "zerde",
+        "--emit-index",
+        "--follow-imports",
+    });
+
+    const docs_md_step = b.step("docs-md", "Generate Markdown API docs");
+    docs_md_step.dependOn(&run_docs_md.step);
+
     const doc_server = b.addExecutable(.{
         .name = "doc-server",
         .root_module = b.createModule(.{
