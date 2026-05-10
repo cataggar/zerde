@@ -200,6 +200,7 @@ pub const Decoder = struct { ... };
 - [hasNextSeqElem](#fn-decoder-hasnextseqelem)
 - [endSeq](#fn-decoder-endseq)
 - [beginStruct](#fn-decoder-beginstruct)
+- [beginStructEvent](#fn-decoder-beginstructevent)
 - [nextField](#fn-decoder-nextfield)
 - [endStruct](#fn-decoder-endstruct)
 - [skipValue](#fn-decoder-skipvalue)
@@ -285,6 +286,17 @@ pub fn endSeq(self: *Self) !void
 
 ```zig
 pub fn beginStruct(self: *Self, comptime T: type) !void
+```
+
+<a id="fn-decoder-beginstructevent"></a>
+
+### Decoder.beginStructEvent
+
+Begins reading a JSON object for event consumers. JSON does not expose
+the object field count before the object has been read.
+
+```zig
+pub fn beginStructEvent(self: *Self) !?usize
 ```
 
 <a id="fn-decoder-nextfield"></a>

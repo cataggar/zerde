@@ -336,10 +336,12 @@ pub const Decoder = struct { ... };
 - [readFloat](#fn-decoder-readfloat)
 - [readString](#fn-decoder-readstring)
 - [readEnum](#fn-decoder-readenum)
+- [readEnumTag](#fn-decoder-readenumtag)
 - [beginSeq](#fn-decoder-beginseq)
 - [hasNextSeqElem](#fn-decoder-hasnextseqelem)
 - [endSeq](#fn-decoder-endseq)
 - [beginStruct](#fn-decoder-beginstruct)
+- [beginStructEvent](#fn-decoder-beginstructevent)
 - [nextField](#fn-decoder-nextfield)
 - [endStruct](#fn-decoder-endstruct)
 - [skipValue](#fn-decoder-skipvalue)
@@ -403,6 +405,16 @@ pub fn readString(self: *Self, allocator: std.mem.Allocator) ![]u8
 pub fn readEnum(self: *Self, comptime T: type) !T
 ```
 
+<a id="fn-decoder-readenumtag"></a>
+
+### Decoder.readEnumTag
+
+Reads a ZON enum literal tag as allocator-owned bytes for event consumers.
+
+```zig
+pub fn readEnumTag(self: *Self, allocator: std.mem.Allocator) ![]u8
+```
+
 <a id="fn-decoder-beginseq"></a>
 
 ### Decoder.beginSeq
@@ -433,6 +445,17 @@ pub fn endSeq(self: *Self) !void
 
 ```zig
 pub fn beginStruct(self: *Self, comptime T: type) !void
+```
+
+<a id="fn-decoder-beginstructevent"></a>
+
+### Decoder.beginStructEvent
+
+Begins reading a ZON struct literal for event consumers. ZON does not
+expose the field count before the literal has been read.
+
+```zig
+pub fn beginStructEvent(self: *Self) !?usize
 ```
 
 <a id="fn-decoder-nextfield"></a>

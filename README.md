@@ -10,6 +10,7 @@ Zerde is a small Zig 0.16 serialization framework built around comptime reflecti
 - ZON read/write with configurable pretty output.
 - Compact binary read/write with configurable endianness.
 - Type-specialized `Codec(T)` namespaces for format dispatch, schema inspection, validation, and cleanup.
+- Structural events for reading into custom representations or transcoding without an application Zig struct.
 - Field metadata for renaming, `rename_all`, skipping, unknown-field denial, byte fields, and custom hooks.
 - Tagged unions with external, adjacent, and internal representations.
 - No external dependencies.
@@ -102,6 +103,38 @@ Common helpers:
 - `read(T, allocator, reader)`
 - `readSlice(T, allocator, input)`
 - `encoder(...)` and `decoder(...)` for low-level integration with `zerde.serialize` and `zerde.deserialize`
+
+## Structural Events
+
+Use `zerde.events` when you want to read Zerde-supported formats into your own representation instead of into a reflected Zig struct.
+
+```zig
+var reader: std.Io.Reader = .fixed("{\"id\":42,\"name\":\"Ada\"}");
+var decoder = zerde.json.decoder(&reader, allocator);
+
+var builder = MyValueBuilder.init(allocator);
+defer builder.deinit();
+
+try zerde.events.consume(allocator, &decoder, &builder);
+try decoder.finish();
+
+const my_value = try builder.finish();
+```
+
+A sink implements structural callbacks like `emitNull`, `emitBool`, `emitInt`, `emitString`, `beginSeq`, `endSeq`, `beginStruct`, `emitFieldName`, and `endStruct`. String and field-name slices passed to the sink are temporary; copy them if your representation retains them.
+
+For simple transcoding or tests, `zerde.events.Value` provides an allocator-owned tree:
+
+```zig
+var in = zerde.json.decoder(&reader, allocator);
+var out = zerde.msgpack.encoder(&writer);
+
+try zerde.events.pipe(allocator, &in, &out);
+try in.finish();
+try out.finish();
+```
+
+The event APIs are intended for self-describing data streams such as JSON, TOML, MessagePack, and ZON. Binary and CSV remain type-directed formats because their low-level representation depends on the Zig type shape.
 
 ## Type Codecs
 

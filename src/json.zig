@@ -227,6 +227,13 @@ pub const Decoder = struct {
         self.push(.object);
     }
 
+    /// Begins reading a JSON object for event consumers. JSON does not expose
+    /// the object field count before the object has been read.
+    pub fn beginStructEvent(self: *Self) !?usize {
+        try self.beginStruct(void);
+        return null;
+    }
+
     pub fn nextField(self: *Self) !?[]u8 {
         const frame = self.currentFrame(.object);
         try self.skipWhitespace();

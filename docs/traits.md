@@ -4,7 +4,7 @@
 
 - [API Index](README.md)
 - Previous: [human](human.md)
-- Next: [codec](codec.md)
+- Next: [events](events.md)
 
 ## Overview
 

@@ -206,6 +206,12 @@ pub const Encoder = struct {
         try value.format(self.writer);
     }
 
+    /// Emits a raw TOML datetime token for event-based transcoding.
+    pub fn emitDateTimeRaw(self: *Self, value: []const u8) !void {
+        try self.beforeValue();
+        try self.writer.writeAll(value);
+    }
+
     pub fn beginSeq(self: *Self, len: ?usize) !void {
         _ = len;
         try self.ensureCanPush();
@@ -425,6 +431,12 @@ const TreeEncoder = struct {
         try self.appendValue(.{ .datetime = bytes });
     }
 
+    pub fn emitDateTimeRaw(self: *Self, value: []const u8) !void {
+        const bytes = try self.allocator.dupe(u8, value);
+        errdefer self.allocator.free(bytes);
+        try self.appendValue(.{ .datetime = bytes });
+    }
+
     pub fn beginSeq(self: *Self, len: ?usize) !void {
         _ = len;
         try self.appendAndPush(.{ .array = .empty });
@@ -601,6 +613,15 @@ pub const Decoder = struct {
         };
     }
 
+    /// Reads a TOML datetime token as allocator-owned bytes for event consumers.
+    pub fn readDateTimeRaw(self: *Self, allocator: std.mem.Allocator) ![]u8 {
+        const value = try self.consumeValue();
+        return switch (value.*) {
+            .datetime => |bytes| try allocator.dupe(u8, bytes),
+            else => error.InvalidType,
+        };
+    }
+
     pub fn beginSeq(self: *Self) !?usize {
         const value = try self.consumeValue();
         return switch (value.*) {
@@ -628,11 +649,20 @@ pub const Decoder = struct {
 
     pub fn beginStruct(self: *Self, comptime T: type) !void {
         _ = T;
+        _ = try self.beginStructEvent();
+    }
+
+    /// Begins reading a TOML table for event consumers and returns its field
+    /// count.
+    pub fn beginStructEvent(self: *Self) !?usize {
         const value = try self.consumeValue();
-        switch (value.*) {
-            .table => |table| try self.push(.{ .table = .{ .fields = table.fields.items } }),
+        return switch (value.*) {
+            .table => |table| blk: {
+                try self.push(.{ .table = .{ .fields = table.fields.items } });
+                break :blk table.fields.items.len;
+            },
             else => return error.InvalidType,
-        }
+        };
     }
 
     pub fn nextField(self: *Self) !?[]u8 {

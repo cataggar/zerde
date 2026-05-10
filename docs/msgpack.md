@@ -402,6 +402,7 @@ pub const Decoder = struct { ... };
 - [hasNextSeqElem](#fn-decoder-hasnextseqelem)
 - [endSeq](#fn-decoder-endseq)
 - [beginStruct](#fn-decoder-beginstruct)
+- [beginStructEvent](#fn-decoder-beginstructevent)
 - [nextField](#fn-decoder-nextfield)
 - [endStruct](#fn-decoder-endstruct)
 - [skipValue](#fn-decoder-skipvalue)
@@ -519,6 +520,17 @@ Begins reading a MessagePack map for a struct value.
 
 ```zig
 pub fn beginStruct(self: *Self, comptime T: type) !void
+```
+
+<a id="fn-decoder-beginstructevent"></a>
+
+### Decoder.beginStructEvent
+
+Begins reading a MessagePack map for event consumers and returns its
+field count.
+
+```zig
+pub fn beginStructEvent(self: *Self) !?usize
 ```
 
 <a id="fn-decoder-nextfield"></a>

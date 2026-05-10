@@ -22,5 +22,6 @@ Generated Markdown API documentation.
 - [csv](csv.md)
 - [human](human.md)
 - [traits](traits.md)
+- [events](events.md)
 - [codec](codec.md)
 - [schema](schema.md)

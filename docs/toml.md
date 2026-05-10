@@ -190,6 +190,7 @@ pub const Encoder = struct { ... };
 - [emitString](#fn-encoder-emitstring)
 - [emitBytes](#fn-encoder-emitbytes)
 - [emitDateTime](#fn-encoder-emitdatetime)
+- [emitDateTimeRaw](#fn-encoder-emitdatetimeraw)
 - [beginSeq](#fn-encoder-beginseq)
 - [endSeq](#fn-encoder-endseq)
 - [beginStruct](#fn-encoder-beginstruct)
@@ -252,6 +253,16 @@ pub fn emitBytes(self: *Self, value: []const u8) !void
 
 ```zig
 pub fn emitDateTime(self: *Self, comptime T: type, value: T) !void
+```
+
+<a id="fn-encoder-emitdatetimeraw"></a>
+
+### Encoder.emitDateTimeRaw
+
+Emits a raw TOML datetime token for event-based transcoding.
+
+```zig
+pub fn emitDateTimeRaw(self: *Self, value: []const u8) !void
 ```
 
 <a id="fn-encoder-beginseq"></a>
@@ -343,10 +354,12 @@ pub const Decoder = struct { ... };
 - [readFloat](#fn-decoder-readfloat)
 - [readString](#fn-decoder-readstring)
 - [readDateTime](#fn-decoder-readdatetime)
+- [readDateTimeRaw](#fn-decoder-readdatetimeraw)
 - [beginSeq](#fn-decoder-beginseq)
 - [hasNextSeqElem](#fn-decoder-hasnextseqelem)
 - [endSeq](#fn-decoder-endseq)
 - [beginStruct](#fn-decoder-beginstruct)
+- [beginStructEvent](#fn-decoder-beginstructevent)
 - [nextField](#fn-decoder-nextfield)
 - [endStruct](#fn-decoder-endstruct)
 - [skipValue](#fn-decoder-skipvalue)
@@ -418,6 +431,16 @@ pub fn readString(self: *Self, allocator: std.mem.Allocator) ![]u8
 pub fn readDateTime(self: *Self, comptime T: type) !T
 ```
 
+<a id="fn-decoder-readdatetimeraw"></a>
+
+### Decoder.readDateTimeRaw
+
+Reads a TOML datetime token as allocator-owned bytes for event consumers.
+
+```zig
+pub fn readDateTimeRaw(self: *Self, allocator: std.mem.Allocator) ![]u8
+```
+
 <a id="fn-decoder-beginseq"></a>
 
 ### Decoder.beginSeq
@@ -448,6 +471,17 @@ pub fn endSeq(self: *Self) !void
 
 ```zig
 pub fn beginStruct(self: *Self, comptime T: type) !void
+```
+
+<a id="fn-decoder-beginstructevent"></a>
+
+### Decoder.beginStructEvent
+
+Begins reading a TOML table for event consumers and returns its field
+count.
+
+```zig
+pub fn beginStructEvent(self: *Self) !?usize
 ```
 
 <a id="fn-decoder-nextfield"></a>

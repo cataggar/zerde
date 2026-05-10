@@ -568,8 +568,15 @@ pub const Decoder = struct {
     /// Begins reading a MessagePack map for a struct value.
     pub fn beginStruct(self: *Self, comptime T: type) !void {
         _ = T;
+        _ = try self.beginStructEvent();
+    }
+
+    /// Begins reading a MessagePack map for event consumers and returns its
+    /// field count.
+    pub fn beginStructEvent(self: *Self) !?usize {
         const len = try self.readMapHeader();
         try self.push(.{ .container = .map, .len = len });
+        return len;
     }
 
     /// Reads the next MessagePack map key as an allocator-owned field name.
@@ -972,8 +979,32 @@ test "msgpack writes strings arrays and maps" {
     try ordered.put(std.testing.allocator, 3, 4);
     try expectMsgpack(ordered, &.{
         0x92,
-        0x82, 0xa3, 'k', 'e', 'y', 0x01, 0xa5, 'v', 'a', 'l', 'u', 'e', 0x02,
-        0x82, 0xa3, 'k', 'e', 'y', 0x03, 0xa5, 'v', 'a', 'l', 'u', 'e', 0x04,
+        0x82,
+        0xa3,
+        'k',
+        'e',
+        'y',
+        0x01,
+        0xa5,
+        'v',
+        'a',
+        'l',
+        'u',
+        'e',
+        0x02,
+        0x82,
+        0xa3,
+        'k',
+        'e',
+        'y',
+        0x03,
+        0xa5,
+        'v',
+        'a',
+        'l',
+        'u',
+        'e',
+        0x04,
     });
 
     const User = struct {

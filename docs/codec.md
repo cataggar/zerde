@@ -3,7 +3,7 @@
 ## Navigation
 
 - [API Index](README.md)
-- Previous: [traits](traits.md)
+- Previous: [events](events.md)
 - Next: [schema](schema.md)
 
 ## Overview

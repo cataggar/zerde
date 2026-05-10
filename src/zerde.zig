@@ -20,6 +20,8 @@ pub const base64 = @import("base64.zig");
 pub const number = @import("number.zig");
 /// Trait helpers for types supported by Zerde.
 pub const traits = @import("traits.zig");
+/// Structural event APIs for custom representations and transcoding.
+pub const events = @import("events.zig");
 
 const datetime = @import("datetime.zig");
 
@@ -76,5 +78,6 @@ test {
     _ = @import("rename.zig");
     _ = @import("testing.zig");
     _ = traits;
+    _ = events;
     _ = @import("containers.zig");
 }

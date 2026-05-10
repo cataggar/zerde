@@ -422,6 +422,11 @@ pub const Decoder = struct {
         return error.InvalidEnumTag;
     }
 
+    /// Reads a ZON enum literal tag as allocator-owned bytes for event consumers.
+    pub fn readEnumTag(self: *Self, allocator: std.mem.Allocator) ![]u8 {
+        return try self.readDotName(allocator);
+    }
+
     pub fn beginSeq(self: *Self) !?usize {
         try self.ensureCanPush();
         try self.skipWhitespaceAndComments();
@@ -459,6 +464,13 @@ pub const Decoder = struct {
         try self.expectByte('.');
         try self.expectByte('{');
         self.push(.object);
+    }
+
+    /// Begins reading a ZON struct literal for event consumers. ZON does not
+    /// expose the field count before the literal has been read.
+    pub fn beginStructEvent(self: *Self) !?usize {
+        try self.beginStruct(void);
+        return null;
     }
 
     pub fn nextField(self: *Self) !?[]u8 {

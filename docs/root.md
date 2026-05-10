@@ -30,6 +30,7 @@ Public root module for Zerde serialization APIs.
 - [base64](#import-base64) `@import("base64.zig")`
 - [number](#import-number) `@import("number.zig")`
 - [traits](#import-traits) `@import("traits.zig")`
+- [events](#import-events) `@import("events.zig")`
 - [Codec](#import-codec) `@import("codec.zig")`
 - [Format](#import-format) `@import("codec.zig")`
 - [serialize](#import-serialize) `@import("serialize.zig")`
@@ -134,6 +135,16 @@ Trait helpers for types supported by Zerde.
 
 ```zig
 pub const traits = @import("traits.zig");
+```
+
+<a id="import-events"></a>
+
+## events
+
+Structural event APIs for custom representations and transcoding.
+
+```zig
+pub const events = @import("events.zig");
 ```
 
 <a id="alias-bytes"></a>
