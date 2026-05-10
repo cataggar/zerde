@@ -47,6 +47,8 @@ pub const WriteLayout = enum {};
 
 ## WriteOptions
 
+TOML writer options.
+
 ```zig
 pub const WriteOptions = struct {
     layout: WriteLayout = .inline_tables,
@@ -225,6 +227,8 @@ pub const Encoder = struct {
 
 ### Encoder.emitNull
 
+Emits a TOML null value when supported.
+
 ```zig
 pub fn emitNull(self: *Self) !void
 ```
@@ -232,6 +236,8 @@ pub fn emitNull(self: *Self) !void
 <a id="fn-encoder-emitbool"></a>
 
 ### Encoder.emitBool
+
+Emits a TOML boolean value.
 
 ```zig
 pub fn emitBool(self: *Self, value: bool) !void
@@ -241,6 +247,8 @@ pub fn emitBool(self: *Self, value: bool) !void
 
 ### Encoder.emitInt
 
+Emits a TOML integer value.
+
 ```zig
 pub fn emitInt(self: *Self, value: anytype) !void
 ```
@@ -248,6 +256,8 @@ pub fn emitInt(self: *Self, value: anytype) !void
 <a id="fn-encoder-emitfloat"></a>
 
 ### Encoder.emitFloat
+
+Emits a TOML floating-point value.
 
 ```zig
 pub fn emitFloat(self: *Self, value: anytype) !void
@@ -257,6 +267,8 @@ pub fn emitFloat(self: *Self, value: anytype) !void
 
 ### Encoder.emitString
 
+Emits a TOML string value.
+
 ```zig
 pub fn emitString(self: *Self, value: []const u8) !void
 ```
@@ -265,6 +277,8 @@ pub fn emitString(self: *Self, value: []const u8) !void
 
 ### Encoder.emitBytes
 
+Emits raw bytes as a base64 TOML string.
+
 ```zig
 pub fn emitBytes(self: *Self, value: []const u8) !void
 ```
@@ -272,6 +286,8 @@ pub fn emitBytes(self: *Self, value: []const u8) !void
 <a id="fn-encoder-emitdatetime"></a>
 
 ### Encoder.emitDateTime
+
+Emits a TOML datetime value.
 
 ```zig
 pub fn emitDateTime(self: *Self, comptime T: type, value: T) !void
@@ -291,6 +307,8 @@ pub fn emitDateTimeRaw(self: *Self, value: []const u8) !void
 
 ### Encoder.beginSeq
 
+Begins a TOML array.
+
 ```zig
 pub fn beginSeq(self: *Self, len: ?usize) !void
 ```
@@ -298,6 +316,8 @@ pub fn beginSeq(self: *Self, len: ?usize) !void
 <a id="fn-encoder-endseq"></a>
 
 ### Encoder.endSeq
+
+Ends the current TOML array.
 
 ```zig
 pub fn endSeq(self: *Self) !void
@@ -307,6 +327,8 @@ pub fn endSeq(self: *Self) !void
 
 ### Encoder.beginStruct
 
+Begins a TOML table or inline table.
+
 ```zig
 pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void
 ```
@@ -314,6 +336,8 @@ pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void
 <a id="fn-encoder-emitfieldname"></a>
 
 ### Encoder.emitFieldName
+
+Emits the next TOML key.
 
 ```zig
 pub fn emitFieldName(self: *Self, name: []const u8) !void
@@ -323,6 +347,8 @@ pub fn emitFieldName(self: *Self, name: []const u8) !void
 
 ### Encoder.endStruct
 
+Ends the current TOML table or inline table.
+
 ```zig
 pub fn endStruct(self: *Self) !void
 ```
@@ -331,6 +357,8 @@ pub fn endStruct(self: *Self) !void
 
 ### Encoder.emitEnumTag
 
+Emits an enum tag as a TOML string.
+
 ```zig
 pub fn emitEnumTag(self: *Self, tag: []const u8) !void
 ```
@@ -338,6 +366,8 @@ pub fn emitEnumTag(self: *Self, tag: []const u8) !void
 <a id="fn-encoder-finish"></a>
 
 ### Encoder.finish
+
+Verifies that the TOML document was completely written.
 
 ```zig
 pub fn finish(self: *Self) !void
@@ -382,6 +412,8 @@ pub const EventEncoder = union(enum) {
 
 ### EventEncoder.deinit
 
+Frees memory owned by this event encoder.
+
 ```zig
 pub fn deinit(self: *Self) void
 ```
@@ -389,6 +421,8 @@ pub fn deinit(self: *Self) void
 <a id="fn-eventencoder-emitnull"></a>
 
 ### EventEncoder.emitNull
+
+Emits a TOML null value when supported.
 
 ```zig
 pub fn emitNull(self: *Self) !void
@@ -398,6 +432,8 @@ pub fn emitNull(self: *Self) !void
 
 ### EventEncoder.emitBool
 
+Emits a TOML boolean value.
+
 ```zig
 pub fn emitBool(self: *Self, value: bool) !void
 ```
@@ -405,6 +441,8 @@ pub fn emitBool(self: *Self, value: bool) !void
 <a id="fn-eventencoder-emitint"></a>
 
 ### EventEncoder.emitInt
+
+Emits a TOML integer value.
 
 ```zig
 pub fn emitInt(self: *Self, value: anytype) !void
@@ -414,6 +452,8 @@ pub fn emitInt(self: *Self, value: anytype) !void
 
 ### EventEncoder.emitFloat
 
+Emits a TOML floating-point value.
+
 ```zig
 pub fn emitFloat(self: *Self, value: anytype) !void
 ```
@@ -421,6 +461,8 @@ pub fn emitFloat(self: *Self, value: anytype) !void
 <a id="fn-eventencoder-emitstring"></a>
 
 ### EventEncoder.emitString
+
+Emits a TOML string value.
 
 ```zig
 pub fn emitString(self: *Self, value: []const u8) !void
@@ -430,6 +472,8 @@ pub fn emitString(self: *Self, value: []const u8) !void
 
 ### EventEncoder.emitBytes
 
+Emits raw bytes as a base64 TOML string.
+
 ```zig
 pub fn emitBytes(self: *Self, value: []const u8) !void
 ```
@@ -437,6 +481,8 @@ pub fn emitBytes(self: *Self, value: []const u8) !void
 <a id="fn-eventencoder-emitdatetime"></a>
 
 ### EventEncoder.emitDateTime
+
+Emits a TOML datetime value.
 
 ```zig
 pub fn emitDateTime(self: *Self, comptime T: type, value: T) !void
@@ -446,6 +492,8 @@ pub fn emitDateTime(self: *Self, comptime T: type, value: T) !void
 
 ### EventEncoder.emitDateTimeRaw
 
+Emits a raw TOML datetime token.
+
 ```zig
 pub fn emitDateTimeRaw(self: *Self, value: []const u8) !void
 ```
@@ -453,6 +501,8 @@ pub fn emitDateTimeRaw(self: *Self, value: []const u8) !void
 <a id="fn-eventencoder-beginseq"></a>
 
 ### EventEncoder.beginSeq
+
+Begins a TOML array.
 
 ```zig
 pub fn beginSeq(self: *Self, len: ?usize) !void
@@ -462,6 +512,8 @@ pub fn beginSeq(self: *Self, len: ?usize) !void
 
 ### EventEncoder.endSeq
 
+Ends the current TOML array.
+
 ```zig
 pub fn endSeq(self: *Self) !void
 ```
@@ -469,6 +521,8 @@ pub fn endSeq(self: *Self) !void
 <a id="fn-eventencoder-beginstruct"></a>
 
 ### EventEncoder.beginStruct
+
+Begins a TOML table or inline table.
 
 ```zig
 pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void
@@ -478,6 +532,8 @@ pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void
 
 ### EventEncoder.emitFieldName
 
+Emits the next TOML key.
+
 ```zig
 pub fn emitFieldName(self: *Self, name: []const u8) !void
 ```
@@ -485,6 +541,8 @@ pub fn emitFieldName(self: *Self, name: []const u8) !void
 <a id="fn-eventencoder-endstruct"></a>
 
 ### EventEncoder.endStruct
+
+Ends the current TOML table or inline table.
 
 ```zig
 pub fn endStruct(self: *Self) !void
@@ -494,6 +552,8 @@ pub fn endStruct(self: *Self) !void
 
 ### EventEncoder.emitEnumTag
 
+Emits an enum tag as a TOML string.
+
 ```zig
 pub fn emitEnumTag(self: *Self, tag: []const u8) !void
 ```
@@ -501,6 +561,8 @@ pub fn emitEnumTag(self: *Self, tag: []const u8) !void
 <a id="fn-eventencoder-finish"></a>
 
 ### EventEncoder.finish
+
+Verifies that the TOML document was completely written.
 
 ```zig
 pub fn finish(self: *Self) !void
@@ -542,6 +604,8 @@ pub const SectionEncoder = struct {
 
 ### SectionEncoder.deinit
 
+Frees memory owned by this section encoder.
+
 ```zig
 pub fn deinit(self: *Self) void
 ```
@@ -549,6 +613,8 @@ pub fn deinit(self: *Self) void
 <a id="fn-sectionencoder-emitnull"></a>
 
 ### SectionEncoder.emitNull
+
+Emits a TOML null value when supported.
 
 ```zig
 pub fn emitNull(self: *Self) !void
@@ -558,6 +624,8 @@ pub fn emitNull(self: *Self) !void
 
 ### SectionEncoder.emitBool
 
+Emits a TOML boolean value.
+
 ```zig
 pub fn emitBool(self: *Self, value: bool) !void
 ```
@@ -565,6 +633,8 @@ pub fn emitBool(self: *Self, value: bool) !void
 <a id="fn-sectionencoder-emitint"></a>
 
 ### SectionEncoder.emitInt
+
+Emits a TOML integer value.
 
 ```zig
 pub fn emitInt(self: *Self, value: anytype) !void
@@ -574,6 +644,8 @@ pub fn emitInt(self: *Self, value: anytype) !void
 
 ### SectionEncoder.emitFloat
 
+Emits a TOML floating-point value.
+
 ```zig
 pub fn emitFloat(self: *Self, value: anytype) !void
 ```
@@ -581,6 +653,8 @@ pub fn emitFloat(self: *Self, value: anytype) !void
 <a id="fn-sectionencoder-emitstring"></a>
 
 ### SectionEncoder.emitString
+
+Emits a TOML string value.
 
 ```zig
 pub fn emitString(self: *Self, value: []const u8) !void
@@ -590,6 +664,8 @@ pub fn emitString(self: *Self, value: []const u8) !void
 
 ### SectionEncoder.emitBytes
 
+Emits raw bytes as a base64 TOML string.
+
 ```zig
 pub fn emitBytes(self: *Self, value: []const u8) !void
 ```
@@ -597,6 +673,8 @@ pub fn emitBytes(self: *Self, value: []const u8) !void
 <a id="fn-sectionencoder-emitdatetime"></a>
 
 ### SectionEncoder.emitDateTime
+
+Emits a TOML datetime value.
 
 ```zig
 pub fn emitDateTime(self: *Self, comptime T: type, value: T) !void
@@ -606,6 +684,8 @@ pub fn emitDateTime(self: *Self, comptime T: type, value: T) !void
 
 ### SectionEncoder.emitDateTimeRaw
 
+Emits a raw TOML datetime token.
+
 ```zig
 pub fn emitDateTimeRaw(self: *Self, value: []const u8) !void
 ```
@@ -613,6 +693,8 @@ pub fn emitDateTimeRaw(self: *Self, value: []const u8) !void
 <a id="fn-sectionencoder-beginseq"></a>
 
 ### SectionEncoder.beginSeq
+
+Begins a TOML array.
 
 ```zig
 pub fn beginSeq(self: *Self, len: ?usize) !void
@@ -622,6 +704,8 @@ pub fn beginSeq(self: *Self, len: ?usize) !void
 
 ### SectionEncoder.endSeq
 
+Ends the current TOML array.
+
 ```zig
 pub fn endSeq(self: *Self) !void
 ```
@@ -629,6 +713,8 @@ pub fn endSeq(self: *Self) !void
 <a id="fn-sectionencoder-beginstruct"></a>
 
 ### SectionEncoder.beginStruct
+
+Begins a TOML table.
 
 ```zig
 pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void
@@ -638,6 +724,8 @@ pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void
 
 ### SectionEncoder.emitFieldName
 
+Emits the next TOML key.
+
 ```zig
 pub fn emitFieldName(self: *Self, name: []const u8) !void
 ```
@@ -645,6 +733,8 @@ pub fn emitFieldName(self: *Self, name: []const u8) !void
 <a id="fn-sectionencoder-endstruct"></a>
 
 ### SectionEncoder.endStruct
+
+Ends the current TOML table.
 
 ```zig
 pub fn endStruct(self: *Self) !void
@@ -654,6 +744,8 @@ pub fn endStruct(self: *Self) !void
 
 ### SectionEncoder.emitEnumTag
 
+Emits an enum tag as a TOML string.
+
 ```zig
 pub fn emitEnumTag(self: *Self, tag: []const u8) !void
 ```
@@ -661,6 +753,8 @@ pub fn emitEnumTag(self: *Self, tag: []const u8) !void
 <a id="fn-sectionencoder-finish"></a>
 
 ### SectionEncoder.finish
+
+Renders the buffered TOML document.
 
 ```zig
 pub fn finish(self: *Self) !void
@@ -709,6 +803,8 @@ pub const Decoder = struct {
 
 ### Decoder.deinit
 
+Frees memory owned by this decoder.
+
 ```zig
 pub fn deinit(self: *Self) void
 ```
@@ -716,6 +812,8 @@ pub fn deinit(self: *Self) void
 <a id="fn-decoder-peek"></a>
 
 ### Decoder.peek
+
+Returns the kind of the next TOML value.
 
 ```zig
 pub fn peek(self: *Self) !Kind
@@ -727,6 +825,8 @@ References: [`Kind`](#type-kind)
 
 ### Decoder.readNull
 
+Reads a TOML null value when supported.
+
 ```zig
 pub fn readNull(self: *Self) !void
 ```
@@ -734,6 +834,8 @@ pub fn readNull(self: *Self) !void
 <a id="fn-decoder-readbool"></a>
 
 ### Decoder.readBool
+
+Reads a TOML boolean value.
 
 ```zig
 pub fn readBool(self: *Self) !bool
@@ -743,6 +845,8 @@ pub fn readBool(self: *Self) !bool
 
 ### Decoder.readInt
 
+Reads a TOML integer into `T`.
+
 ```zig
 pub fn readInt(self: *Self, comptime T: type) !T
 ```
@@ -750,6 +854,8 @@ pub fn readInt(self: *Self, comptime T: type) !T
 <a id="fn-decoder-readfloat"></a>
 
 ### Decoder.readFloat
+
+Reads a TOML number into floating-point type `T`.
 
 ```zig
 pub fn readFloat(self: *Self, comptime T: type) !T
@@ -759,6 +865,8 @@ pub fn readFloat(self: *Self, comptime T: type) !T
 
 ### Decoder.readString
 
+Reads a TOML string as allocator-owned bytes.
+
 ```zig
 pub fn readString(self: *Self, allocator: std.mem.Allocator) ![]u8
 ```
@@ -766,6 +874,8 @@ pub fn readString(self: *Self, allocator: std.mem.Allocator) ![]u8
 <a id="fn-decoder-readdatetime"></a>
 
 ### Decoder.readDateTime
+
+Reads a TOML datetime value into `T`.
 
 ```zig
 pub fn readDateTime(self: *Self, comptime T: type) !T
@@ -785,6 +895,8 @@ pub fn readDateTimeRaw(self: *Self, allocator: std.mem.Allocator) ![]u8
 
 ### Decoder.beginSeq
 
+Begins reading a TOML array.
+
 ```zig
 pub fn beginSeq(self: *Self) !?usize
 ```
@@ -792,6 +904,8 @@ pub fn beginSeq(self: *Self) !?usize
 <a id="fn-decoder-hasnextseqelem"></a>
 
 ### Decoder.hasNextSeqElem
+
+Returns whether the current TOML array has another element.
 
 ```zig
 pub fn hasNextSeqElem(self: *Self) !bool
@@ -801,6 +915,8 @@ pub fn hasNextSeqElem(self: *Self) !bool
 
 ### Decoder.endSeq
 
+Ends the current TOML array.
+
 ```zig
 pub fn endSeq(self: *Self) !void
 ```
@@ -808,6 +924,8 @@ pub fn endSeq(self: *Self) !void
 <a id="fn-decoder-beginstruct"></a>
 
 ### Decoder.beginStruct
+
+Begins reading a TOML table.
 
 ```zig
 pub fn beginStruct(self: *Self, comptime T: type) !void
@@ -828,6 +946,8 @@ pub fn beginStructEvent(self: *Self) !?usize
 
 ### Decoder.nextField
 
+Returns the next table key as allocator-owned bytes, or null when done.
+
 ```zig
 pub fn nextField(self: *Self) !?[]u8
 ```
@@ -835,6 +955,8 @@ pub fn nextField(self: *Self) !?[]u8
 <a id="fn-decoder-endstruct"></a>
 
 ### Decoder.endStruct
+
+Ends the current TOML table.
 
 ```zig
 pub fn endStruct(self: *Self) !void
@@ -844,6 +966,8 @@ pub fn endStruct(self: *Self) !void
 
 ### Decoder.skipValue
 
+Skips one TOML value.
+
 ```zig
 pub fn skipValue(self: *Self) !void
 ```
@@ -851,6 +975,8 @@ pub fn skipValue(self: *Self) !void
 <a id="fn-decoder-finish"></a>
 
 ### Decoder.finish
+
+Verifies that the TOML document was completely read.
 
 ```zig
 pub fn finish(self: *Self) !void

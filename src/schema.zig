@@ -15,6 +15,7 @@ pub const Schema = struct {
     shape: Shape,
 };
 
+/// High-level shape of a reflected Zig type.
 pub const Shape = union(enum) {
     bool,
     int: IntInfo,
@@ -29,25 +30,30 @@ pub const Shape = union(enum) {
     union_: UnionInfo,
 };
 
+/// Integer schema details.
 pub const IntInfo = struct {
     signedness: std.builtin.Signedness,
     bits: u16,
 };
 
+/// Floating-point schema details.
 pub const FloatInfo = struct {
     bits: u16,
 };
 
+/// Sequence schema details.
 pub const SeqInfo = struct {
     child: *const Schema,
     len: ?usize,
 };
 
+/// Map schema details.
 pub const MapInfo = struct {
     key: *const Schema,
     value: *const Schema,
 };
 
+/// Struct field schema details.
 pub const FieldInfo = struct {
     zig_name: []const u8,
     wire_name: []const u8,
@@ -58,19 +64,23 @@ pub const FieldInfo = struct {
     deserializes: bool,
 };
 
+/// Struct schema details.
 pub const StructInfo = struct {
     fields: []const FieldInfo,
 };
 
+/// Enum schema details.
 pub const EnumInfo = struct {
     tags: []const []const u8,
 };
 
+/// Tagged union variant schema details.
 pub const UnionVariantInfo = struct {
     zig_name: []const u8,
     schema: ?*const Schema,
 };
 
+/// Tagged union schema details.
 pub const UnionInfo = struct {
     repr: meta.UnionRepr,
     variants: []const UnionVariantInfo,

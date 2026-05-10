@@ -257,6 +257,8 @@ pub const Encoder = struct {
 
 ### Encoder.emitNull
 
+Emits an empty CSV cell for a null value.
+
 ```zig
 pub fn emitNull(self: *Self) !void
 ```
@@ -264,6 +266,8 @@ pub fn emitNull(self: *Self) !void
 <a id="fn-encoder-emitbool"></a>
 
 ### Encoder.emitBool
+
+Emits a boolean cell as `true` or `false`.
 
 ```zig
 pub fn emitBool(self: *Self, value: bool) !void
@@ -273,6 +277,8 @@ pub fn emitBool(self: *Self, value: bool) !void
 
 ### Encoder.emitInt
 
+Emits an integer cell.
+
 ```zig
 pub fn emitInt(self: *Self, value: anytype) !void
 ```
@@ -280,6 +286,8 @@ pub fn emitInt(self: *Self, value: anytype) !void
 <a id="fn-encoder-emitfloat"></a>
 
 ### Encoder.emitFloat
+
+Emits a floating-point cell.
 
 ```zig
 pub fn emitFloat(self: *Self, value: anytype) !void
@@ -289,6 +297,8 @@ pub fn emitFloat(self: *Self, value: anytype) !void
 
 ### Encoder.emitString
 
+Emits a UTF-8 string cell with CSV escaping.
+
 ```zig
 pub fn emitString(self: *Self, value: []const u8) !void
 ```
@@ -297,6 +307,8 @@ pub fn emitString(self: *Self, value: []const u8) !void
 
 ### Encoder.emitBytes
 
+Emits raw bytes as base64 text.
+
 ```zig
 pub fn emitBytes(self: *Self, value: []const u8) !void
 ```
@@ -304,6 +316,8 @@ pub fn emitBytes(self: *Self, value: []const u8) !void
 <a id="fn-encoder-emitenumtag"></a>
 
 ### Encoder.emitEnumTag
+
+Emits an enum tag cell by name.
 
 ```zig
 pub fn emitEnumTag(self: *Self, tag: []const u8) !void
@@ -328,6 +342,8 @@ References: [`events.Value`](events.md#type-value)
 
 ### Encoder.beginArray
 
+Begins writing an array of CSV rows.
+
 ```zig
 pub fn beginArray(self: *Self, comptime T: type, len: usize) !void
 ```
@@ -335,6 +351,8 @@ pub fn beginArray(self: *Self, comptime T: type, len: usize) !void
 <a id="fn-encoder-beginslice"></a>
 
 ### Encoder.beginSlice
+
+Begins writing a slice of CSV rows.
 
 ```zig
 pub fn beginSlice(self: *Self, comptime Child: type, len: usize) !void
@@ -344,6 +362,8 @@ pub fn beginSlice(self: *Self, comptime Child: type, len: usize) !void
 
 ### Encoder.beginSeq
 
+Begins writing a sequence of CSV rows.
+
 ```zig
 pub fn beginSeq(self: *Self, len: ?usize) !void
 ```
@@ -351,6 +371,8 @@ pub fn beginSeq(self: *Self, len: ?usize) !void
 <a id="fn-encoder-hasnextseqelem"></a>
 
 ### Encoder.hasNextSeqElem
+
+Returns whether sequence pull-style writing is supported.
 
 ```zig
 pub fn hasNextSeqElem(self: *Self) !bool
@@ -360,6 +382,8 @@ pub fn hasNextSeqElem(self: *Self) !bool
 
 ### Encoder.endSeq
 
+Ends the CSV row sequence.
+
 ```zig
 pub fn endSeq(self: *Self) !void
 ```
@@ -367,6 +391,8 @@ pub fn endSeq(self: *Self) !void
 <a id="fn-encoder-beginstruct"></a>
 
 ### Encoder.beginStruct
+
+Begins writing a row struct or nested flat struct.
 
 ```zig
 pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void
@@ -376,6 +402,8 @@ pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void
 
 ### Encoder.emitFieldName
 
+Selects the next CSV column by struct field name.
+
 ```zig
 pub fn emitFieldName(self: *Self, name: []const u8) !void
 ```
@@ -383,6 +411,8 @@ pub fn emitFieldName(self: *Self, name: []const u8) !void
 <a id="fn-encoder-endstruct"></a>
 
 ### Encoder.endStruct
+
+Ends the current row struct or nested flat struct.
 
 ```zig
 pub fn endStruct(self: *Self) !void
@@ -392,6 +422,8 @@ pub fn endStruct(self: *Self) !void
 
 ### Encoder.finish
 
+Verifies that the CSV document was completely written.
+
 ```zig
 pub fn finish(self: *Self) !void
 ```
@@ -399,6 +431,8 @@ pub fn finish(self: *Self) !void
 <a id="fn-encoder-beginoptional"></a>
 
 ### Encoder.beginOptional
+
+Emits an empty cell for absent optional values.
 
 ```zig
 pub fn beginOptional(self: *Self, present: bool) !void
@@ -453,6 +487,8 @@ pub const Decoder = struct {
 
 ### Decoder.deinit
 
+Frees memory owned by this decoder.
+
 ```zig
 pub fn deinit(self: *Self) void
 ```
@@ -460,6 +496,8 @@ pub fn deinit(self: *Self) void
 <a id="fn-decoder-peek"></a>
 
 ### Decoder.peek
+
+Returns the kind of the next CSV value.
 
 ```zig
 pub fn peek(self: *Self) !Kind
@@ -471,6 +509,8 @@ References: [`Kind`](#type-kind)
 
 ### Decoder.readNull
 
+Reads an empty cell as null.
+
 ```zig
 pub fn readNull(self: *Self) !void
 ```
@@ -478,6 +518,8 @@ pub fn readNull(self: *Self) !void
 <a id="fn-decoder-readbool"></a>
 
 ### Decoder.readBool
+
+Reads a boolean cell.
 
 ```zig
 pub fn readBool(self: *Self) !bool
@@ -487,6 +529,8 @@ pub fn readBool(self: *Self) !bool
 
 ### Decoder.readInt
 
+Reads an integer cell into `T`.
+
 ```zig
 pub fn readInt(self: *Self, comptime T: type) !T
 ```
@@ -494,6 +538,8 @@ pub fn readInt(self: *Self, comptime T: type) !T
 <a id="fn-decoder-readfloat"></a>
 
 ### Decoder.readFloat
+
+Reads a numeric cell into floating-point type `T`.
 
 ```zig
 pub fn readFloat(self: *Self, comptime T: type) !T
@@ -503,6 +549,8 @@ pub fn readFloat(self: *Self, comptime T: type) !T
 
 ### Decoder.readString
 
+Reads a string cell as allocator-owned bytes.
+
 ```zig
 pub fn readString(self: *Self, allocator: std.mem.Allocator) ![]u8
 ```
@@ -510,6 +558,8 @@ pub fn readString(self: *Self, allocator: std.mem.Allocator) ![]u8
 <a id="fn-decoder-readbytes"></a>
 
 ### Decoder.readBytes
+
+Reads a base64 cell into allocator-owned bytes.
 
 ```zig
 pub fn readBytes(self: *Self, allocator: std.mem.Allocator) ![]u8
@@ -519,6 +569,8 @@ pub fn readBytes(self: *Self, allocator: std.mem.Allocator) ![]u8
 
 ### Decoder.readOptionalPresent
 
+Returns whether the current optional field is present.
+
 ```zig
 pub fn readOptionalPresent(self: *Self) !bool
 ```
@@ -526,6 +578,8 @@ pub fn readOptionalPresent(self: *Self) !bool
 <a id="fn-decoder-beginseq"></a>
 
 ### Decoder.beginSeq
+
+Begins reading the sequence of CSV rows.
 
 ```zig
 pub fn beginSeq(self: *Self) !?usize
@@ -535,6 +589,8 @@ pub fn beginSeq(self: *Self) !?usize
 
 ### Decoder.hasNextSeqElem
 
+Returns whether another CSV row is available.
+
 ```zig
 pub fn hasNextSeqElem(self: *Self) !bool
 ```
@@ -542,6 +598,8 @@ pub fn hasNextSeqElem(self: *Self) !bool
 <a id="fn-decoder-endseq"></a>
 
 ### Decoder.endSeq
+
+Ends the CSV row sequence.
 
 ```zig
 pub fn endSeq(self: *Self) !void
@@ -551,6 +609,8 @@ pub fn endSeq(self: *Self) !void
 
 ### Decoder.beginStruct
 
+Begins reading a row struct or nested flat struct.
+
 ```zig
 pub fn beginStruct(self: *Self, comptime T: type) !void
 ```
@@ -558,6 +618,8 @@ pub fn beginStruct(self: *Self, comptime T: type) !void
 <a id="fn-decoder-beginstructevent"></a>
 
 ### Decoder.beginStructEvent
+
+Begins reading a dynamic CSV row for event consumers.
 
 ```zig
 pub fn beginStructEvent(self: *Self) !?usize
@@ -567,6 +629,8 @@ pub fn beginStructEvent(self: *Self) !?usize
 
 ### Decoder.nextField
 
+Returns the next field name as allocator-owned bytes, or null when done.
+
 ```zig
 pub fn nextField(self: *Self) !?[]u8
 ```
@@ -574,6 +638,8 @@ pub fn nextField(self: *Self) !?[]u8
 <a id="fn-decoder-endstruct"></a>
 
 ### Decoder.endStruct
+
+Ends the current row struct or nested flat struct.
 
 ```zig
 pub fn endStruct(self: *Self) !void
@@ -583,6 +649,8 @@ pub fn endStruct(self: *Self) !void
 
 ### Decoder.skipValue
 
+Skips the current cell or nested field group.
+
 ```zig
 pub fn skipValue(self: *Self) !void
 ```
@@ -590,6 +658,8 @@ pub fn skipValue(self: *Self) !void
 <a id="fn-decoder-finish"></a>
 
 ### Decoder.finish
+
+Verifies that the CSV document was completely read.
 
 ```zig
 pub fn finish(self: *Self) !void

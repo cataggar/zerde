@@ -63,6 +63,7 @@ pub const LocalDate = struct {
     month: u8,
     day: u8,
 
+    /// Parses a `YYYY-MM-DD` local date.
     pub fn parse(input: []const u8) !LocalDate {
         var parser = DateTimeParser{ .input = input };
         const value = try parser.parseDate();
@@ -70,14 +71,17 @@ pub const LocalDate = struct {
         return value;
     }
 
+    /// Writes this date as `YYYY-MM-DD`.
     pub fn format(self: LocalDate, writer: *std.Io.Writer) !void {
         try writer.print("{d:0>4}-{d:0>2}-{d:0>2}", .{ self.year, self.month, self.day });
     }
 
+    /// Serializes this date as a native datetime token when supported, otherwise as a string.
     pub fn zerdeWrite(self: LocalDate, enc: anytype) !void {
         try writeDateTimeScalar(LocalDate, self, enc, 16);
     }
 
+    /// Deserializes a local date from a native datetime token or string.
     pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !LocalDate {
         return try readDateTimeScalar(LocalDate, allocator, dec);
     }
@@ -90,6 +94,7 @@ pub const LocalTime = struct {
     second: u8,
     nanosecond: u32 = 0,
 
+    /// Parses a `HH:MM:SS[.fraction]` local time.
     pub fn parse(input: []const u8) !LocalTime {
         var parser = DateTimeParser{ .input = input };
         const value = try parser.parseTime();
@@ -97,15 +102,18 @@ pub const LocalTime = struct {
         return value;
     }
 
+    /// Writes this time as `HH:MM:SS[.fraction]`.
     pub fn format(self: LocalTime, writer: *std.Io.Writer) !void {
         try writer.print("{d:0>2}:{d:0>2}:{d:0>2}", .{ self.hour, self.minute, self.second });
         try formatFraction(writer, self.nanosecond);
     }
 
+    /// Serializes this time as a native datetime token when supported, otherwise as a string.
     pub fn zerdeWrite(self: LocalTime, enc: anytype) !void {
         try writeDateTimeScalar(LocalTime, self, enc, 32);
     }
 
+    /// Deserializes a local time from a native datetime token or string.
     pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !LocalTime {
         return try readDateTimeScalar(LocalTime, allocator, dec);
     }
@@ -116,6 +124,7 @@ pub const LocalDateTime = struct {
     date: LocalDate,
     time: LocalTime,
 
+    /// Parses a `YYYY-MM-DDTHH:MM:SS[.fraction]` local date-time.
     pub fn parse(input: []const u8) !LocalDateTime {
         var parser = DateTimeParser{ .input = input };
         const value = try parser.parseLocalDateTime();
@@ -123,16 +132,19 @@ pub const LocalDateTime = struct {
         return value;
     }
 
+    /// Writes this date-time as `YYYY-MM-DDTHH:MM:SS[.fraction]`.
     pub fn format(self: LocalDateTime, writer: *std.Io.Writer) !void {
         try self.date.format(writer);
         try writer.writeByte('T');
         try self.time.format(writer);
     }
 
+    /// Serializes this date-time as a native datetime token when supported, otherwise as a string.
     pub fn zerdeWrite(self: LocalDateTime, enc: anytype) !void {
         try writeDateTimeScalar(LocalDateTime, self, enc, 48);
     }
 
+    /// Deserializes a local date-time from a native datetime token or string.
     pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !LocalDateTime {
         return try readDateTimeScalar(LocalDateTime, allocator, dec);
     }
@@ -144,6 +156,7 @@ pub const OffsetDateTime = struct {
     time: LocalTime,
     offset_minutes: i16,
 
+    /// Parses an offset date-time ending in `Z` or a `+/-HH:MM` offset.
     pub fn parse(input: []const u8) !OffsetDateTime {
         var parser = DateTimeParser{ .input = input };
         const value = try parser.parseOffsetDateTime();
@@ -151,6 +164,7 @@ pub const OffsetDateTime = struct {
         return value;
     }
 
+    /// Writes this date-time with a `Z` or `+/-HH:MM` offset.
     pub fn format(self: OffsetDateTime, writer: *std.Io.Writer) !void {
         try self.date.format(writer);
         try writer.writeByte('T');
@@ -165,10 +179,12 @@ pub const OffsetDateTime = struct {
         try writer.print("{c}{d:0>2}:{d:0>2}", .{ sign, abs_minutes / 60, abs_minutes % 60 });
     }
 
+    /// Serializes this date-time as a native datetime token when supported, otherwise as a string.
     pub fn zerdeWrite(self: OffsetDateTime, enc: anytype) !void {
         try writeDateTimeScalar(OffsetDateTime, self, enc, 56);
     }
 
+    /// Deserializes an offset date-time from a native datetime token or string.
     pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !OffsetDateTime {
         return try readDateTimeScalar(OffsetDateTime, allocator, dec);
     }

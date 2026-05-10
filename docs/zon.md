@@ -189,6 +189,8 @@ pub const Encoder = struct {
 
 ### Encoder.emitNull
 
+Emits a ZON null value.
+
 ```zig
 pub fn emitNull(self: *Self) !void
 ```
@@ -196,6 +198,8 @@ pub fn emitNull(self: *Self) !void
 <a id="fn-encoder-emitbool"></a>
 
 ### Encoder.emitBool
+
+Emits a ZON boolean value.
 
 ```zig
 pub fn emitBool(self: *Self, value: bool) !void
@@ -205,6 +209,8 @@ pub fn emitBool(self: *Self, value: bool) !void
 
 ### Encoder.emitInt
 
+Emits a ZON integer value.
+
 ```zig
 pub fn emitInt(self: *Self, value: anytype) !void
 ```
@@ -212,6 +218,8 @@ pub fn emitInt(self: *Self, value: anytype) !void
 <a id="fn-encoder-emitfloat"></a>
 
 ### Encoder.emitFloat
+
+Emits a ZON floating-point value.
 
 ```zig
 pub fn emitFloat(self: *Self, value: anytype) !void
@@ -221,6 +229,8 @@ pub fn emitFloat(self: *Self, value: anytype) !void
 
 ### Encoder.emitString
 
+Emits a ZON string value.
+
 ```zig
 pub fn emitString(self: *Self, value: []const u8) !void
 ```
@@ -228,6 +238,8 @@ pub fn emitString(self: *Self, value: []const u8) !void
 <a id="fn-encoder-emitbytes"></a>
 
 ### Encoder.emitBytes
+
+Emits raw bytes as a base64 ZON string.
 
 ```zig
 pub fn emitBytes(self: *Self, value: []const u8) !void
@@ -237,6 +249,8 @@ pub fn emitBytes(self: *Self, value: []const u8) !void
 
 ### Encoder.emitEnum
 
+Emits a ZON enum literal for `value`.
+
 ```zig
 pub fn emitEnum(self: *Self, comptime T: type, value: T) !void
 ```
@@ -244,6 +258,8 @@ pub fn emitEnum(self: *Self, comptime T: type, value: T) !void
 <a id="fn-encoder-emitenumtag"></a>
 
 ### Encoder.emitEnumTag
+
+Emits a ZON enum literal by tag name.
 
 ```zig
 pub fn emitEnumTag(self: *Self, tag: []const u8) !void
@@ -253,6 +269,8 @@ pub fn emitEnumTag(self: *Self, tag: []const u8) !void
 
 ### Encoder.beginSeq
 
+Begins a ZON array literal.
+
 ```zig
 pub fn beginSeq(self: *Self, len: ?usize) !void
 ```
@@ -260,6 +278,8 @@ pub fn beginSeq(self: *Self, len: ?usize) !void
 <a id="fn-encoder-endseq"></a>
 
 ### Encoder.endSeq
+
+Ends the current ZON array literal.
 
 ```zig
 pub fn endSeq(self: *Self) !void
@@ -269,6 +289,8 @@ pub fn endSeq(self: *Self) !void
 
 ### Encoder.beginStruct
 
+Begins a ZON struct literal.
+
 ```zig
 pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void
 ```
@@ -276,6 +298,8 @@ pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void
 <a id="fn-encoder-emitfieldname"></a>
 
 ### Encoder.emitFieldName
+
+Emits the next ZON struct field name.
 
 ```zig
 pub fn emitFieldName(self: *Self, name: []const u8) !void
@@ -285,6 +309,8 @@ pub fn emitFieldName(self: *Self, name: []const u8) !void
 
 ### Encoder.endStruct
 
+Ends the current ZON struct literal.
+
 ```zig
 pub fn endStruct(self: *Self) !void
 ```
@@ -292,6 +318,8 @@ pub fn endStruct(self: *Self) !void
 <a id="fn-encoder-finish"></a>
 
 ### Encoder.finish
+
+Verifies that the ZON document was completely written.
 
 ```zig
 pub fn finish(self: *Self) !void
@@ -336,6 +364,8 @@ pub const Decoder = struct {
 
 ### Decoder.peek
 
+Returns the kind of the next ZON value.
+
 ```zig
 pub fn peek(self: *Self) !Kind
 ```
@@ -346,6 +376,8 @@ References: [`Kind`](#type-kind)
 
 ### Decoder.readNull
 
+Reads a ZON null value.
+
 ```zig
 pub fn readNull(self: *Self) !void
 ```
@@ -353,6 +385,8 @@ pub fn readNull(self: *Self) !void
 <a id="fn-decoder-readbool"></a>
 
 ### Decoder.readBool
+
+Reads a ZON boolean value.
 
 ```zig
 pub fn readBool(self: *Self) !bool
@@ -362,6 +396,8 @@ pub fn readBool(self: *Self) !bool
 
 ### Decoder.readInt
 
+Reads a ZON integer into `T`.
+
 ```zig
 pub fn readInt(self: *Self, comptime T: type) !T
 ```
@@ -369,6 +405,8 @@ pub fn readInt(self: *Self, comptime T: type) !T
 <a id="fn-decoder-readfloat"></a>
 
 ### Decoder.readFloat
+
+Reads a ZON number into floating-point type `T`.
 
 ```zig
 pub fn readFloat(self: *Self, comptime T: type) !T
@@ -378,6 +416,8 @@ pub fn readFloat(self: *Self, comptime T: type) !T
 
 ### Decoder.readString
 
+Reads a ZON string as allocator-owned UTF-8 bytes.
+
 ```zig
 pub fn readString(self: *Self, allocator: std.mem.Allocator) ![]u8
 ```
@@ -385,6 +425,8 @@ pub fn readString(self: *Self, allocator: std.mem.Allocator) ![]u8
 <a id="fn-decoder-readenum"></a>
 
 ### Decoder.readEnum
+
+Reads a ZON enum literal into `T`.
 
 ```zig
 pub fn readEnum(self: *Self, comptime T: type) !T
@@ -404,6 +446,8 @@ pub fn readEnumTag(self: *Self, allocator: std.mem.Allocator) ![]u8
 
 ### Decoder.beginSeq
 
+Begins reading a ZON array literal.
+
 ```zig
 pub fn beginSeq(self: *Self) !?usize
 ```
@@ -411,6 +455,8 @@ pub fn beginSeq(self: *Self) !?usize
 <a id="fn-decoder-hasnextseqelem"></a>
 
 ### Decoder.hasNextSeqElem
+
+Returns whether the current ZON array has another element.
 
 ```zig
 pub fn hasNextSeqElem(self: *Self) !bool
@@ -420,6 +466,8 @@ pub fn hasNextSeqElem(self: *Self) !bool
 
 ### Decoder.endSeq
 
+Ends the current ZON array literal.
+
 ```zig
 pub fn endSeq(self: *Self) !void
 ```
@@ -427,6 +475,8 @@ pub fn endSeq(self: *Self) !void
 <a id="fn-decoder-beginstruct"></a>
 
 ### Decoder.beginStruct
+
+Begins reading a ZON struct literal.
 
 ```zig
 pub fn beginStruct(self: *Self, comptime T: type) !void
@@ -447,6 +497,8 @@ pub fn beginStructEvent(self: *Self) !?usize
 
 ### Decoder.nextField
 
+Returns the next struct field name as allocator-owned bytes, or null when done.
+
 ```zig
 pub fn nextField(self: *Self) !?[]u8
 ```
@@ -454,6 +506,8 @@ pub fn nextField(self: *Self) !?[]u8
 <a id="fn-decoder-endstruct"></a>
 
 ### Decoder.endStruct
+
+Ends the current ZON struct literal.
 
 ```zig
 pub fn endStruct(self: *Self) !void
@@ -463,6 +517,8 @@ pub fn endStruct(self: *Self) !void
 
 ### Decoder.skipValue
 
+Skips one complete ZON value.
+
 ```zig
 pub fn skipValue(self: *Self) anyerror!void
 ```
@@ -470,6 +526,8 @@ pub fn skipValue(self: *Self) anyerror!void
 <a id="fn-decoder-finish"></a>
 
 ### Decoder.finish
+
+Verifies that the ZON document was completely read.
 
 ```zig
 pub fn finish(self: *Self) !void

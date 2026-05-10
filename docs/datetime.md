@@ -87,6 +87,8 @@ pub const LocalDate = struct {
 
 ### LocalDate.parse
 
+Parses a `YYYY-MM-DD` local date.
+
 ```zig
 pub fn parse(input: []const u8) !LocalDate
 ```
@@ -96,6 +98,8 @@ References: [`LocalDate`](#type-localdate)
 <a id="fn-localdate-format"></a>
 
 ### LocalDate.format
+
+Writes this date as `YYYY-MM-DD`.
 
 ```zig
 pub fn format(self: LocalDate, writer: *std.Io.Writer) !void
@@ -107,6 +111,8 @@ References: [`LocalDate`](#type-localdate)
 
 ### LocalDate.zerdeWrite
 
+Serializes this date as a native datetime token when supported, otherwise as a string.
+
 ```zig
 pub fn zerdeWrite(self: LocalDate, enc: anytype) !void
 ```
@@ -116,6 +122,8 @@ References: [`LocalDate`](#type-localdate)
 <a id="fn-localdate-zerderead"></a>
 
 ### LocalDate.zerdeRead
+
+Deserializes a local date from a native datetime token or string.
 
 ```zig
 pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !LocalDate
@@ -149,6 +157,8 @@ pub const LocalTime = struct {
 
 ### LocalTime.parse
 
+Parses a `HH:MM:SS[.fraction]` local time.
+
 ```zig
 pub fn parse(input: []const u8) !LocalTime
 ```
@@ -158,6 +168,8 @@ References: [`LocalTime`](#type-localtime)
 <a id="fn-localtime-format"></a>
 
 ### LocalTime.format
+
+Writes this time as `HH:MM:SS[.fraction]`.
 
 ```zig
 pub fn format(self: LocalTime, writer: *std.Io.Writer) !void
@@ -169,6 +181,8 @@ References: [`LocalTime`](#type-localtime)
 
 ### LocalTime.zerdeWrite
 
+Serializes this time as a native datetime token when supported, otherwise as a string.
+
 ```zig
 pub fn zerdeWrite(self: LocalTime, enc: anytype) !void
 ```
@@ -178,6 +192,8 @@ References: [`LocalTime`](#type-localtime)
 <a id="fn-localtime-zerderead"></a>
 
 ### LocalTime.zerdeRead
+
+Deserializes a local time from a native datetime token or string.
 
 ```zig
 pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !LocalTime
@@ -209,6 +225,8 @@ pub const LocalDateTime = struct {
 
 ### LocalDateTime.parse
 
+Parses a `YYYY-MM-DDTHH:MM:SS[.fraction]` local date-time.
+
 ```zig
 pub fn parse(input: []const u8) !LocalDateTime
 ```
@@ -218,6 +236,8 @@ References: [`LocalDateTime`](#type-localdatetime)
 <a id="fn-localdatetime-format"></a>
 
 ### LocalDateTime.format
+
+Writes this date-time as `YYYY-MM-DDTHH:MM:SS[.fraction]`.
 
 ```zig
 pub fn format(self: LocalDateTime, writer: *std.Io.Writer) !void
@@ -229,6 +249,8 @@ References: [`LocalDateTime`](#type-localdatetime)
 
 ### LocalDateTime.zerdeWrite
 
+Serializes this date-time as a native datetime token when supported, otherwise as a string.
+
 ```zig
 pub fn zerdeWrite(self: LocalDateTime, enc: anytype) !void
 ```
@@ -238,6 +260,8 @@ References: [`LocalDateTime`](#type-localdatetime)
 <a id="fn-localdatetime-zerderead"></a>
 
 ### LocalDateTime.zerdeRead
+
+Deserializes a local date-time from a native datetime token or string.
 
 ```zig
 pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !LocalDateTime
@@ -270,6 +294,8 @@ pub const OffsetDateTime = struct {
 
 ### OffsetDateTime.parse
 
+Parses an offset date-time ending in `Z` or a `+/-HH:MM` offset.
+
 ```zig
 pub fn parse(input: []const u8) !OffsetDateTime
 ```
@@ -279,6 +305,8 @@ References: [`OffsetDateTime`](#type-offsetdatetime)
 <a id="fn-offsetdatetime-format"></a>
 
 ### OffsetDateTime.format
+
+Writes this date-time with a `Z` or `+/-HH:MM` offset.
 
 ```zig
 pub fn format(self: OffsetDateTime, writer: *std.Io.Writer) !void
@@ -290,6 +318,8 @@ References: [`OffsetDateTime`](#type-offsetdatetime)
 
 ### OffsetDateTime.zerdeWrite
 
+Serializes this date-time as a native datetime token when supported, otherwise as a string.
+
 ```zig
 pub fn zerdeWrite(self: OffsetDateTime, enc: anytype) !void
 ```
@@ -299,6 +329,8 @@ References: [`OffsetDateTime`](#type-offsetdatetime)
 <a id="fn-offsetdatetime-zerderead"></a>
 
 ### OffsetDateTime.zerdeRead
+
+Deserializes an offset date-time from a native datetime token or string.
 
 ```zig
 pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !OffsetDateTime

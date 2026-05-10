@@ -28,6 +28,7 @@ pub const WriteLayout = enum {
     sections,
 };
 
+/// TOML writer options.
 pub const WriteOptions = struct {
     layout: WriteLayout = .inline_tables,
 };
@@ -182,33 +183,39 @@ pub const Encoder = struct {
     stack_len: usize = 0,
     root_count: usize = 0,
 
+    /// Emits a TOML null value when supported.
     pub fn emitNull(self: *Self) !void {
         _ = self;
         return error.UnsupportedTomlNull;
     }
 
+    /// Emits a TOML boolean value.
     pub fn emitBool(self: *Self, value: bool) !void {
         try self.beforeValue();
         try self.writer.writeAll(if (value) "true" else "false");
     }
 
+    /// Emits a TOML integer value.
     pub fn emitInt(self: *Self, value: anytype) !void {
         const toml_value = try tomlInteger(value);
         try self.beforeValue();
         try self.writer.print("{d}", .{toml_value});
     }
 
+    /// Emits a TOML floating-point value.
     pub fn emitFloat(self: *Self, value: anytype) !void {
         try self.beforeValue();
         try self.writer.print("{d}", .{value});
     }
 
+    /// Emits a TOML string value.
     pub fn emitString(self: *Self, value: []const u8) !void {
         if (!std.unicode.utf8ValidateSlice(value)) return error.InvalidUtf8;
         try self.beforeValue();
         try self.writeEscapedString(value);
     }
 
+    /// Emits raw bytes as a base64 TOML string.
     pub fn emitBytes(self: *Self, value: []const u8) !void {
         try self.beforeValue();
         try self.writer.writeByte('"');
@@ -216,6 +223,7 @@ pub const Encoder = struct {
         try self.writer.writeByte('"');
     }
 
+    /// Emits a TOML datetime value.
     pub fn emitDateTime(self: *Self, comptime T: type, value: T) !void {
         try self.beforeValue();
         try value.format(self.writer);
@@ -227,6 +235,7 @@ pub const Encoder = struct {
         try self.writer.writeAll(value);
     }
 
+    /// Begins a TOML array.
     pub fn beginSeq(self: *Self, len: ?usize) !void {
         _ = len;
         try self.ensureCanPush();
@@ -235,11 +244,13 @@ pub const Encoder = struct {
         self.push(.seq);
     }
 
+    /// Ends the current TOML array.
     pub fn endSeq(self: *Self) !void {
         self.pop(.seq);
         try self.writer.writeAll("]");
     }
 
+    /// Begins a TOML table or inline table.
     pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void {
         _ = T;
         _ = field_count;
@@ -257,6 +268,7 @@ pub const Encoder = struct {
         self.push(.inline_table);
     }
 
+    /// Emits the next TOML key.
     pub fn emitFieldName(self: *Self, name: []const u8) !void {
         const frame = self.currentTableFrame();
         if (frame.expecting_field_value) return error.InvalidTomlEncoderState;
@@ -277,6 +289,7 @@ pub const Encoder = struct {
         frame.expecting_field_value = true;
     }
 
+    /// Ends the current TOML table or inline table.
     pub fn endStruct(self: *Self) !void {
         const frame = self.currentTableFrame();
         if (frame.expecting_field_value) return error.InvalidTomlEncoderState;
@@ -286,10 +299,12 @@ pub const Encoder = struct {
         if (container == .inline_table) try self.writer.writeAll(" }");
     }
 
+    /// Emits an enum tag as a TOML string.
     pub fn emitEnumTag(self: *Self, tag: []const u8) !void {
         try self.emitString(tag);
     }
 
+    /// Verifies that the TOML document was completely written.
     pub fn finish(self: *Self) !void {
         if (self.root_count == 0) return error.IncompleteTomlDocument;
         if (self.stack_len != 0) return error.IncompleteTomlDocument;
@@ -386,6 +401,7 @@ pub const EventEncoder = union(enum) {
     inline_tables: Encoder,
     sections: SectionEncoder,
 
+    /// Frees memory owned by this event encoder.
     pub fn deinit(self: *Self) void {
         switch (self.*) {
             .inline_tables => {},
@@ -393,6 +409,7 @@ pub const EventEncoder = union(enum) {
         }
     }
 
+    /// Emits a TOML null value when supported.
     pub fn emitNull(self: *Self) !void {
         switch (self.*) {
             .inline_tables => |*enc| try enc.emitNull(),
@@ -400,6 +417,7 @@ pub const EventEncoder = union(enum) {
         }
     }
 
+    /// Emits a TOML boolean value.
     pub fn emitBool(self: *Self, value: bool) !void {
         switch (self.*) {
             .inline_tables => |*enc| try enc.emitBool(value),
@@ -407,6 +425,7 @@ pub const EventEncoder = union(enum) {
         }
     }
 
+    /// Emits a TOML integer value.
     pub fn emitInt(self: *Self, value: anytype) !void {
         switch (self.*) {
             .inline_tables => |*enc| try enc.emitInt(value),
@@ -414,6 +433,7 @@ pub const EventEncoder = union(enum) {
         }
     }
 
+    /// Emits a TOML floating-point value.
     pub fn emitFloat(self: *Self, value: anytype) !void {
         switch (self.*) {
             .inline_tables => |*enc| try enc.emitFloat(value),
@@ -421,6 +441,7 @@ pub const EventEncoder = union(enum) {
         }
     }
 
+    /// Emits a TOML string value.
     pub fn emitString(self: *Self, value: []const u8) !void {
         switch (self.*) {
             .inline_tables => |*enc| try enc.emitString(value),
@@ -428,6 +449,7 @@ pub const EventEncoder = union(enum) {
         }
     }
 
+    /// Emits raw bytes as a base64 TOML string.
     pub fn emitBytes(self: *Self, value: []const u8) !void {
         switch (self.*) {
             .inline_tables => |*enc| try enc.emitBytes(value),
@@ -435,6 +457,7 @@ pub const EventEncoder = union(enum) {
         }
     }
 
+    /// Emits a TOML datetime value.
     pub fn emitDateTime(self: *Self, comptime T: type, value: T) !void {
         switch (self.*) {
             .inline_tables => |*enc| try enc.emitDateTime(T, value),
@@ -442,6 +465,7 @@ pub const EventEncoder = union(enum) {
         }
     }
 
+    /// Emits a raw TOML datetime token.
     pub fn emitDateTimeRaw(self: *Self, value: []const u8) !void {
         switch (self.*) {
             .inline_tables => |*enc| try enc.emitDateTimeRaw(value),
@@ -449,6 +473,7 @@ pub const EventEncoder = union(enum) {
         }
     }
 
+    /// Begins a TOML array.
     pub fn beginSeq(self: *Self, len: ?usize) !void {
         switch (self.*) {
             .inline_tables => |*enc| try enc.beginSeq(len),
@@ -456,6 +481,7 @@ pub const EventEncoder = union(enum) {
         }
     }
 
+    /// Ends the current TOML array.
     pub fn endSeq(self: *Self) !void {
         switch (self.*) {
             .inline_tables => |*enc| try enc.endSeq(),
@@ -463,6 +489,7 @@ pub const EventEncoder = union(enum) {
         }
     }
 
+    /// Begins a TOML table or inline table.
     pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void {
         switch (self.*) {
             .inline_tables => |*enc| try enc.beginStruct(T, field_count),
@@ -470,6 +497,7 @@ pub const EventEncoder = union(enum) {
         }
     }
 
+    /// Emits the next TOML key.
     pub fn emitFieldName(self: *Self, name: []const u8) !void {
         switch (self.*) {
             .inline_tables => |*enc| try enc.emitFieldName(name),
@@ -477,6 +505,7 @@ pub const EventEncoder = union(enum) {
         }
     }
 
+    /// Ends the current TOML table or inline table.
     pub fn endStruct(self: *Self) !void {
         switch (self.*) {
             .inline_tables => |*enc| try enc.endStruct(),
@@ -484,6 +513,7 @@ pub const EventEncoder = union(enum) {
         }
     }
 
+    /// Emits an enum tag as a TOML string.
     pub fn emitEnumTag(self: *Self, tag: []const u8) !void {
         switch (self.*) {
             .inline_tables => |*enc| try enc.emitEnumTag(tag),
@@ -491,6 +521,7 @@ pub const EventEncoder = union(enum) {
         }
     }
 
+    /// Verifies that the TOML document was completely written.
     pub fn finish(self: *Self) !void {
         switch (self.*) {
             .inline_tables => |*enc| try enc.finish(),
@@ -506,66 +537,82 @@ pub const SectionEncoder = struct {
     writer: *std.Io.Writer,
     tree: TreeEncoder,
 
+    /// Frees memory owned by this section encoder.
     pub fn deinit(self: *Self) void {
         self.tree.deinit();
     }
 
+    /// Emits a TOML null value when supported.
     pub fn emitNull(self: *Self) !void {
         try self.tree.emitNull();
     }
 
+    /// Emits a TOML boolean value.
     pub fn emitBool(self: *Self, value: bool) !void {
         try self.tree.emitBool(value);
     }
 
+    /// Emits a TOML integer value.
     pub fn emitInt(self: *Self, value: anytype) !void {
         try self.tree.emitInt(value);
     }
 
+    /// Emits a TOML floating-point value.
     pub fn emitFloat(self: *Self, value: anytype) !void {
         try self.tree.emitFloat(value);
     }
 
+    /// Emits a TOML string value.
     pub fn emitString(self: *Self, value: []const u8) !void {
         try self.tree.emitString(value);
     }
 
+    /// Emits raw bytes as a base64 TOML string.
     pub fn emitBytes(self: *Self, value: []const u8) !void {
         try self.tree.emitBytes(value);
     }
 
+    /// Emits a TOML datetime value.
     pub fn emitDateTime(self: *Self, comptime T: type, value: T) !void {
         try self.tree.emitDateTime(T, value);
     }
 
+    /// Emits a raw TOML datetime token.
     pub fn emitDateTimeRaw(self: *Self, value: []const u8) !void {
         try self.tree.emitDateTimeRaw(value);
     }
 
+    /// Begins a TOML array.
     pub fn beginSeq(self: *Self, len: ?usize) !void {
         try self.tree.beginSeq(len);
     }
 
+    /// Ends the current TOML array.
     pub fn endSeq(self: *Self) !void {
         try self.tree.endSeq();
     }
 
+    /// Begins a TOML table.
     pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void {
         try self.tree.beginStruct(T, field_count);
     }
 
+    /// Emits the next TOML key.
     pub fn emitFieldName(self: *Self, name: []const u8) !void {
         try self.tree.emitFieldName(name);
     }
 
+    /// Ends the current TOML table.
     pub fn endStruct(self: *Self) !void {
         try self.tree.endStruct();
     }
 
+    /// Emits an enum tag as a TOML string.
     pub fn emitEnumTag(self: *Self, tag: []const u8) !void {
         try self.tree.emitEnumTag(tag);
     }
 
+    /// Renders the buffered TOML document.
     pub fn finish(self: *Self) !void {
         const root = try self.tree.finish();
         if (root.* != .table) return error.TomlRootMustBeStruct;
@@ -599,27 +646,32 @@ const TreeEncoder = struct {
         self.* = undefined;
     }
 
+    /// Buffers a TOML null value when supported.
     pub fn emitNull(self: *Self) !void {
         _ = self;
         return error.UnsupportedTomlNull;
     }
 
+    /// Buffers a TOML boolean value.
     pub fn emitBool(self: *Self, value: bool) !void {
         try self.appendValue(.{ .bool = value });
     }
 
+    /// Buffers a TOML integer value.
     pub fn emitInt(self: *Self, value: anytype) !void {
         const bytes = try std.fmt.allocPrint(self.allocator, "{d}", .{try tomlInteger(value)});
         errdefer self.allocator.free(bytes);
         try self.appendValue(.{ .int = .{ .bytes = bytes, .base = 10 } });
     }
 
+    /// Buffers a TOML floating-point value.
     pub fn emitFloat(self: *Self, value: anytype) !void {
         const bytes = try std.fmt.allocPrint(self.allocator, "{d}", .{value});
         errdefer self.allocator.free(bytes);
         try self.appendValue(.{ .float = bytes });
     }
 
+    /// Buffers a TOML string value.
     pub fn emitString(self: *Self, value: []const u8) !void {
         if (!std.unicode.utf8ValidateSlice(value)) return error.InvalidUtf8;
         const bytes = try self.allocator.dupe(u8, value);
@@ -627,12 +679,14 @@ const TreeEncoder = struct {
         try self.appendValue(.{ .string = bytes });
     }
 
+    /// Buffers raw bytes as a base64 TOML string.
     pub fn emitBytes(self: *Self, value: []const u8) !void {
         const bytes = try base64.encodeAlloc(self.allocator, value);
         errdefer self.allocator.free(bytes);
         try self.appendValue(.{ .string = bytes });
     }
 
+    /// Buffers a TOML datetime value.
     pub fn emitDateTime(self: *Self, comptime T: type, value: T) !void {
         var out = std.Io.Writer.Allocating.init(self.allocator);
         errdefer out.deinit();
@@ -643,27 +697,32 @@ const TreeEncoder = struct {
         try self.appendValue(.{ .datetime = bytes });
     }
 
+    /// Buffers a raw TOML datetime token.
     pub fn emitDateTimeRaw(self: *Self, value: []const u8) !void {
         const bytes = try self.allocator.dupe(u8, value);
         errdefer self.allocator.free(bytes);
         try self.appendValue(.{ .datetime = bytes });
     }
 
+    /// Begins buffering a TOML array.
     pub fn beginSeq(self: *Self, len: ?usize) !void {
         _ = len;
         try self.appendAndPush(.{ .array = .empty });
     }
 
+    /// Ends the current buffered TOML array.
     pub fn endSeq(self: *Self) !void {
         self.pop(.array);
     }
 
+    /// Begins buffering a TOML table.
     pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void {
         _ = T;
         _ = field_count;
         try self.appendAndPush(.{ .table = .{} });
     }
 
+    /// Buffers the next TOML key.
     pub fn emitFieldName(self: *Self, name: []const u8) !void {
         const frame = self.currentFrame();
         if (frame.value.* != .table) return error.InvalidTomlEncoderState;
@@ -675,6 +734,7 @@ const TreeEncoder = struct {
         frame.pending_field_name = try self.allocator.dupe(u8, name);
     }
 
+    /// Ends the current buffered TOML table.
     pub fn endStruct(self: *Self) !void {
         const frame = self.currentFrame();
         if (frame.pending_field_name) |name| {
@@ -685,6 +745,7 @@ const TreeEncoder = struct {
         self.pop(.table);
     }
 
+    /// Buffers an enum tag as a TOML string.
     pub fn emitEnumTag(self: *Self, tag: []const u8) !void {
         try self.emitString(tag);
     }
@@ -769,21 +830,25 @@ pub const Decoder = struct {
     pending_value: ?*const Value = null,
     root_used: bool = false,
 
+    /// Frees memory owned by this decoder.
     pub fn deinit(self: *Self) void {
         self.root.deinit(self.allocator);
         self.allocator.free(self.input);
         self.* = undefined;
     }
 
+    /// Returns the kind of the next TOML value.
     pub fn peek(self: *Self) !Kind {
         return kindOf(try self.currentValue());
     }
 
+    /// Reads a TOML null value when supported.
     pub fn readNull(self: *Self) !void {
         _ = self;
         return error.InvalidType;
     }
 
+    /// Reads a TOML boolean value.
     pub fn readBool(self: *Self) !bool {
         const value = try self.consumeValue();
         return switch (value.*) {
@@ -792,6 +857,7 @@ pub const Decoder = struct {
         };
     }
 
+    /// Reads a TOML integer into `T`.
     pub fn readInt(self: *Self, comptime T: type) !T {
         const value = try self.consumeValue();
         return switch (value.*) {
@@ -800,6 +866,7 @@ pub const Decoder = struct {
         };
     }
 
+    /// Reads a TOML number into floating-point type `T`.
     pub fn readFloat(self: *Self, comptime T: type) !T {
         const value = try self.consumeValue();
         return switch (value.*) {
@@ -809,6 +876,7 @@ pub const Decoder = struct {
         };
     }
 
+    /// Reads a TOML string as allocator-owned bytes.
     pub fn readString(self: *Self, allocator: std.mem.Allocator) ![]u8 {
         const value = try self.consumeValue();
         return switch (value.*) {
@@ -817,6 +885,7 @@ pub const Decoder = struct {
         };
     }
 
+    /// Reads a TOML datetime value into `T`.
     pub fn readDateTime(self: *Self, comptime T: type) !T {
         const value = try self.consumeValue();
         return switch (value.*) {
@@ -834,6 +903,7 @@ pub const Decoder = struct {
         };
     }
 
+    /// Begins reading a TOML array.
     pub fn beginSeq(self: *Self) !?usize {
         const value = try self.consumeValue();
         return switch (value.*) {
@@ -845,6 +915,7 @@ pub const Decoder = struct {
         };
     }
 
+    /// Returns whether the current TOML array has another element.
     pub fn hasNextSeqElem(self: *Self) !bool {
         if (self.pending_value != null) return error.InvalidTomlDecoderState;
         const frame = self.currentSeqFrame();
@@ -854,11 +925,13 @@ pub const Decoder = struct {
         return true;
     }
 
+    /// Ends the current TOML array.
     pub fn endSeq(self: *Self) !void {
         if (self.pending_value != null) return error.InvalidTomlDecoderState;
         self.pop(.seq);
     }
 
+    /// Begins reading a TOML table.
     pub fn beginStruct(self: *Self, comptime T: type) !void {
         _ = T;
         _ = try self.beginStructEvent();
@@ -877,6 +950,7 @@ pub const Decoder = struct {
         };
     }
 
+    /// Returns the next table key as allocator-owned bytes, or null when done.
     pub fn nextField(self: *Self) !?[]u8 {
         if (self.pending_value != null) return error.InvalidTomlDecoderState;
         const frame = self.currentTableFrame();
@@ -888,15 +962,18 @@ pub const Decoder = struct {
         return try self.allocator.dupe(u8, field.name);
     }
 
+    /// Ends the current TOML table.
     pub fn endStruct(self: *Self) !void {
         if (self.pending_value != null) return error.InvalidTomlDecoderState;
         self.pop(.table);
     }
 
+    /// Skips one TOML value.
     pub fn skipValue(self: *Self) !void {
         _ = try self.consumeValue();
     }
 
+    /// Verifies that the TOML document was completely read.
     pub fn finish(self: *Self) !void {
         if (self.pending_value != null) return error.InvalidTomlDecoderState;
         if (self.stack_len != 0) return error.InvalidTomlDecoderState;

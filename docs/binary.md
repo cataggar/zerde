@@ -171,6 +171,8 @@ References: [`Options`](#type-options), [`Decoder`](#type-decoder)
 
 ## Encoder
 
+Low-level binary encoder used by the generic serializer.
+
 ```zig
 pub const Encoder = struct {
     writer: *std.Io.Writer,
@@ -204,6 +206,8 @@ pub const Encoder = struct {
 
 ### Encoder.emitNull
 
+Emits a null marker when required by the current binary context.
+
 ```zig
 pub fn emitNull(self: *Self) !void
 ```
@@ -211,6 +215,8 @@ pub fn emitNull(self: *Self) !void
 <a id="fn-encoder-emitbool"></a>
 
 ### Encoder.emitBool
+
+Emits a boolean as one byte.
 
 ```zig
 pub fn emitBool(self: *Self, value: bool) !void
@@ -220,6 +226,8 @@ pub fn emitBool(self: *Self, value: bool) !void
 
 ### Encoder.emitInt
 
+Emits an integer using the configured byte order.
+
 ```zig
 pub fn emitInt(self: *Self, value: anytype) !void
 ```
@@ -227,6 +235,8 @@ pub fn emitInt(self: *Self, value: anytype) !void
 <a id="fn-encoder-emitfloat"></a>
 
 ### Encoder.emitFloat
+
+Emits a floating-point value as its raw IEEE bits.
 
 ```zig
 pub fn emitFloat(self: *Self, value: anytype) !void
@@ -236,6 +246,8 @@ pub fn emitFloat(self: *Self, value: anytype) !void
 
 ### Encoder.emitString
 
+Emits a length-prefixed UTF-8 string.
+
 ```zig
 pub fn emitString(self: *Self, value: []const u8) !void
 ```
@@ -243,6 +255,8 @@ pub fn emitString(self: *Self, value: []const u8) !void
 <a id="fn-encoder-emitbytes"></a>
 
 ### Encoder.emitBytes
+
+Emits length-prefixed raw bytes.
 
 ```zig
 pub fn emitBytes(self: *Self, value: []const u8) !void
@@ -252,6 +266,8 @@ pub fn emitBytes(self: *Self, value: []const u8) !void
 
 ### Encoder.emitEnum
 
+Emits an enum value using the enum tag's integer storage size.
+
 ```zig
 pub fn emitEnum(self: *Self, comptime T: type, value: T) !void
 ```
@@ -259,6 +275,8 @@ pub fn emitEnum(self: *Self, comptime T: type, value: T) !void
 <a id="fn-encoder-emitenumtag"></a>
 
 ### Encoder.emitEnumTag
+
+Emits an enum tag by name.
 
 ```zig
 pub fn emitEnumTag(self: *Self, tag: []const u8) !void
@@ -268,6 +286,8 @@ pub fn emitEnumTag(self: *Self, tag: []const u8) !void
 
 ### Encoder.beginOptional
 
+Emits the presence marker for an optional value.
+
 ```zig
 pub fn beginOptional(self: *Self, present: bool) !void
 ```
@@ -275,6 +295,8 @@ pub fn beginOptional(self: *Self, present: bool) !void
 <a id="fn-encoder-beginarray"></a>
 
 ### Encoder.beginArray
+
+Begins a fixed-length array.
 
 ```zig
 pub fn beginArray(self: *Self, comptime T: type, len: usize) !void
@@ -284,6 +306,8 @@ pub fn beginArray(self: *Self, comptime T: type, len: usize) !void
 
 ### Encoder.beginSlice
 
+Begins a length-prefixed slice.
+
 ```zig
 pub fn beginSlice(self: *Self, comptime Child: type, len: usize) !void
 ```
@@ -291,6 +315,8 @@ pub fn beginSlice(self: *Self, comptime Child: type, len: usize) !void
 <a id="fn-encoder-beginseq"></a>
 
 ### Encoder.beginSeq
+
+Begins a length-prefixed sequence.
 
 ```zig
 pub fn beginSeq(self: *Self, len: ?usize) !void
@@ -300,6 +326,8 @@ pub fn beginSeq(self: *Self, len: ?usize) !void
 
 ### Encoder.endSeq
 
+Ends the current sequence.
+
 ```zig
 pub fn endSeq(self: *Self) !void
 ```
@@ -307,6 +335,8 @@ pub fn endSeq(self: *Self) !void
 <a id="fn-encoder-beginstruct"></a>
 
 ### Encoder.beginStruct
+
+Begins a struct or tagged union value.
 
 ```zig
 pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void
@@ -316,6 +346,8 @@ pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void
 
 ### Encoder.emitFieldName
 
+Emits or handles the next struct field name.
+
 ```zig
 pub fn emitFieldName(self: *Self, name: []const u8) !void
 ```
@@ -323,6 +355,8 @@ pub fn emitFieldName(self: *Self, name: []const u8) !void
 <a id="fn-encoder-endstruct"></a>
 
 ### Encoder.endStruct
+
+Ends the current struct or tagged union value.
 
 ```zig
 pub fn endStruct(self: *Self) !void
@@ -332,6 +366,8 @@ pub fn endStruct(self: *Self) !void
 
 ### Encoder.finish
 
+Verifies that the binary document was completely written.
+
 ```zig
 pub fn finish(self: *Self) !void
 ```
@@ -340,6 +376,8 @@ pub fn finish(self: *Self) !void
 
 ## Kind
 
+Binary value kinds reported by `Decoder.peek`.
+
 ```zig
 pub const Kind = enum {};
 ```
@@ -347,6 +385,8 @@ pub const Kind = enum {};
 <a id="type-decoder"></a>
 
 ## Decoder
+
+Low-level binary decoder used by the generic deserializer.
 
 ```zig
 pub const Decoder = struct {
@@ -384,6 +424,8 @@ pub const Decoder = struct {
 
 ### Decoder.peek
 
+Returns the next value kind when supported by the binary format.
+
 ```zig
 pub fn peek(self: *Self) !Kind
 ```
@@ -394,6 +436,8 @@ References: [`Kind`](#type-kind)
 
 ### Decoder.readNull
 
+Reads a null value.
+
 ```zig
 pub fn readNull(self: *Self) !void
 ```
@@ -401,6 +445,8 @@ pub fn readNull(self: *Self) !void
 <a id="fn-decoder-readbool"></a>
 
 ### Decoder.readBool
+
+Reads a boolean value.
 
 ```zig
 pub fn readBool(self: *Self) !bool
@@ -410,6 +456,8 @@ pub fn readBool(self: *Self) !bool
 
 ### Decoder.readInt
 
+Reads an integer using the configured byte order.
+
 ```zig
 pub fn readInt(self: *Self, comptime T: type) !T
 ```
@@ -417,6 +465,8 @@ pub fn readInt(self: *Self, comptime T: type) !T
 <a id="fn-decoder-readfloat"></a>
 
 ### Decoder.readFloat
+
+Reads a floating-point value from its raw IEEE bits.
 
 ```zig
 pub fn readFloat(self: *Self, comptime T: type) !T
@@ -426,6 +476,8 @@ pub fn readFloat(self: *Self, comptime T: type) !T
 
 ### Decoder.readString
 
+Reads a UTF-8 string as allocator-owned bytes.
+
 ```zig
 pub fn readString(self: *Self, allocator: std.mem.Allocator) ![]u8
 ```
@@ -433,6 +485,8 @@ pub fn readString(self: *Self, allocator: std.mem.Allocator) ![]u8
 <a id="fn-decoder-readbytes"></a>
 
 ### Decoder.readBytes
+
+Reads raw bytes into an allocator-owned slice.
 
 ```zig
 pub fn readBytes(self: *Self, allocator: std.mem.Allocator) ![]u8
@@ -442,6 +496,8 @@ pub fn readBytes(self: *Self, allocator: std.mem.Allocator) ![]u8
 
 ### Decoder.readEnum
 
+Reads an enum value using the enum tag's integer storage size.
+
 ```zig
 pub fn readEnum(self: *Self, comptime T: type) !T
 ```
@@ -449,6 +505,8 @@ pub fn readEnum(self: *Self, comptime T: type) !T
 <a id="fn-decoder-readoptionalpresent"></a>
 
 ### Decoder.readOptionalPresent
+
+Reads and returns the optional presence marker.
 
 ```zig
 pub fn readOptionalPresent(self: *Self) !bool
@@ -458,6 +516,8 @@ pub fn readOptionalPresent(self: *Self) !bool
 
 ### Decoder.beginArray
 
+Begins reading a fixed-length array.
+
 ```zig
 pub fn beginArray(self: *Self, comptime T: type) !?usize
 ```
@@ -465,6 +525,8 @@ pub fn beginArray(self: *Self, comptime T: type) !?usize
 <a id="fn-decoder-beginseq"></a>
 
 ### Decoder.beginSeq
+
+Begins reading a length-prefixed sequence.
 
 ```zig
 pub fn beginSeq(self: *Self) !?usize
@@ -474,6 +536,8 @@ pub fn beginSeq(self: *Self) !?usize
 
 ### Decoder.hasNextSeqElem
 
+Returns whether the current sequence has another element.
+
 ```zig
 pub fn hasNextSeqElem(self: *Self) !bool
 ```
@@ -481,6 +545,8 @@ pub fn hasNextSeqElem(self: *Self) !bool
 <a id="fn-decoder-endseq"></a>
 
 ### Decoder.endSeq
+
+Ends the current sequence.
 
 ```zig
 pub fn endSeq(self: *Self) !void
@@ -490,6 +556,8 @@ pub fn endSeq(self: *Self) !void
 
 ### Decoder.beginStruct
 
+Begins reading a struct or tagged union value.
+
 ```zig
 pub fn beginStruct(self: *Self, comptime T: type) !void
 ```
@@ -497,6 +565,8 @@ pub fn beginStruct(self: *Self, comptime T: type) !void
 <a id="fn-decoder-nextfield"></a>
 
 ### Decoder.nextField
+
+Returns the next field name as allocator-owned bytes, or null when done.
 
 ```zig
 pub fn nextField(self: *Self) !?[]u8
@@ -506,6 +576,8 @@ pub fn nextField(self: *Self) !?[]u8
 
 ### Decoder.endStruct
 
+Ends the current struct or tagged union value.
+
 ```zig
 pub fn endStruct(self: *Self) !void
 ```
@@ -514,6 +586,8 @@ pub fn endStruct(self: *Self) !void
 
 ### Decoder.skipValue
 
+Skips the next value when supported by the binary format.
+
 ```zig
 pub fn skipValue(self: *Self) !void
 ```
@@ -521,6 +595,8 @@ pub fn skipValue(self: *Self) !void
 <a id="fn-decoder-finish"></a>
 
 ### Decoder.finish
+
+Verifies that the binary document was completely read.
 
 ```zig
 pub fn finish(self: *Self) !void

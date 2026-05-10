@@ -60,6 +60,8 @@ pub const UnionRepr = enum {};
 
 ## union_tag_field_name
 
+Default field name for tagged union discriminants.
+
 ```zig
 pub const union_tag_field_name = "tag";
 ```
@@ -67,6 +69,8 @@ pub const union_tag_field_name = "tag";
 <a id="const-union_content_field_name"></a>
 
 ## union_content_field_name
+
+Default field name for adjacent tagged union payloads.
 
 ```zig
 pub const union_content_field_name = "value";

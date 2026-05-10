@@ -19,7 +19,9 @@ pub const UnionRepr = enum {
     adjacent,
 };
 
+/// Default field name for tagged union discriminants.
 pub const union_tag_field_name = "tag";
+/// Default field name for adjacent tagged union payloads.
 pub const union_content_field_name = "value";
 
 /// Normalized field-level metadata options.

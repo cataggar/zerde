@@ -120,6 +120,7 @@ pub const Decoder = struct {
     stack: [max_depth]Frame = undefined,
     stack_len: usize = 0,
 
+    /// Returns the kind of the next JSON value.
     pub fn peek(self: *Self) !Kind {
         try self.skipWhitespace();
         const byte = (try self.peekByte()) orelse return error.EndOfStream;
@@ -134,10 +135,12 @@ pub const Decoder = struct {
         };
     }
 
+    /// Reads a JSON null value.
     pub fn readNull(self: *Self) !void {
         try self.expectLiteral("null");
     }
 
+    /// Reads a JSON boolean value.
     pub fn readBool(self: *Self) !bool {
         try self.skipWhitespace();
         const byte = (try self.peekByte()) orelse return error.EndOfStream;
@@ -154,6 +157,7 @@ pub const Decoder = struct {
         };
     }
 
+    /// Reads a JSON integer into `T`.
     pub fn readInt(self: *Self, comptime T: type) !T {
         const token = try self.readNumber();
         defer token.deinit(self.allocator);
@@ -163,12 +167,14 @@ pub const Decoder = struct {
         };
     }
 
+    /// Reads a JSON number into floating-point type `T`.
     pub fn readFloat(self: *Self, comptime T: type) !T {
         const token = try self.readNumber();
         defer token.deinit(self.allocator);
         return try JsonNumber.readFloat(T, token);
     }
 
+    /// Reads a JSON string as allocator-owned UTF-8 bytes.
     pub fn readString(self: *Self, allocator: std.mem.Allocator) ![]u8 {
         try self.skipWhitespace();
         try self.expectByte('"');
@@ -192,6 +198,7 @@ pub const Decoder = struct {
         }
     }
 
+    /// Begins reading a JSON array.
     pub fn beginSeq(self: *Self) !?usize {
         try self.ensureCanPush();
         try self.skipWhitespace();
@@ -200,6 +207,7 @@ pub const Decoder = struct {
         return null;
     }
 
+    /// Returns whether the current JSON array has another element.
     pub fn hasNextSeqElem(self: *Self) !bool {
         const frame = self.currentFrame(.seq);
         try self.skipWhitespace();
@@ -215,10 +223,12 @@ pub const Decoder = struct {
         return true;
     }
 
+    /// Ends the current JSON array.
     pub fn endSeq(self: *Self) !void {
         self.pop(.seq);
     }
 
+    /// Begins reading a JSON object.
     pub fn beginStruct(self: *Self, comptime T: type) !void {
         _ = T;
         try self.ensureCanPush();
@@ -234,6 +244,7 @@ pub const Decoder = struct {
         return null;
     }
 
+    /// Returns the next object field name as allocator-owned bytes, or null when done.
     pub fn nextField(self: *Self) !?[]u8 {
         const frame = self.currentFrame(.object);
         try self.skipWhitespace();
@@ -253,10 +264,12 @@ pub const Decoder = struct {
         return name;
     }
 
+    /// Ends the current JSON object.
     pub fn endStruct(self: *Self) !void {
         self.pop(.object);
     }
 
+    /// Skips one complete JSON value.
     pub fn skipValue(self: *Self) !void {
         switch (try self.peek()) {
             .null => try self.readNull(),
@@ -289,6 +302,7 @@ pub const Decoder = struct {
         }
     }
 
+    /// Verifies that the JSON document was completely read.
     pub fn finish(self: *Self) !void {
         try self.skipWhitespace();
         if (self.stack_len != 0) return error.InvalidJsonDecoderState;

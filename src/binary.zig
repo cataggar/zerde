@@ -86,6 +86,7 @@ const TagEntry = struct {
     payload_field_names: []const []const u8,
 };
 
+/// Low-level binary encoder used by the generic serializer.
 pub const Encoder = struct {
     const Self = @This();
     const max_depth = 64;
@@ -113,6 +114,7 @@ pub const Encoder = struct {
     stack: [max_depth]Frame = undefined,
     stack_len: usize = 0,
 
+    /// Emits a null marker when required by the current binary context.
     pub fn emitNull(self: *Self) !void {
         if (self.stack_len != 0) {
             const frame = &self.stack[self.stack_len - 1];
@@ -123,14 +125,17 @@ pub const Encoder = struct {
         }
     }
 
+    /// Emits a boolean as one byte.
     pub fn emitBool(self: *Self, value: bool) !void {
         try self.writer.writeByte(if (value) 1 else 0);
     }
 
+    /// Emits an integer using the configured byte order.
     pub fn emitInt(self: *Self, value: anytype) !void {
         try self.writeInt(@TypeOf(value), value);
     }
 
+    /// Emits a floating-point value as its raw IEEE bits.
     pub fn emitFloat(self: *Self, value: anytype) !void {
         const T = @TypeOf(value);
         const Float = if (@typeInfo(T) == .comptime_float) f64 else T;
@@ -141,6 +146,7 @@ pub const Encoder = struct {
         try self.writeInt(Int, raw);
     }
 
+    /// Emits a length-prefixed UTF-8 string.
     pub fn emitString(self: *Self, value: []const u8) !void {
         if (self.stack_len != 0) {
             const frame = &self.stack[self.stack_len - 1];
@@ -156,44 +162,53 @@ pub const Encoder = struct {
         try self.writeBytes(value);
     }
 
+    /// Emits length-prefixed raw bytes.
     pub fn emitBytes(self: *Self, value: []const u8) !void {
         try self.writeBytes(value);
     }
 
+    /// Emits an enum value using the enum tag's integer storage size.
     pub fn emitEnum(self: *Self, comptime T: type, value: T) !void {
         try self.writeEnumTag(T, @intFromEnum(value));
     }
 
+    /// Emits an enum tag by name.
     pub fn emitEnumTag(self: *Self, tag: []const u8) !void {
         try self.emitString(tag);
     }
 
+    /// Emits the presence marker for an optional value.
     pub fn beginOptional(self: *Self, present: bool) !void {
         try self.writer.writeByte(if (present) 1 else 0);
     }
 
+    /// Begins a fixed-length array.
     pub fn beginArray(self: *Self, comptime T: type, len: usize) !void {
         _ = T;
         try self.push(.{ .container = .seq, .len = len });
     }
 
+    /// Begins a length-prefixed slice.
     pub fn beginSlice(self: *Self, comptime Child: type, len: usize) !void {
         _ = Child;
         try self.writeLength(len);
         try self.push(.{ .container = .seq, .len = len });
     }
 
+    /// Begins a length-prefixed sequence.
     pub fn beginSeq(self: *Self, len: ?usize) !void {
         const actual_len = len orelse return error.MissingBinaryLength;
         try self.writeLength(actual_len);
         try self.push(.{ .container = .seq, .len = actual_len });
     }
 
+    /// Ends the current sequence.
     pub fn endSeq(self: *Self) !void {
         _ = self.current(.seq);
         self.pop(.seq);
     }
 
+    /// Begins a struct or tagged union value.
     pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void {
         _ = field_count;
 
@@ -215,6 +230,7 @@ pub const Encoder = struct {
         }
     }
 
+    /// Emits or handles the next struct field name.
     pub fn emitFieldName(self: *Self, name: []const u8) !void {
         const frame = &self.stack[self.stack_len - 1];
         switch (frame.container) {
@@ -231,6 +247,7 @@ pub const Encoder = struct {
         }
     }
 
+    /// Ends the current struct or tagged union value.
     pub fn endStruct(self: *Self) !void {
         const frame = &self.stack[self.stack_len - 1];
         switch (frame.container) {
@@ -239,6 +256,7 @@ pub const Encoder = struct {
         }
     }
 
+    /// Verifies that the binary document was completely written.
     pub fn finish(self: *Self) !void {
         if (self.stack_len != 0) return error.InvalidBinaryEncoderState;
     }
@@ -307,6 +325,7 @@ pub const Encoder = struct {
     }
 };
 
+/// Binary value kinds reported by `Decoder.peek`.
 pub const Kind = enum {
     null,
     bool,
@@ -317,6 +336,7 @@ pub const Kind = enum {
     struct_,
 };
 
+/// Low-level binary decoder used by the generic deserializer.
 pub const Decoder = struct {
     const Self = @This();
     const max_depth = 64;
@@ -345,15 +365,18 @@ pub const Decoder = struct {
     stack_len: usize = 0,
     pending_string: ?[]const u8 = null,
 
+    /// Returns the next value kind when supported by the binary format.
     pub fn peek(self: *Self) !Kind {
         _ = self;
         return error.UnsupportedBinaryPeek;
     }
 
+    /// Reads a null value.
     pub fn readNull(self: *Self) !void {
         _ = self;
     }
 
+    /// Reads a boolean value.
     pub fn readBool(self: *Self) !bool {
         return switch (try self.reader.takeByte()) {
             0 => false,
@@ -362,6 +385,7 @@ pub const Decoder = struct {
         };
     }
 
+    /// Reads an integer using the configured byte order.
     pub fn readInt(self: *Self, comptime T: type) !T {
         const byte_count = comptime intByteCount(T);
         if (comptime byte_count == 0) return @intCast(0);
@@ -375,12 +399,14 @@ pub const Decoder = struct {
         return @bitCast(raw);
     }
 
+    /// Reads a floating-point value from its raw IEEE bits.
     pub fn readFloat(self: *Self, comptime T: type) !T {
         const Int = std.meta.Int(.unsigned, @bitSizeOf(T));
         const raw = try self.readInt(Int);
         return @bitCast(raw);
     }
 
+    /// Reads a UTF-8 string as allocator-owned bytes.
     pub fn readString(self: *Self, allocator: std.mem.Allocator) ![]u8 {
         if (self.pending_string) |value| {
             self.pending_string = null;
@@ -390,6 +416,7 @@ pub const Decoder = struct {
         return try self.readBytes(allocator);
     }
 
+    /// Reads raw bytes into an allocator-owned slice.
     pub fn readBytes(self: *Self, allocator: std.mem.Allocator) ![]u8 {
         const len = try self.readLength();
         const out = try allocator.alloc(u8, len);
@@ -398,6 +425,7 @@ pub const Decoder = struct {
         return out;
     }
 
+    /// Reads an enum value using the enum tag's integer storage size.
     pub fn readEnum(self: *Self, comptime T: type) !T {
         const value = try self.readTagValue(comptime tagByteCount(T));
         const enum_info = @typeInfo(T).@"enum";
@@ -407,6 +435,7 @@ pub const Decoder = struct {
         return error.InvalidEnumTag;
     }
 
+    /// Reads and returns the optional presence marker.
     pub fn readOptionalPresent(self: *Self) !bool {
         return switch (try self.reader.takeByte()) {
             0 => false,
@@ -415,18 +444,21 @@ pub const Decoder = struct {
         };
     }
 
+    /// Begins reading a fixed-length array.
     pub fn beginArray(self: *Self, comptime T: type) !?usize {
         const array_info = @typeInfo(T).array;
         try self.push(.{ .container = .seq, .len = array_info.len });
         return array_info.len;
     }
 
+    /// Begins reading a length-prefixed sequence.
     pub fn beginSeq(self: *Self) !?usize {
         const len = try self.readLength();
         try self.push(.{ .container = .seq, .len = len });
         return len;
     }
 
+    /// Returns whether the current sequence has another element.
     pub fn hasNextSeqElem(self: *Self) !bool {
         const frame = self.current(.seq);
         if (frame.index == frame.len) return false;
@@ -434,12 +466,14 @@ pub const Decoder = struct {
         return true;
     }
 
+    /// Ends the current sequence.
     pub fn endSeq(self: *Self) !void {
         const frame = self.current(.seq);
         if (frame.index != frame.len) return error.InvalidArrayLength;
         self.pop(.seq);
     }
 
+    /// Begins reading a struct or tagged union value.
     pub fn beginStruct(self: *Self, comptime T: type) !void {
         switch (@typeInfo(T)) {
             .@"union" => |union_info| {
@@ -466,6 +500,7 @@ pub const Decoder = struct {
         }
     }
 
+    /// Returns the next field name as allocator-owned bytes, or null when done.
     pub fn nextField(self: *Self) !?[]u8 {
         const frame = &self.stack[self.stack_len - 1];
         const name = switch (frame.container) {
@@ -509,6 +544,7 @@ pub const Decoder = struct {
         return try self.allocator.dupe(u8, name);
     }
 
+    /// Ends the current struct or tagged union value.
     pub fn endStruct(self: *Self) !void {
         const frame = &self.stack[self.stack_len - 1];
         switch (frame.container) {
@@ -517,11 +553,13 @@ pub const Decoder = struct {
         }
     }
 
+    /// Skips the next value when supported by the binary format.
     pub fn skipValue(self: *Self) !void {
         _ = self;
         return error.UnsupportedBinarySkip;
     }
 
+    /// Verifies that the binary document was completely read.
     pub fn finish(self: *Self) !void {
         if (self.stack_len != 0) return error.InvalidBinaryDecoderState;
         _ = self.reader.peekByte() catch |err| switch (err) {

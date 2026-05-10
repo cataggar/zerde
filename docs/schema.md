@@ -46,6 +46,8 @@ pub const Schema = struct {
 
 ## Shape
 
+High-level shape of a reflected Zig type.
+
 ```zig
 pub const Shape = union(enum) {
     int: IntInfo,
@@ -63,6 +65,8 @@ pub const Shape = union(enum) {
 
 ## IntInfo
 
+[Integer](number.md#type-integer) schema details.
+
 ```zig
 pub const IntInfo = struct {
     signedness: std.builtin.Signedness,
@@ -74,6 +78,8 @@ pub const IntInfo = struct {
 
 ## FloatInfo
 
+Floating-point schema details.
+
 ```zig
 pub const FloatInfo = struct {
     bits: u16,
@@ -83,6 +89,8 @@ pub const FloatInfo = struct {
 <a id="type-seqinfo"></a>
 
 ## SeqInfo
+
+Sequence schema details.
 
 ```zig
 pub const SeqInfo = struct {
@@ -95,6 +103,8 @@ pub const SeqInfo = struct {
 
 ## MapInfo
 
+Map schema details.
+
 ```zig
 pub const MapInfo = struct {
     key: *const Schema,
@@ -105,6 +115,8 @@ pub const MapInfo = struct {
 <a id="type-fieldinfo"></a>
 
 ## FieldInfo
+
+Struct field schema details.
 
 ```zig
 pub const FieldInfo = struct {
@@ -122,6 +134,8 @@ pub const FieldInfo = struct {
 
 ## StructInfo
 
+Struct schema details.
+
 ```zig
 pub const StructInfo = struct {
     fields: []const FieldInfo,
@@ -131,6 +145,8 @@ pub const StructInfo = struct {
 <a id="type-enuminfo"></a>
 
 ## EnumInfo
+
+Enum schema details.
 
 ```zig
 pub const EnumInfo = struct {
@@ -142,6 +158,8 @@ pub const EnumInfo = struct {
 
 ## UnionVariantInfo
 
+Tagged union variant schema details.
+
 ```zig
 pub const UnionVariantInfo = struct {
     zig_name: []const u8,
@@ -152,6 +170,8 @@ pub const UnionVariantInfo = struct {
 <a id="type-unioninfo"></a>
 
 ## UnionInfo
+
+Tagged union schema details.
 
 ```zig
 pub const UnionInfo = struct {

@@ -200,6 +200,8 @@ pub const Decoder = struct {
 
 ### Decoder.peek
 
+Returns the kind of the next JSON value.
+
 ```zig
 pub fn peek(self: *Self) !Kind
 ```
@@ -210,6 +212,8 @@ References: [`Kind`](#type-kind)
 
 ### Decoder.readNull
 
+Reads a JSON null value.
+
 ```zig
 pub fn readNull(self: *Self) !void
 ```
@@ -217,6 +221,8 @@ pub fn readNull(self: *Self) !void
 <a id="fn-decoder-readbool"></a>
 
 ### Decoder.readBool
+
+Reads a JSON boolean value.
 
 ```zig
 pub fn readBool(self: *Self) !bool
@@ -226,6 +232,8 @@ pub fn readBool(self: *Self) !bool
 
 ### Decoder.readInt
 
+Reads a JSON integer into `T`.
+
 ```zig
 pub fn readInt(self: *Self, comptime T: type) !T
 ```
@@ -233,6 +241,8 @@ pub fn readInt(self: *Self, comptime T: type) !T
 <a id="fn-decoder-readfloat"></a>
 
 ### Decoder.readFloat
+
+Reads a JSON number into floating-point type `T`.
 
 ```zig
 pub fn readFloat(self: *Self, comptime T: type) !T
@@ -242,6 +252,8 @@ pub fn readFloat(self: *Self, comptime T: type) !T
 
 ### Decoder.readString
 
+Reads a JSON string as allocator-owned UTF-8 bytes.
+
 ```zig
 pub fn readString(self: *Self, allocator: std.mem.Allocator) ![]u8
 ```
@@ -249,6 +261,8 @@ pub fn readString(self: *Self, allocator: std.mem.Allocator) ![]u8
 <a id="fn-decoder-beginseq"></a>
 
 ### Decoder.beginSeq
+
+Begins reading a JSON array.
 
 ```zig
 pub fn beginSeq(self: *Self) !?usize
@@ -258,6 +272,8 @@ pub fn beginSeq(self: *Self) !?usize
 
 ### Decoder.hasNextSeqElem
 
+Returns whether the current JSON array has another element.
+
 ```zig
 pub fn hasNextSeqElem(self: *Self) !bool
 ```
@@ -266,6 +282,8 @@ pub fn hasNextSeqElem(self: *Self) !bool
 
 ### Decoder.endSeq
 
+Ends the current JSON array.
+
 ```zig
 pub fn endSeq(self: *Self) !void
 ```
@@ -273,6 +291,8 @@ pub fn endSeq(self: *Self) !void
 <a id="fn-decoder-beginstruct"></a>
 
 ### Decoder.beginStruct
+
+Begins reading a JSON object.
 
 ```zig
 pub fn beginStruct(self: *Self, comptime T: type) !void
@@ -293,6 +313,8 @@ pub fn beginStructEvent(self: *Self) !?usize
 
 ### Decoder.nextField
 
+Returns the next object field name as allocator-owned bytes, or null when done.
+
 ```zig
 pub fn nextField(self: *Self) !?[]u8
 ```
@@ -300,6 +322,8 @@ pub fn nextField(self: *Self) !?[]u8
 <a id="fn-decoder-endstruct"></a>
 
 ### Decoder.endStruct
+
+Ends the current JSON object.
 
 ```zig
 pub fn endStruct(self: *Self) !void
@@ -309,6 +333,8 @@ pub fn endStruct(self: *Self) !void
 
 ### Decoder.skipValue
 
+Skips one complete JSON value.
+
 ```zig
 pub fn skipValue(self: *Self) !void
 ```
@@ -316,6 +342,8 @@ pub fn skipValue(self: *Self) !void
 <a id="fn-decoder-finish"></a>
 
 ### Decoder.finish
+
+Verifies that the JSON document was completely read.
 
 ```zig
 pub fn finish(self: *Self) !void

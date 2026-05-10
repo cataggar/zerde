@@ -114,32 +114,38 @@ pub const Encoder = struct {
     stack_len: usize = 0,
     root_count: usize = 0,
 
+    /// Emits a ZON null value.
     pub fn emitNull(self: *Self) !void {
         try self.beforeValue();
         try self.writer.writeAll("null");
     }
 
+    /// Emits a ZON boolean value.
     pub fn emitBool(self: *Self, value: bool) !void {
         try self.beforeValue();
         try self.writer.writeAll(if (value) "true" else "false");
     }
 
+    /// Emits a ZON integer value.
     pub fn emitInt(self: *Self, value: anytype) !void {
         try self.beforeValue();
         try self.writer.print("{d}", .{value});
     }
 
+    /// Emits a ZON floating-point value.
     pub fn emitFloat(self: *Self, value: anytype) !void {
         try self.beforeValue();
         try self.writer.print("{d}", .{value});
     }
 
+    /// Emits a ZON string value.
     pub fn emitString(self: *Self, value: []const u8) !void {
         if (!std.unicode.utf8ValidateSlice(value)) return error.InvalidUtf8;
         try self.beforeValue();
         try self.writeEscapedString(value);
     }
 
+    /// Emits raw bytes as a base64 ZON string.
     pub fn emitBytes(self: *Self, value: []const u8) !void {
         try self.beforeValue();
         try self.writer.writeByte('"');
@@ -147,15 +153,18 @@ pub const Encoder = struct {
         try self.writer.writeByte('"');
     }
 
+    /// Emits a ZON enum literal for `value`.
     pub fn emitEnum(self: *Self, comptime T: type, value: T) !void {
         try self.emitEnumTag(@tagName(value));
     }
 
+    /// Emits a ZON enum literal by tag name.
     pub fn emitEnumTag(self: *Self, tag: []const u8) !void {
         try self.beforeValue();
         try self.writeDotName(tag);
     }
 
+    /// Begins a ZON array literal.
     pub fn beginSeq(self: *Self, len: ?usize) !void {
         _ = len;
         try self.ensureCanPush();
@@ -164,6 +173,7 @@ pub const Encoder = struct {
         self.push(.seq);
     }
 
+    /// Ends the current ZON array literal.
     pub fn endSeq(self: *Self) !void {
         const frame = self.currentFrame(.seq);
         if (self.options.pretty) {
@@ -175,6 +185,7 @@ pub const Encoder = struct {
         try self.writer.writeByte('}');
     }
 
+    /// Begins a ZON struct literal.
     pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void {
         _ = T;
         _ = field_count;
@@ -184,6 +195,7 @@ pub const Encoder = struct {
         self.push(.object);
     }
 
+    /// Emits the next ZON struct field name.
     pub fn emitFieldName(self: *Self, name: []const u8) !void {
         const frame = self.currentFrame(.object);
         if (frame.expecting_field_value) return error.InvalidZonEncoderState;
@@ -201,6 +213,7 @@ pub const Encoder = struct {
         frame.expecting_field_value = true;
     }
 
+    /// Ends the current ZON struct literal.
     pub fn endStruct(self: *Self) !void {
         const frame = self.currentFrame(.object);
         if (frame.expecting_field_value) return error.InvalidZonEncoderState;
@@ -213,6 +226,7 @@ pub const Encoder = struct {
         try self.writer.writeByte('}');
     }
 
+    /// Verifies that the ZON document was completely written.
     pub fn finish(self: *Self) !void {
         if (self.root_count == 0) return error.IncompleteZonDocument;
         if (self.stack_len == 0) return;
@@ -337,6 +351,7 @@ pub const Decoder = struct {
     stack: [max_depth]Frame = undefined,
     stack_len: usize = 0,
 
+    /// Returns the kind of the next ZON value.
     pub fn peek(self: *Self) !Kind {
         try self.skipWhitespaceAndComments();
         const byte = (try self.peekByte()) orelse return error.EndOfStream;
@@ -353,10 +368,12 @@ pub const Decoder = struct {
         };
     }
 
+    /// Reads a ZON null value.
     pub fn readNull(self: *Self) !void {
         try self.expectLiteral("null");
     }
 
+    /// Reads a ZON boolean value.
     pub fn readBool(self: *Self) !bool {
         try self.skipWhitespaceAndComments();
         const byte = (try self.peekByte()) orelse return error.EndOfStream;
@@ -373,6 +390,7 @@ pub const Decoder = struct {
         };
     }
 
+    /// Reads a ZON integer into `T`.
     pub fn readInt(self: *Self, comptime T: type) !T {
         const token = try self.readNumber();
         defer token.deinit(self.allocator);
@@ -382,12 +400,14 @@ pub const Decoder = struct {
         };
     }
 
+    /// Reads a ZON number into floating-point type `T`.
     pub fn readFloat(self: *Self, comptime T: type) !T {
         const token = try self.readNumber();
         defer token.deinit(self.allocator);
         return try ZonNumber.readFloat(T, token);
     }
 
+    /// Reads a ZON string as allocator-owned UTF-8 bytes.
     pub fn readString(self: *Self, allocator: std.mem.Allocator) ![]u8 {
         try self.skipWhitespaceAndComments();
         try self.expectByte('"');
@@ -411,6 +431,7 @@ pub const Decoder = struct {
         }
     }
 
+    /// Reads a ZON enum literal into `T`.
     pub fn readEnum(self: *Self, comptime T: type) !T {
         const enum_info = @typeInfo(T).@"enum";
         const tag = try self.readDotName(self.allocator);
@@ -427,6 +448,7 @@ pub const Decoder = struct {
         return try self.readDotName(allocator);
     }
 
+    /// Begins reading a ZON array literal.
     pub fn beginSeq(self: *Self) !?usize {
         try self.ensureCanPush();
         try self.skipWhitespaceAndComments();
@@ -436,6 +458,7 @@ pub const Decoder = struct {
         return null;
     }
 
+    /// Returns whether the current ZON array has another element.
     pub fn hasNextSeqElem(self: *Self) !bool {
         const frame = self.currentFrame(.seq);
         try self.skipWhitespaceAndComments();
@@ -453,10 +476,12 @@ pub const Decoder = struct {
         return true;
     }
 
+    /// Ends the current ZON array literal.
     pub fn endSeq(self: *Self) !void {
         self.pop(.seq);
     }
 
+    /// Begins reading a ZON struct literal.
     pub fn beginStruct(self: *Self, comptime T: type) !void {
         _ = T;
         try self.ensureCanPush();
@@ -473,6 +498,7 @@ pub const Decoder = struct {
         return null;
     }
 
+    /// Returns the next struct field name as allocator-owned bytes, or null when done.
     pub fn nextField(self: *Self) !?[]u8 {
         const frame = self.currentFrame(.object);
         try self.skipWhitespaceAndComments();
@@ -494,10 +520,12 @@ pub const Decoder = struct {
         return name;
     }
 
+    /// Ends the current ZON struct literal.
     pub fn endStruct(self: *Self) !void {
         self.pop(.object);
     }
 
+    /// Skips one complete ZON value.
     pub fn skipValue(self: *Self) anyerror!void {
         switch (try self.peek()) {
             .null => try self.readNull(),
@@ -518,6 +546,7 @@ pub const Decoder = struct {
         }
     }
 
+    /// Verifies that the ZON document was completely read.
     pub fn finish(self: *Self) !void {
         try self.skipWhitespaceAndComments();
         if (self.stack_len != 0) return error.InvalidZonDecoderState;

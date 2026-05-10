@@ -2,14 +2,17 @@
 
 const std = @import("std");
 
+/// Returns whether `T` is a supported std list container.
 pub fn isList(comptime T: type) bool {
     return isArrayList(T) or isMultiArrayList(T);
 }
 
+/// Returns whether `T` is a supported std map container.
 pub fn isMap(comptime T: type) bool {
     return isHashMap(T) or isArrayHashMap(T);
 }
 
+/// Returns the element type stored by a supported list container.
 pub fn listChild(comptime T: type) type {
     if (comptime isArrayList(T)) {
         const items_info = @typeInfo(fieldType(T, "items")).pointer;
@@ -19,16 +22,19 @@ pub fn listChild(comptime T: type) type {
     unsupported(T, "list");
 }
 
+/// Returns the key type stored by a supported map container.
 pub fn mapKey(comptime T: type) type {
     if (!comptime isMap(T)) unsupported(T, "map");
     return fieldType(T.KV, "key");
 }
 
+/// Returns the value type stored by a supported map container.
 pub fn mapValue(comptime T: type) type {
     if (!comptime isMap(T)) unsupported(T, "map");
     return fieldType(T.KV, "value");
 }
 
+/// Initializes a supported list container, using `len` as a capacity hint when possible.
 pub fn initList(comptime T: type, allocator: std.mem.Allocator, len: ?usize) !T {
     if (comptime @hasDecl(T, "initCapacity")) {
         if (len) |actual_len| return try T.initCapacity(allocator, actual_len);
@@ -38,6 +44,7 @@ pub fn initList(comptime T: type, allocator: std.mem.Allocator, len: ?usize) !T 
     return .{};
 }
 
+/// Appends one item to a supported list container.
 pub fn appendList(comptime T: type, list: *T, allocator: std.mem.Allocator, item: listChild(T)) !void {
     const append_info = @typeInfo(@TypeOf(T.append)).@"fn";
     switch (append_info.params.len) {
@@ -47,6 +54,7 @@ pub fn appendList(comptime T: type, list: *T, allocator: std.mem.Allocator, item
     }
 }
 
+/// Deinitializes storage owned by a supported list container.
 pub fn deinitListStorage(comptime T: type, allocator: std.mem.Allocator, value: T) void {
     var copy = value;
     const deinit_info = @typeInfo(@TypeOf(T.deinit)).@"fn";
@@ -57,18 +65,21 @@ pub fn deinitListStorage(comptime T: type, allocator: std.mem.Allocator, value: 
     }
 }
 
+/// Returns the number of items in a supported list container.
 pub fn listLen(comptime T: type, value: T) usize {
     if (comptime isArrayList(T)) return value.items.len;
     if (comptime isMultiArrayList(T)) return value.len;
     unsupported(T, "list");
 }
 
+/// Returns the item at `index` from a supported list container.
 pub fn listItem(comptime T: type, value: T, index: usize) listChild(T) {
     if (comptime isArrayList(T)) return value.items[index];
     if (comptime isMultiArrayList(T)) return value.get(index);
     unsupported(T, "list");
 }
 
+/// Initializes a supported map container.
 pub fn initMap(comptime T: type, allocator: std.mem.Allocator) !T {
     if (!comptime isMap(T)) unsupported(T, "map");
 
@@ -81,6 +92,7 @@ pub fn initMap(comptime T: type, allocator: std.mem.Allocator) !T {
     return .{};
 }
 
+/// Inserts one key-value pair into a supported map container.
 pub fn putMapEntry(
     comptime T: type,
     map: *T,
@@ -98,6 +110,7 @@ pub fn putMapEntry(
     gop.value_ptr.* = value;
 }
 
+/// Deinitializes storage owned by a supported map container.
 pub fn deinitMapStorage(comptime T: type, allocator: std.mem.Allocator, value: T) void {
     var copy = value;
     const deinit_info = @typeInfo(@TypeOf(T.deinit)).@"fn";

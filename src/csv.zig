@@ -155,38 +155,45 @@ pub const Encoder = struct {
     pending_leaf_count: usize = 0,
     pending_nested_entries: []const FieldEntry = &.{},
 
+    /// Emits an empty CSV cell for a null value.
     pub fn emitNull(self: *Self) !void {
         const count = try self.beforeNullCell();
         try writeEmptyCells(count, self.writer, self.options, &self.row_field_index);
     }
 
+    /// Emits a boolean cell as `true` or `false`.
     pub fn emitBool(self: *Self, value: bool) !void {
         try self.beforeCell();
         try self.writer.writeAll(if (value) "true" else "false");
     }
 
+    /// Emits an integer cell.
     pub fn emitInt(self: *Self, value: anytype) !void {
         try self.beforeCell();
         try self.writer.print("{d}", .{value});
     }
 
+    /// Emits a floating-point cell.
     pub fn emitFloat(self: *Self, value: anytype) !void {
         try CsvNumber.emitFloat(value);
         try self.beforeCell();
         try self.writer.print("{d}", .{value});
     }
 
+    /// Emits a UTF-8 string cell with CSV escaping.
     pub fn emitString(self: *Self, value: []const u8) !void {
         if (!std.unicode.utf8ValidateSlice(value)) return error.InvalidUtf8;
         try self.beforeCell();
         try writeEscapedCell(self.writer, value, self.options.delimiter.byte());
     }
 
+    /// Emits raw bytes as base64 text.
     pub fn emitBytes(self: *Self, value: []const u8) !void {
         try self.beforeCell();
         try base64.writeEncoded(self.writer, value);
     }
 
+    /// Emits an enum tag cell by name.
     pub fn emitEnumTag(self: *Self, tag: []const u8) !void {
         try self.emitString(tag);
     }
@@ -243,27 +250,32 @@ pub const Encoder = struct {
         self.seq_done = true;
     }
 
+    /// Begins writing an array of CSV rows.
     pub fn beginArray(self: *Self, comptime T: type, len: usize) !void {
         _ = len;
         try self.beginTypedSeq(arrayChild(T));
     }
 
+    /// Begins writing a slice of CSV rows.
     pub fn beginSlice(self: *Self, comptime Child: type, len: usize) !void {
         _ = len;
         try self.beginTypedSeq(Child);
     }
 
+    /// Begins writing a sequence of CSV rows.
     pub fn beginSeq(self: *Self, len: ?usize) !void {
         _ = len;
         if (self.root_started) return error.InvalidCsvEncoderState;
         self.root_started = true;
     }
 
+    /// Returns whether sequence pull-style writing is supported.
     pub fn hasNextSeqElem(self: *Self) !bool {
         _ = self;
         return error.UnsupportedCsvOperation;
     }
 
+    /// Ends the CSV row sequence.
     pub fn endSeq(self: *Self) !void {
         if (!self.root_started or self.in_row() or self.seq_done) return error.InvalidCsvEncoderState;
         if (self.options.final_record_terminator and (self.header_written or self.row_count != 0)) {
@@ -272,6 +284,7 @@ pub const Encoder = struct {
         self.seq_done = true;
     }
 
+    /// Begins writing a row struct or nested flat struct.
     pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void {
         _ = field_count;
         comptime validateRow(T);
@@ -298,6 +311,7 @@ pub const Encoder = struct {
         self.expecting_cell = false;
     }
 
+    /// Selects the next CSV column by struct field name.
     pub fn emitFieldName(self: *Self, name: []const u8) !void {
         if (!self.in_row() or self.expecting_cell) return error.InvalidCsvEncoderState;
         const entry = findFieldEntry(self.currentFrame().entries, name) orelse return error.InvalidCsvEncoderState;
@@ -307,16 +321,19 @@ pub const Encoder = struct {
         self.expecting_cell = true;
     }
 
+    /// Ends the current row struct or nested flat struct.
     pub fn endStruct(self: *Self) !void {
         if (self.stack_len == 0 or self.expecting_cell) return error.InvalidCsvEncoderState;
         const frame = self.pop();
         if (frame.is_row) self.row_count += 1;
     }
 
+    /// Verifies that the CSV document was completely written.
     pub fn finish(self: *Self) !void {
         if (!self.root_started or !self.seq_done or self.stack_len != 0) return error.IncompleteCsvDocument;
     }
 
+    /// Emits an empty cell for absent optional values.
     pub fn beginOptional(self: *Self, present: bool) !void {
         if (!present) try self.emitNull();
     }
@@ -399,11 +416,13 @@ pub const Decoder = struct {
     pending_path: []const u8 = "",
     current_lookup_names: []const []const u8 = &.{},
 
+    /// Frees memory owned by this decoder.
     pub fn deinit(self: *Self) void {
         deinitRecords(self.allocator, self.records);
         self.* = undefined;
     }
 
+    /// Returns the kind of the next CSV value.
     pub fn peek(self: *Self) !Kind {
         const cell = self.current_cell orelse {
             if (!self.in_seq and !self.seq_done and self.current_record_index == null) return .seq;
@@ -417,11 +436,13 @@ pub const Decoder = struct {
         return .string;
     }
 
+    /// Reads an empty cell as null.
     pub fn readNull(self: *Self) !void {
         const cell = try self.takeCell();
         if (cell.len != 0) return error.InvalidType;
     }
 
+    /// Reads a boolean cell.
     pub fn readBool(self: *Self) !bool {
         const cell = try self.takeCell();
         if (std.mem.eql(u8, cell, "true")) return true;
@@ -429,6 +450,7 @@ pub const Decoder = struct {
         return error.InvalidType;
     }
 
+    /// Reads an integer cell into `T`.
     pub fn readInt(self: *Self, comptime T: type) !T {
         const cell = try self.takeCell();
         const token = try CsvNumber.parseAlloc(self.allocator, cell);
@@ -440,6 +462,7 @@ pub const Decoder = struct {
         };
     }
 
+    /// Reads a numeric cell into floating-point type `T`.
     pub fn readFloat(self: *Self, comptime T: type) !T {
         const cell = try self.takeCell();
         const token = try CsvNumber.parseAlloc(self.allocator, cell);
@@ -447,17 +470,20 @@ pub const Decoder = struct {
         return try CsvNumber.readFloat(T, token);
     }
 
+    /// Reads a string cell as allocator-owned bytes.
     pub fn readString(self: *Self, allocator: std.mem.Allocator) ![]u8 {
         const cell = try self.takeCell();
         if (!std.unicode.utf8ValidateSlice(cell)) return error.InvalidUtf8;
         return try allocator.dupe(u8, cell);
     }
 
+    /// Reads a base64 cell into allocator-owned bytes.
     pub fn readBytes(self: *Self, allocator: std.mem.Allocator) ![]u8 {
         const cell = try self.takeCell();
         return try base64.decodeAlloc(allocator, cell);
     }
 
+    /// Returns whether the current optional field is present.
     pub fn readOptionalPresent(self: *Self) !bool {
         if (self.pending_nested_entries.len != 0) {
             const record_index = self.current_record_index orelse return error.InvalidCsvDecoderState;
@@ -477,23 +503,27 @@ pub const Decoder = struct {
         return true;
     }
 
+    /// Begins reading the sequence of CSV rows.
     pub fn beginSeq(self: *Self) !?usize {
         if (self.in_seq or self.seq_done) return error.InvalidCsvDecoderState;
         self.in_seq = true;
         return self.dataRecordCount();
     }
 
+    /// Returns whether another CSV row is available.
     pub fn hasNextSeqElem(self: *Self) !bool {
         if (!self.in_seq or self.current_record_index != null) return error.InvalidCsvDecoderState;
         return self.row_index < self.dataRecordCount();
     }
 
+    /// Ends the CSV row sequence.
     pub fn endSeq(self: *Self) !void {
         if (!self.in_seq or self.current_record_index != null) return error.InvalidCsvDecoderState;
         self.in_seq = false;
         self.seq_done = true;
     }
 
+    /// Begins reading a row struct or nested flat struct.
     pub fn beginStruct(self: *Self, comptime T: type) !void {
         comptime validateRow(T);
         if (self.pending_nested_entries.len != 0) {
@@ -518,6 +548,7 @@ pub const Decoder = struct {
         if (self.options.header) try validateHeader(T, self.records[0]);
     }
 
+    /// Begins reading a dynamic CSV row for event consumers.
     pub fn beginStructEvent(self: *Self) !?usize {
         if (!self.in_seq or self.current_record_index != null) return error.InvalidCsvDecoderState;
 
@@ -533,6 +564,7 @@ pub const Decoder = struct {
         return field_count;
     }
 
+    /// Returns the next field name as allocator-owned bytes, or null when done.
     pub fn nextField(self: *Self) !?[]u8 {
         const record_index = self.current_record_index orelse return error.InvalidCsvDecoderState;
         if (self.current_cell != null) return error.InvalidCsvDecoderState;
@@ -571,6 +603,7 @@ pub const Decoder = struct {
         return null;
     }
 
+    /// Ends the current row struct or nested flat struct.
     pub fn endStruct(self: *Self) !void {
         const record_index = self.current_record_index orelse return error.InvalidCsvDecoderState;
         _ = record_index;
@@ -584,6 +617,7 @@ pub const Decoder = struct {
         }
     }
 
+    /// Skips the current cell or nested field group.
     pub fn skipValue(self: *Self) !void {
         if (self.pending_nested_entries.len != 0) {
             self.pending_nested_entries = &.{};
@@ -593,6 +627,7 @@ pub const Decoder = struct {
         _ = try self.takeCell();
     }
 
+    /// Verifies that the CSV document was completely read.
     pub fn finish(self: *Self) !void {
         if (!self.seq_done or self.in_seq or self.current_record_index != null or self.current_cell != null) return error.IncompleteCsvDocument;
         if (self.row_index != self.dataRecordCount()) return error.IncompleteCsvDocument;
