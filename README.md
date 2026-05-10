@@ -17,14 +17,14 @@ Zerde is a small Zig 0.16 serialization framework built around comptime reflecti
 
 ## Status
 
-The current version is `0.2.3` and targets Zig `0.16.0` or newer. The API is usable, but still early.
+The current version is `0.2.4` and targets Zig `0.16.0` or newer. The API is usable, but still early.
 
 ## Quick Start
 
 1. Add `zerde` to your Zig package dependencies:
 
 ```sh
-zig fetch --save git+https://codeberg.org/gron/zerde#v0.2.3
+zig fetch --save git+https://codeberg.org/gron/zerde#v0.2.4
 ```
 
 2. Wire the dependency into your executable in `build.zig`:

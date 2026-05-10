@@ -16,6 +16,7 @@ without deserializing into an application Zig struct.
 - [consume](#fn-consume)
 - [readAlloc](#fn-readalloc)
 - [pipe](#fn-pipe)
+- [beginStruct](#fn-beginstruct)
 
 ## Types
 
@@ -146,5 +147,21 @@ may not add fields outside that schema.
 
 ```zig
 pub fn pipe(allocator: std.mem.Allocator, decoder: anytype, encoder: anytype) !void
+```
+
+<a id="fn-beginstruct"></a>
+
+## beginStruct
+
+Begins a struct/object on an event target or encoder.
+
+Targets that expose `beginStructEvent` receive the field count as-is, which
+allows `null` when the count is unknown. Event sinks that expose
+`beginStruct(?usize)` are also supported. Type-directed encoders that only
+expose `beginStruct(comptime T, field_count)` receive `void` as the marker
+type and require a known field count.
+
+```zig
+pub fn beginStruct(target: anytype, field_count: ?usize) !void
 ```
 

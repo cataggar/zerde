@@ -118,6 +118,30 @@ pub fn pipe(allocator: std.mem.Allocator, decoder: anytype, encoder: anytype) !v
     try value.write(encoder);
 }
 
+/// Begins a struct/object on an event target or encoder.
+///
+/// Targets that expose `beginStructEvent` receive the field count as-is, which
+/// allows `null` when the count is unknown. Event sinks that expose
+/// `beginStruct(?usize)` are also supported. Type-directed encoders that only
+/// expose `beginStruct(comptime T, field_count)` receive `void` as the marker
+/// type and require a known field count.
+pub fn beginStruct(target: anytype, field_count: ?usize) !void {
+    if (comptime hasMethod(@TypeOf(target), "beginStructEvent")) {
+        try target.beginStructEvent(field_count);
+    } else if (comptime hasMethod(@TypeOf(target), "beginStruct")) {
+        if (comptime methodParamCount(@TypeOf(target), "beginStruct") == 2) {
+            try target.beginStruct(field_count);
+        } else if (comptime methodParamCount(@TypeOf(target), "beginStruct") == 3) {
+            const actual_field_count = field_count orelse return error.MissingStructFieldCount;
+            try target.beginStruct(void, actual_field_count);
+        } else {
+            @compileError("beginStruct must accept (?usize) or (comptime type, usize)");
+        }
+    } else {
+        @compileError("target must expose beginStructEvent or beginStruct");
+    }
+}
+
 fn consumeValue(allocator: std.mem.Allocator, decoder: anytype, sink: anytype) !void {
     const kind = @tagName(try decoder.peek());
     if (std.mem.eql(u8, kind, "null")) {
@@ -159,7 +183,7 @@ fn consumeValue(allocator: std.mem.Allocator, decoder: anytype, sink: anytype) !
         try sink.endSeq();
     } else if (std.mem.eql(u8, kind, "struct_")) {
         const len = try beginStructEvent(decoder);
-        try beginStructSink(sink, len);
+        try beginStruct(sink, len);
         while (try decoder.nextField()) |field_name| {
             defer allocator.free(field_name);
             try sink.emitFieldName(field_name);
@@ -257,14 +281,6 @@ fn beginStructEvent(decoder: anytype) !?usize {
     return null;
 }
 
-fn beginStructSink(sink: anytype, len: ?usize) !void {
-    if (comptime hasMethod(@TypeOf(sink), "beginStructEvent")) {
-        try sink.beginStructEvent(len);
-    } else {
-        try sink.beginStruct(len);
-    }
-}
-
 fn readEnumTag(allocator: std.mem.Allocator, decoder: anytype) ![]u8 {
     if (comptime hasMethod(@TypeOf(decoder), "readEnumTag")) return try decoder.readEnumTag(allocator);
     return error.UnsupportedEventKind;
@@ -305,6 +321,14 @@ fn hasMethod(comptime T: type, comptime name: []const u8) bool {
         else => T,
     };
     return @hasDecl(Target, name);
+}
+
+fn methodParamCount(comptime T: type, comptime name: []const u8) comptime_int {
+    const Target = switch (@typeInfo(T)) {
+        .pointer => |pointer| pointer.child,
+        else => T,
+    };
+    return @typeInfo(@TypeOf(@field(Target, name))).@"fn".params.len;
 }
 
 test "events consume json into custom sink" {
@@ -378,6 +402,65 @@ test "events consume json into custom sink" {
     try dec.finish();
 
     try std.testing.expectEqualStrings("struct:null{id=int:42tags=seq:null[string:astring:b]}", sink.out.items);
+}
+
+test "events beginStruct prefers beginStructEvent" {
+    const Target = struct {
+        called_event: bool = false,
+        len: ?usize = null,
+
+        pub fn beginStructEvent(self: *@This(), field_count: ?usize) !void {
+            self.called_event = true;
+            self.len = field_count;
+        }
+
+        pub fn beginStruct(self: *@This(), comptime T: type, field_count: usize) !void {
+            _ = self;
+            _ = T;
+            _ = field_count;
+            return error.WrongBeginStruct;
+        }
+    };
+
+    var target = Target{};
+    try beginStruct(&target, 3);
+
+    try std.testing.expect(target.called_event);
+    try std.testing.expectEqual(@as(?usize, 3), target.len);
+}
+
+test "events beginStruct supports event sinks" {
+    const Sink = struct {
+        len: ?usize = undefined,
+
+        pub fn beginStruct(self: *@This(), field_count: ?usize) !void {
+            self.len = field_count;
+        }
+    };
+
+    var sink = Sink{};
+    try beginStruct(&sink, null);
+
+    try std.testing.expectEqual(@as(?usize, null), sink.len);
+}
+
+test "events beginStruct supports type-directed encoders" {
+    const Encoder = struct {
+        received_void: bool = false,
+        field_count: usize = 0,
+
+        pub fn beginStruct(self: *@This(), comptime T: type, field_count: usize) !void {
+            self.received_void = T == void;
+            self.field_count = field_count;
+        }
+    };
+
+    var encoder = Encoder{};
+    try beginStruct(&encoder, 2);
+
+    try std.testing.expect(encoder.received_void);
+    try std.testing.expectEqual(@as(usize, 2), encoder.field_count);
+    try std.testing.expectError(error.MissingStructFieldCount, beginStruct(&encoder, null));
 }
 
 test "events pipe json to msgpack without application struct" {
