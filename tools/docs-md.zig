@@ -949,15 +949,34 @@ fn renderDecl(
     if (decl.children.items.len != 0) {
         try appendHeading(allocator, out, heading_level + 1, "Nested Declarations");
         try out.append(allocator, '\n');
-        for (decl.children.items) |child| {
-            const child_anchor = try declAnchor(allocator, child, decl.name);
-            try out.print(allocator, "- [{s}](#{s})\n", .{ child.name, child_anchor });
-        }
-        try out.append(allocator, '\n');
+        try renderNestedDeclarationsTable(allocator, out, decl.children.items, decl.name);
         for (decl.children.items) |child| {
             try renderDecl(allocator, out, symbols, current_module, child, heading_level + 1, decl.name, single_file);
         }
     }
+}
+
+fn renderNestedDeclarationsTable(allocator: Allocator, out: *std.ArrayList(u8), children: []const DeclDocs, parent_name: []const u8) !void {
+    try out.appendSlice(allocator, "| Name | Signature | Return Type | Description |\n");
+    try out.appendSlice(allocator, "| --- | --- | --- | --- |\n");
+    for (children) |child| {
+        const child_anchor = try declAnchor(allocator, child, parent_name);
+        const return_type = functionReturnType(child.signature);
+        try out.appendSlice(allocator, "| [");
+        try appendTableCellEscaped(allocator, out, child.name);
+        try out.print(allocator, "](#{s}) | `", .{child_anchor});
+        try appendTableCellEscaped(allocator, out, singleLineText(child.signature));
+        try out.appendSlice(allocator, "` | ");
+        if (return_type.len != 0) {
+            try out.append(allocator, '`');
+            try appendTableCellEscaped(allocator, out, return_type);
+            try out.append(allocator, '`');
+        }
+        try out.appendSlice(allocator, " | ");
+        try appendTableCellEscaped(allocator, out, firstDocSentence(child.doc));
+        try out.appendSlice(allocator, " |\n");
+    }
+    try out.append(allocator, '\n');
 }
 
 fn appendDeclSignatureCodeBlock(allocator: Allocator, out: *std.ArrayList(u8), decl: *const DeclDocs) !void {
@@ -1027,6 +1046,86 @@ fn appendFieldSignature(allocator: Allocator, out: *std.ArrayList(u8), field: Fi
 fn appendSpaces(allocator: Allocator, out: *std.ArrayList(u8), count: usize) !void {
     var i: usize = 0;
     while (i < count) : (i += 1) try out.append(allocator, ' ');
+}
+
+fn appendTableCellEscaped(allocator: Allocator, out: *std.ArrayList(u8), text: []const u8) !void {
+    var previous_space = false;
+    for (text) |byte| {
+        switch (byte) {
+            '\n', '\r', '\t' => {
+                if (!previous_space) try out.append(allocator, ' ');
+                previous_space = true;
+            },
+            '|' => {
+                try out.appendSlice(allocator, "\\|");
+                previous_space = false;
+            },
+            '`' => {
+                try out.appendSlice(allocator, "&#96;");
+                previous_space = false;
+            },
+            else => {
+                try out.append(allocator, byte);
+                previous_space = byte == ' ';
+            },
+        }
+    }
+}
+
+fn singleLineText(text: []const u8) []const u8 {
+    return std.mem.trim(u8, text, &std.ascii.whitespace);
+}
+
+fn firstDocSentence(doc: []const u8) []const u8 {
+    const trimmed = std.mem.trim(u8, doc, &std.ascii.whitespace);
+    if (std.mem.indexOf(u8, trimmed, "\n\n")) |end| return trimmed[0..end];
+    return trimmed;
+}
+
+fn functionReturnType(signature: []const u8) []const u8 {
+    const fn_index = std.mem.indexOf(u8, signature, "fn") orelse return "";
+    if (fn_index > 0 and isIdentContinue(signature[fn_index - 1])) return "";
+    const after_fn = fn_index + 2;
+    if (after_fn < signature.len and isIdentContinue(signature[after_fn])) return "";
+    const lparen = std.mem.indexOfScalarPos(u8, signature, after_fn, '(') orelse return "";
+    const params_end = matchingParenEnd(signature, lparen) orelse return "";
+
+    var tail = std.mem.trim(u8, signature[params_end..], &std.ascii.whitespace);
+    while (consumeFnModifier(tail)) |next| tail = std.mem.trim(u8, next, &std.ascii.whitespace);
+    if (std.mem.indexOfScalar(u8, tail, '{')) |brace| tail = tail[0..brace];
+    tail = std.mem.trim(u8, tail, &std.ascii.whitespace);
+    if (std.mem.endsWith(u8, tail, ";")) tail = std.mem.trim(u8, tail[0 .. tail.len - 1], &std.ascii.whitespace);
+    return tail;
+}
+
+fn consumeFnModifier(text: []const u8) ?[]const u8 {
+    const modifiers = [_][]const u8{ "align", "addrspace", "linksection", "callconv" };
+    for (modifiers) |modifier| {
+        if (!std.mem.startsWith(u8, text, modifier)) continue;
+        if (text.len <= modifier.len or text[modifier.len] != '(') continue;
+        const end = matchingParenEnd(text, modifier.len) orelse return null;
+        return text[end..];
+    }
+    return null;
+}
+
+fn matchingParenEnd(text: []const u8, lparen: usize) ?usize {
+    var depth: usize = 0;
+    var i = lparen;
+    while (i < text.len) : (i += 1) {
+        switch (text[i]) {
+            '"' => i = skipQuoted(text, i, '"') -| 1,
+            '\'' => i = skipQuoted(text, i, '\'') -| 1,
+            '(' => depth += 1,
+            ')' => {
+                if (depth == 0) return null;
+                depth -= 1;
+                if (depth == 0) return i + 1;
+            },
+            else => {},
+        }
+    }
+    return null;
 }
 
 fn appendSignatureReferences(
@@ -1566,6 +1665,62 @@ test "error set fields collect and render inline with docs" {
         \\    /// Reached the end of input unexpectedly.
         \\    EndOfStream,
         \\};
+        \\```
+        \\
+        \\
+    , out.items);
+}
+
+test "nested declarations render summary table before details" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var parent = DeclDocs{
+        .name = "Api",
+        .kind = .type,
+        .visibility = .public,
+        .doc = "",
+        .signature = "pub const Api = struct { ... };",
+        .line = 1,
+    };
+    try parent.children.append(allocator, .{
+        .name = "init",
+        .kind = .function,
+        .visibility = .public,
+        .doc = "Create an Api.\nSecond line.",
+        .signature = "pub fn init(name: []const u8) !Api",
+        .line = 2,
+    });
+
+    var symbols = SymbolIndex{};
+    var out = std.ArrayList(u8).empty;
+    try renderDecl(allocator, &out, &symbols, "root", parent, 2, null, false);
+
+    try std.testing.expectEqualStrings(
+        \\<a id="type-api"></a>
+        \\
+        \\## Api
+        \\
+        \\```zig
+        \\pub const Api = struct { ... };
+        \\```
+        \\
+        \\### Nested Declarations
+        \\
+        \\| Name | Signature | Return Type | Description |
+        \\| --- | --- | --- | --- |
+        \\| [init](#fn-api-init) | `pub fn init(name: []const u8) !Api` | `!Api` | Create an Api. Second line. |
+        \\
+        \\<a id="fn-api-init"></a>
+        \\
+        \\### Api.init
+        \\
+        \\Create an Api.
+        \\Second line.
+        \\
+        \\```zig
+        \\pub fn init(name: []const u8) !Api
         \\```
         \\
         \\

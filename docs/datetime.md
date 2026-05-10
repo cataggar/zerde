@@ -35,8 +35,10 @@ pub const Timestamp = struct {
 
 ### Nested Declarations
 
-- [zerdeWrite](#fn-timestamp-zerdewrite)
-- [zerdeRead](#fn-timestamp-zerderead)
+| Name | Signature | Return Type | Description |
+| --- | --- | --- | --- |
+| [zerdeWrite](#fn-timestamp-zerdewrite) | `pub fn zerdeWrite(self: Timestamp, enc: anytype) !void` | `!void` | Serializes as a MessagePack timestamp extension when supported, otherwise as a struct. |
+| [zerdeRead](#fn-timestamp-zerderead) | `pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !Timestamp` | `!Timestamp` | Deserializes from a MessagePack timestamp extension when supported, otherwise from a struct. |
 
 <a id="fn-timestamp-zerdewrite"></a>
 
@@ -78,10 +80,12 @@ pub const LocalDate = struct {
 
 ### Nested Declarations
 
-- [parse](#fn-localdate-parse)
-- [format](#fn-localdate-format)
-- [zerdeWrite](#fn-localdate-zerdewrite)
-- [zerdeRead](#fn-localdate-zerderead)
+| Name | Signature | Return Type | Description |
+| --- | --- | --- | --- |
+| [parse](#fn-localdate-parse) | `pub fn parse(input: []const u8) !LocalDate` | `!LocalDate` | Parses a &#96;YYYY-MM-DD&#96; local date. |
+| [format](#fn-localdate-format) | `pub fn format(self: LocalDate, writer: *std.Io.Writer) !void` | `!void` | Writes this date as &#96;YYYY-MM-DD&#96;. |
+| [zerdeWrite](#fn-localdate-zerdewrite) | `pub fn zerdeWrite(self: LocalDate, enc: anytype) !void` | `!void` | Serializes this date as a native datetime token when supported, otherwise as a string. |
+| [zerdeRead](#fn-localdate-zerderead) | `pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !LocalDate` | `!LocalDate` | Deserializes a local date from a native datetime token or string. |
 
 <a id="fn-localdate-parse"></a>
 
@@ -148,10 +152,12 @@ pub const LocalTime = struct {
 
 ### Nested Declarations
 
-- [parse](#fn-localtime-parse)
-- [format](#fn-localtime-format)
-- [zerdeWrite](#fn-localtime-zerdewrite)
-- [zerdeRead](#fn-localtime-zerderead)
+| Name | Signature | Return Type | Description |
+| --- | --- | --- | --- |
+| [parse](#fn-localtime-parse) | `pub fn parse(input: []const u8) !LocalTime` | `!LocalTime` | Parses a &#96;HH:MM:SS[.fraction]&#96; local time. |
+| [format](#fn-localtime-format) | `pub fn format(self: LocalTime, writer: *std.Io.Writer) !void` | `!void` | Writes this time as &#96;HH:MM:SS[.fraction]&#96;. |
+| [zerdeWrite](#fn-localtime-zerdewrite) | `pub fn zerdeWrite(self: LocalTime, enc: anytype) !void` | `!void` | Serializes this time as a native datetime token when supported, otherwise as a string. |
+| [zerdeRead](#fn-localtime-zerderead) | `pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !LocalTime` | `!LocalTime` | Deserializes a local time from a native datetime token or string. |
 
 <a id="fn-localtime-parse"></a>
 
@@ -216,10 +222,12 @@ pub const LocalDateTime = struct {
 
 ### Nested Declarations
 
-- [parse](#fn-localdatetime-parse)
-- [format](#fn-localdatetime-format)
-- [zerdeWrite](#fn-localdatetime-zerdewrite)
-- [zerdeRead](#fn-localdatetime-zerderead)
+| Name | Signature | Return Type | Description |
+| --- | --- | --- | --- |
+| [parse](#fn-localdatetime-parse) | `pub fn parse(input: []const u8) !LocalDateTime` | `!LocalDateTime` | Parses a &#96;YYYY-MM-DDTHH:MM:SS[.fraction]&#96; local date-time. |
+| [format](#fn-localdatetime-format) | `pub fn format(self: LocalDateTime, writer: *std.Io.Writer) !void` | `!void` | Writes this date-time as &#96;YYYY-MM-DDTHH:MM:SS[.fraction]&#96;. |
+| [zerdeWrite](#fn-localdatetime-zerdewrite) | `pub fn zerdeWrite(self: LocalDateTime, enc: anytype) !void` | `!void` | Serializes this date-time as a native datetime token when supported, otherwise as a string. |
+| [zerdeRead](#fn-localdatetime-zerderead) | `pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !LocalDateTime` | `!LocalDateTime` | Deserializes a local date-time from a native datetime token or string. |
 
 <a id="fn-localdatetime-parse"></a>
 
@@ -285,10 +293,12 @@ pub const OffsetDateTime = struct {
 
 ### Nested Declarations
 
-- [parse](#fn-offsetdatetime-parse)
-- [format](#fn-offsetdatetime-format)
-- [zerdeWrite](#fn-offsetdatetime-zerdewrite)
-- [zerdeRead](#fn-offsetdatetime-zerderead)
+| Name | Signature | Return Type | Description |
+| --- | --- | --- | --- |
+| [parse](#fn-offsetdatetime-parse) | `pub fn parse(input: []const u8) !OffsetDateTime` | `!OffsetDateTime` | Parses an offset date-time ending in &#96;Z&#96; or a &#96;+/-HH:MM&#96; offset. |
+| [format](#fn-offsetdatetime-format) | `pub fn format(self: OffsetDateTime, writer: *std.Io.Writer) !void` | `!void` | Writes this date-time with a &#96;Z&#96; or &#96;+/-HH:MM&#96; offset. |
+| [zerdeWrite](#fn-offsetdatetime-zerdewrite) | `pub fn zerdeWrite(self: OffsetDateTime, enc: anytype) !void` | `!void` | Serializes this date-time as a native datetime token when supported, otherwise as a string. |
+| [zerdeRead](#fn-offsetdatetime-zerderead) | `pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !OffsetDateTime` | `!OffsetDateTime` | Deserializes an offset date-time from a native datetime token or string. |
 
 <a id="fn-offsetdatetime-parse"></a>
 

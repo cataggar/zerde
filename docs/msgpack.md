@@ -56,7 +56,9 @@ pub const Extension = struct {
 
 ### Nested Declarations
 
-- [deinit](#fn-extension-deinit)
+| Name | Signature | Return Type | Description |
+| --- | --- | --- | --- |
+| [deinit](#fn-extension-deinit) | `pub fn deinit(self: Extension, allocator: std.mem.Allocator) void` | `void` | Frees the extension payload returned by &#96;Decoder.readExtension&#96;. |
 
 <a id="fn-extension-deinit"></a>
 
@@ -208,21 +210,23 @@ pub const Encoder = struct {
 
 ### Nested Declarations
 
-- [emitNull](#fn-encoder-emitnull)
-- [emitBool](#fn-encoder-emitbool)
-- [emitInt](#fn-encoder-emitint)
-- [emitFloat](#fn-encoder-emitfloat)
-- [emitString](#fn-encoder-emitstring)
-- [emitBytes](#fn-encoder-emitbytes)
-- [emitEnumTag](#fn-encoder-emitenumtag)
-- [beginSeq](#fn-encoder-beginseq)
-- [endSeq](#fn-encoder-endseq)
-- [beginStruct](#fn-encoder-beginstruct)
-- [emitFieldName](#fn-encoder-emitfieldname)
-- [endStruct](#fn-encoder-endstruct)
-- [emitExtension](#fn-encoder-emitextension)
-- [emitTimestamp](#fn-encoder-emittimestamp)
-- [finish](#fn-encoder-finish)
+| Name | Signature | Return Type | Description |
+| --- | --- | --- | --- |
+| [emitNull](#fn-encoder-emitnull) | `pub fn emitNull(self: *Self) !void` | `!void` | Emits the MessagePack nil value. |
+| [emitBool](#fn-encoder-emitbool) | `pub fn emitBool(self: *Self, value: bool) !void` | `!void` | Emits a MessagePack boolean value. |
+| [emitInt](#fn-encoder-emitint) | `pub fn emitInt(self: *Self, value: anytype) !void` | `!void` | Emits an integer using the smallest valid MessagePack integer format. |
+| [emitFloat](#fn-encoder-emitfloat) | `pub fn emitFloat(self: *Self, value: anytype) !void` | `!void` | Emits a 32-bit or 64-bit MessagePack float. |
+| [emitString](#fn-encoder-emitstring) | `pub fn emitString(self: *Self, value: []const u8) !void` | `!void` | Emits a UTF-8 string with the MessagePack str family. |
+| [emitBytes](#fn-encoder-emitbytes) | `pub fn emitBytes(self: *Self, value: []const u8) !void` | `!void` | Emits raw bytes with the MessagePack bin family. |
+| [emitEnumTag](#fn-encoder-emitenumtag) | `pub fn emitEnumTag(self: *Self, tag: []const u8) !void` | `!void` | Emits an enum tag as a MessagePack string. |
+| [beginSeq](#fn-encoder-beginseq) | `pub fn beginSeq(self: *Self, len: ?usize) !void` | `!void` | Begins a MessagePack array with a known element count. |
+| [endSeq](#fn-encoder-endseq) | `pub fn endSeq(self: *Self) !void` | `!void` | Ends the current MessagePack array. |
+| [beginStruct](#fn-encoder-beginstruct) | `pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void` | `!void` | Begins a MessagePack map for a struct value. |
+| [emitFieldName](#fn-encoder-emitfieldname) | `pub fn emitFieldName(self: *Self, name: []const u8) !void` | `!void` | Emits the next MessagePack map key for a struct field. |
+| [endStruct](#fn-encoder-endstruct) | `pub fn endStruct(self: *Self) !void` | `!void` | Ends the current MessagePack map for a struct value. |
+| [emitExtension](#fn-encoder-emitextension) | `pub fn emitExtension(self: *Self, type_id: i8, data: []const u8) !void` | `!void` | Emits a low-level MessagePack extension value for custom hooks. |
+| [emitTimestamp](#fn-encoder-emittimestamp) | `pub fn emitTimestamp(self: *Self, value: Timestamp) !void` | `!void` | Emits the predefined MessagePack timestamp extension type (-1). |
+| [finish](#fn-encoder-finish) | `pub fn finish(self: *Self) !void` | `!void` | Verifies that exactly one complete MessagePack root value was emitted. |
 
 <a id="fn-encoder-emitnull"></a>
 
@@ -395,24 +399,26 @@ pub const Decoder = struct {
 
 ### Nested Declarations
 
-- [peek](#fn-decoder-peek)
-- [readNull](#fn-decoder-readnull)
-- [readBool](#fn-decoder-readbool)
-- [readInt](#fn-decoder-readint)
-- [readFloat](#fn-decoder-readfloat)
-- [readString](#fn-decoder-readstring)
-- [readBytes](#fn-decoder-readbytes)
-- [beginSeq](#fn-decoder-beginseq)
-- [hasNextSeqElem](#fn-decoder-hasnextseqelem)
-- [endSeq](#fn-decoder-endseq)
-- [beginStruct](#fn-decoder-beginstruct)
-- [beginStructEvent](#fn-decoder-beginstructevent)
-- [nextField](#fn-decoder-nextfield)
-- [endStruct](#fn-decoder-endstruct)
-- [skipValue](#fn-decoder-skipvalue)
-- [readExtension](#fn-decoder-readextension)
-- [readTimestamp](#fn-decoder-readtimestamp)
-- [finish](#fn-decoder-finish)
+| Name | Signature | Return Type | Description |
+| --- | --- | --- | --- |
+| [peek](#fn-decoder-peek) | `pub fn peek(self: *Self) !Kind` | `!Kind` | Returns the kind of the next MessagePack value without consuming it. |
+| [readNull](#fn-decoder-readnull) | `pub fn readNull(self: *Self) !void` | `!void` | Reads a MessagePack nil value. |
+| [readBool](#fn-decoder-readbool) | `pub fn readBool(self: *Self) !bool` | `!bool` | Reads a MessagePack boolean value. |
+| [readInt](#fn-decoder-readint) | `pub fn readInt(self: *Self, comptime T: type) !T` | `!T` | Reads a MessagePack integer and converts it to &#96;T&#96;. |
+| [readFloat](#fn-decoder-readfloat) | `pub fn readFloat(self: *Self, comptime T: type) !T` | `!T` | Reads a MessagePack float, or an integer coerced to &#96;T&#96;. |
+| [readString](#fn-decoder-readstring) | `pub fn readString(self: *Self, allocator: std.mem.Allocator) ![]u8` | `![]u8` | Reads a MessagePack str value as allocator-owned UTF-8 bytes. |
+| [readBytes](#fn-decoder-readbytes) | `pub fn readBytes(self: *Self, allocator: std.mem.Allocator) ![]u8` | `![]u8` | Reads a MessagePack bin value, or a str value for compatibility, as owned bytes. |
+| [beginSeq](#fn-decoder-beginseq) | `pub fn beginSeq(self: *Self) !?usize` | `!?usize` | Begins reading a MessagePack array and returns its element count. |
+| [hasNextSeqElem](#fn-decoder-hasnextseqelem) | `pub fn hasNextSeqElem(self: *Self) !bool` | `!bool` | Returns whether the current MessagePack array has another element. |
+| [endSeq](#fn-decoder-endseq) | `pub fn endSeq(self: *Self) !void` | `!void` | Ends the current MessagePack array. |
+| [beginStruct](#fn-decoder-beginstruct) | `pub fn beginStruct(self: *Self, comptime T: type) !void` | `!void` | Begins reading a MessagePack map for a struct value. |
+| [beginStructEvent](#fn-decoder-beginstructevent) | `pub fn beginStructEvent(self: *Self) !?usize` | `!?usize` | Begins reading a MessagePack map for event consumers and returns its field count. |
+| [nextField](#fn-decoder-nextfield) | `pub fn nextField(self: *Self) !?[]u8` | `!?[]u8` | Reads the next MessagePack map key as an allocator-owned field name. |
+| [endStruct](#fn-decoder-endstruct) | `pub fn endStruct(self: *Self) !void` | `!void` | Ends the current MessagePack map for a struct value. |
+| [skipValue](#fn-decoder-skipvalue) | `pub fn skipValue(self: *Self) !void` | `!void` | Skips the next complete MessagePack value, including nested containers. |
+| [readExtension](#fn-decoder-readextension) | `pub fn readExtension(self: *Self, allocator: std.mem.Allocator) !Extension` | `!Extension` | Reads a low-level MessagePack extension value. Caller owns &#96;data&#96;. |
+| [readTimestamp](#fn-decoder-readtimestamp) | `pub fn readTimestamp(self: *Self) !Timestamp` | `!Timestamp` | Reads the predefined MessagePack timestamp extension type (-1). |
+| [finish](#fn-decoder-finish) | `pub fn finish(self: *Self) !void` | `!void` | Verifies that the reader is at the end of a complete MessagePack document. |
 
 <a id="fn-decoder-peek"></a>
 

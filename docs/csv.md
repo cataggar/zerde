@@ -280,26 +280,28 @@ pub const Encoder = struct {
 
 ### Nested Declarations
 
-- [emitNull](#fn-encoder-emitnull)
-- [emitBool](#fn-encoder-emitbool)
-- [emitInt](#fn-encoder-emitint)
-- [emitFloat](#fn-encoder-emitfloat)
-- [emitString](#fn-encoder-emitstring)
-- [emitBytes](#fn-encoder-emitbytes)
-- [emitEnumTag](#fn-encoder-emitenumtag)
-- [emitEventValue](#fn-encoder-emiteventvalue)
-- [beginArray](#fn-encoder-beginarray)
-- [beginSlice](#fn-encoder-beginslice)
-- [beginSeq](#fn-encoder-beginseq)
-- [hasNextSeqElem](#fn-encoder-hasnextseqelem)
-- [endSeq](#fn-encoder-endseq)
-- [beginStruct](#fn-encoder-beginstruct)
-- [beginStructEvent](#fn-encoder-beginstructevent)
-- [emitFieldName](#fn-encoder-emitfieldname)
-- [endStruct](#fn-encoder-endstruct)
-- [finish](#fn-encoder-finish)
-- [deinit](#fn-encoder-deinit)
-- [beginOptional](#fn-encoder-beginoptional)
+| Name | Signature | Return Type | Description |
+| --- | --- | --- | --- |
+| [emitNull](#fn-encoder-emitnull) | `pub fn emitNull(self: *Self) !void` | `!void` | Emits an empty CSV cell for a null value. |
+| [emitBool](#fn-encoder-emitbool) | `pub fn emitBool(self: *Self, value: bool) !void` | `!void` | Emits a boolean cell as &#96;true&#96; or &#96;false&#96;. |
+| [emitInt](#fn-encoder-emitint) | `pub fn emitInt(self: *Self, value: anytype) !void` | `!void` | Emits an integer cell. |
+| [emitFloat](#fn-encoder-emitfloat) | `pub fn emitFloat(self: *Self, value: anytype) !void` | `!void` | Emits a floating-point cell. |
+| [emitString](#fn-encoder-emitstring) | `pub fn emitString(self: *Self, value: []const u8) !void` | `!void` | Emits a UTF-8 string cell with CSV escaping. |
+| [emitBytes](#fn-encoder-emitbytes) | `pub fn emitBytes(self: *Self, value: []const u8) !void` | `!void` | Emits raw bytes as base64 text. |
+| [emitEnumTag](#fn-encoder-emitenumtag) | `pub fn emitEnumTag(self: *Self, tag: []const u8) !void` | `!void` | Emits an enum tag cell by name. |
+| [emitEventValue](#fn-encoder-emiteventvalue) | `pub fn emitEventValue(self: *Self, value: events.Value) !void` | `!void` | Writes a buffered structural event value as CSV. |
+| [beginArray](#fn-encoder-beginarray) | `pub fn beginArray(self: *Self, comptime T: type, len: usize) !void` | `!void` | Begins writing an array of CSV rows. |
+| [beginSlice](#fn-encoder-beginslice) | `pub fn beginSlice(self: *Self, comptime Child: type, len: usize) !void` | `!void` | Begins writing a slice of CSV rows. |
+| [beginSeq](#fn-encoder-beginseq) | `pub fn beginSeq(self: *Self, len: ?usize) !void` | `!void` | Begins writing a sequence of CSV rows. |
+| [hasNextSeqElem](#fn-encoder-hasnextseqelem) | `pub fn hasNextSeqElem(self: *Self) !bool` | `!bool` | Returns whether sequence pull-style writing is supported. |
+| [endSeq](#fn-encoder-endseq) | `pub fn endSeq(self: *Self) !void` | `!void` | Ends the CSV row sequence. |
+| [beginStruct](#fn-encoder-beginstruct) | `pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void` | `!void` | Begins writing a row struct or nested flat struct. |
+| [beginStructEvent](#fn-encoder-beginstructevent) | `pub fn beginStructEvent(self: *Self, field_count: ?usize) !void` | `!void` | Begins a dynamic event row struct or nested struct. |
+| [emitFieldName](#fn-encoder-emitfieldname) | `pub fn emitFieldName(self: *Self, name: []const u8) !void` | `!void` | Selects the next CSV column by struct field name. |
+| [endStruct](#fn-encoder-endstruct) | `pub fn endStruct(self: *Self) !void` | `!void` | Ends the current row struct or nested flat struct. |
+| [finish](#fn-encoder-finish) | `pub fn finish(self: *Self) !void` | `!void` | Verifies that the CSV document was completely written. |
+| [deinit](#fn-encoder-deinit) | `pub fn deinit(self: *Self) void` | `void` | Frees allocator-owned dynamic event state. |
+| [beginOptional](#fn-encoder-beginoptional) | `pub fn beginOptional(self: *Self, present: bool) !void` | `!void` | Emits an empty cell for absent optional values. |
 
 <a id="fn-encoder-emitnull"></a>
 
@@ -532,24 +534,26 @@ pub const Decoder = struct {
 
 ### Nested Declarations
 
-- [deinit](#fn-decoder-deinit)
-- [peek](#fn-decoder-peek)
-- [readNull](#fn-decoder-readnull)
-- [readBool](#fn-decoder-readbool)
-- [readInt](#fn-decoder-readint)
-- [readFloat](#fn-decoder-readfloat)
-- [readString](#fn-decoder-readstring)
-- [readBytes](#fn-decoder-readbytes)
-- [readOptionalPresent](#fn-decoder-readoptionalpresent)
-- [beginSeq](#fn-decoder-beginseq)
-- [hasNextSeqElem](#fn-decoder-hasnextseqelem)
-- [endSeq](#fn-decoder-endseq)
-- [beginStruct](#fn-decoder-beginstruct)
-- [beginStructEvent](#fn-decoder-beginstructevent)
-- [nextField](#fn-decoder-nextfield)
-- [endStruct](#fn-decoder-endstruct)
-- [skipValue](#fn-decoder-skipvalue)
-- [finish](#fn-decoder-finish)
+| Name | Signature | Return Type | Description |
+| --- | --- | --- | --- |
+| [deinit](#fn-decoder-deinit) | `pub fn deinit(self: *Self) void` | `void` | Frees memory owned by this decoder. |
+| [peek](#fn-decoder-peek) | `pub fn peek(self: *Self) !Kind` | `!Kind` | Returns the kind of the next CSV value. |
+| [readNull](#fn-decoder-readnull) | `pub fn readNull(self: *Self) !void` | `!void` | Reads an empty cell as null. |
+| [readBool](#fn-decoder-readbool) | `pub fn readBool(self: *Self) !bool` | `!bool` | Reads a boolean cell. |
+| [readInt](#fn-decoder-readint) | `pub fn readInt(self: *Self, comptime T: type) !T` | `!T` | Reads an integer cell into &#96;T&#96;. |
+| [readFloat](#fn-decoder-readfloat) | `pub fn readFloat(self: *Self, comptime T: type) !T` | `!T` | Reads a numeric cell into floating-point type &#96;T&#96;. |
+| [readString](#fn-decoder-readstring) | `pub fn readString(self: *Self, allocator: std.mem.Allocator) ![]u8` | `![]u8` | Reads a string cell as allocator-owned bytes. |
+| [readBytes](#fn-decoder-readbytes) | `pub fn readBytes(self: *Self, allocator: std.mem.Allocator) ![]u8` | `![]u8` | Reads a base64 cell into allocator-owned bytes. |
+| [readOptionalPresent](#fn-decoder-readoptionalpresent) | `pub fn readOptionalPresent(self: *Self) !bool` | `!bool` | Returns whether the current optional field is present. |
+| [beginSeq](#fn-decoder-beginseq) | `pub fn beginSeq(self: *Self) !?usize` | `!?usize` | Begins reading the sequence of CSV rows. |
+| [hasNextSeqElem](#fn-decoder-hasnextseqelem) | `pub fn hasNextSeqElem(self: *Self) !bool` | `!bool` | Returns whether another CSV row is available. |
+| [endSeq](#fn-decoder-endseq) | `pub fn endSeq(self: *Self) !void` | `!void` | Ends the CSV row sequence. |
+| [beginStruct](#fn-decoder-beginstruct) | `pub fn beginStruct(self: *Self, comptime T: type) !void` | `!void` | Begins reading a row struct or nested flat struct. |
+| [beginStructEvent](#fn-decoder-beginstructevent) | `pub fn beginStructEvent(self: *Self) !?usize` | `!?usize` | Begins reading a dynamic CSV row for event consumers. |
+| [nextField](#fn-decoder-nextfield) | `pub fn nextField(self: *Self) !?[]u8` | `!?[]u8` | Returns the next field name as allocator-owned bytes, or null when done. |
+| [endStruct](#fn-decoder-endstruct) | `pub fn endStruct(self: *Self) !void` | `!void` | Ends the current row struct or nested flat struct. |
+| [skipValue](#fn-decoder-skipvalue) | `pub fn skipValue(self: *Self) !void` | `!void` | Skips the current cell or nested field group. |
+| [finish](#fn-decoder-finish) | `pub fn finish(self: *Self) !void` | `!void` | Verifies that the CSV document was completely read. |
 
 <a id="fn-decoder-deinit"></a>
 

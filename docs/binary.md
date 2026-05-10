@@ -184,23 +184,25 @@ pub const Encoder = struct {
 
 ### Nested Declarations
 
-- [emitNull](#fn-encoder-emitnull)
-- [emitBool](#fn-encoder-emitbool)
-- [emitInt](#fn-encoder-emitint)
-- [emitFloat](#fn-encoder-emitfloat)
-- [emitString](#fn-encoder-emitstring)
-- [emitBytes](#fn-encoder-emitbytes)
-- [emitEnum](#fn-encoder-emitenum)
-- [emitEnumTag](#fn-encoder-emitenumtag)
-- [beginOptional](#fn-encoder-beginoptional)
-- [beginArray](#fn-encoder-beginarray)
-- [beginSlice](#fn-encoder-beginslice)
-- [beginSeq](#fn-encoder-beginseq)
-- [endSeq](#fn-encoder-endseq)
-- [beginStruct](#fn-encoder-beginstruct)
-- [emitFieldName](#fn-encoder-emitfieldname)
-- [endStruct](#fn-encoder-endstruct)
-- [finish](#fn-encoder-finish)
+| Name | Signature | Return Type | Description |
+| --- | --- | --- | --- |
+| [emitNull](#fn-encoder-emitnull) | `pub fn emitNull(self: *Self) !void` | `!void` | Emits a null marker when required by the current binary context. |
+| [emitBool](#fn-encoder-emitbool) | `pub fn emitBool(self: *Self, value: bool) !void` | `!void` | Emits a boolean as one byte. |
+| [emitInt](#fn-encoder-emitint) | `pub fn emitInt(self: *Self, value: anytype) !void` | `!void` | Emits an integer using the configured byte order. |
+| [emitFloat](#fn-encoder-emitfloat) | `pub fn emitFloat(self: *Self, value: anytype) !void` | `!void` | Emits a floating-point value as its raw IEEE bits. |
+| [emitString](#fn-encoder-emitstring) | `pub fn emitString(self: *Self, value: []const u8) !void` | `!void` | Emits a length-prefixed UTF-8 string. |
+| [emitBytes](#fn-encoder-emitbytes) | `pub fn emitBytes(self: *Self, value: []const u8) !void` | `!void` | Emits length-prefixed raw bytes. |
+| [emitEnum](#fn-encoder-emitenum) | `pub fn emitEnum(self: *Self, comptime T: type, value: T) !void` | `!void` | Emits an enum value using the enum tag's integer storage size. |
+| [emitEnumTag](#fn-encoder-emitenumtag) | `pub fn emitEnumTag(self: *Self, tag: []const u8) !void` | `!void` | Emits an enum tag by name. |
+| [beginOptional](#fn-encoder-beginoptional) | `pub fn beginOptional(self: *Self, present: bool) !void` | `!void` | Emits the presence marker for an optional value. |
+| [beginArray](#fn-encoder-beginarray) | `pub fn beginArray(self: *Self, comptime T: type, len: usize) !void` | `!void` | Begins a fixed-length array. |
+| [beginSlice](#fn-encoder-beginslice) | `pub fn beginSlice(self: *Self, comptime Child: type, len: usize) !void` | `!void` | Begins a length-prefixed slice. |
+| [beginSeq](#fn-encoder-beginseq) | `pub fn beginSeq(self: *Self, len: ?usize) !void` | `!void` | Begins a length-prefixed sequence. |
+| [endSeq](#fn-encoder-endseq) | `pub fn endSeq(self: *Self) !void` | `!void` | Ends the current sequence. |
+| [beginStruct](#fn-encoder-beginstruct) | `pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void` | `!void` | Begins a struct or tagged union value. |
+| [emitFieldName](#fn-encoder-emitfieldname) | `pub fn emitFieldName(self: *Self, name: []const u8) !void` | `!void` | Emits or handles the next struct field name. |
+| [endStruct](#fn-encoder-endstruct) | `pub fn endStruct(self: *Self) !void` | `!void` | Ends the current struct or tagged union value. |
+| [finish](#fn-encoder-finish) | `pub fn finish(self: *Self) !void` | `!void` | Verifies that the binary document was completely written. |
 
 <a id="fn-encoder-emitnull"></a>
 
@@ -409,24 +411,26 @@ pub const Decoder = struct {
 
 ### Nested Declarations
 
-- [peek](#fn-decoder-peek)
-- [readNull](#fn-decoder-readnull)
-- [readBool](#fn-decoder-readbool)
-- [readInt](#fn-decoder-readint)
-- [readFloat](#fn-decoder-readfloat)
-- [readString](#fn-decoder-readstring)
-- [readBytes](#fn-decoder-readbytes)
-- [readEnum](#fn-decoder-readenum)
-- [readOptionalPresent](#fn-decoder-readoptionalpresent)
-- [beginArray](#fn-decoder-beginarray)
-- [beginSeq](#fn-decoder-beginseq)
-- [hasNextSeqElem](#fn-decoder-hasnextseqelem)
-- [endSeq](#fn-decoder-endseq)
-- [beginStruct](#fn-decoder-beginstruct)
-- [nextField](#fn-decoder-nextfield)
-- [endStruct](#fn-decoder-endstruct)
-- [skipValue](#fn-decoder-skipvalue)
-- [finish](#fn-decoder-finish)
+| Name | Signature | Return Type | Description |
+| --- | --- | --- | --- |
+| [peek](#fn-decoder-peek) | `pub fn peek(self: *Self) !Kind` | `!Kind` | Returns the next value kind when supported by the binary format. |
+| [readNull](#fn-decoder-readnull) | `pub fn readNull(self: *Self) !void` | `!void` | Reads a null value. |
+| [readBool](#fn-decoder-readbool) | `pub fn readBool(self: *Self) !bool` | `!bool` | Reads a boolean value. |
+| [readInt](#fn-decoder-readint) | `pub fn readInt(self: *Self, comptime T: type) !T` | `!T` | Reads an integer using the configured byte order. |
+| [readFloat](#fn-decoder-readfloat) | `pub fn readFloat(self: *Self, comptime T: type) !T` | `!T` | Reads a floating-point value from its raw IEEE bits. |
+| [readString](#fn-decoder-readstring) | `pub fn readString(self: *Self, allocator: std.mem.Allocator) ![]u8` | `![]u8` | Reads a UTF-8 string as allocator-owned bytes. |
+| [readBytes](#fn-decoder-readbytes) | `pub fn readBytes(self: *Self, allocator: std.mem.Allocator) ![]u8` | `![]u8` | Reads raw bytes into an allocator-owned slice. |
+| [readEnum](#fn-decoder-readenum) | `pub fn readEnum(self: *Self, comptime T: type) !T` | `!T` | Reads an enum value using the enum tag's integer storage size. |
+| [readOptionalPresent](#fn-decoder-readoptionalpresent) | `pub fn readOptionalPresent(self: *Self) !bool` | `!bool` | Reads and returns the optional presence marker. |
+| [beginArray](#fn-decoder-beginarray) | `pub fn beginArray(self: *Self, comptime T: type) !?usize` | `!?usize` | Begins reading a fixed-length array. |
+| [beginSeq](#fn-decoder-beginseq) | `pub fn beginSeq(self: *Self) !?usize` | `!?usize` | Begins reading a length-prefixed sequence. |
+| [hasNextSeqElem](#fn-decoder-hasnextseqelem) | `pub fn hasNextSeqElem(self: *Self) !bool` | `!bool` | Returns whether the current sequence has another element. |
+| [endSeq](#fn-decoder-endseq) | `pub fn endSeq(self: *Self) !void` | `!void` | Ends the current sequence. |
+| [beginStruct](#fn-decoder-beginstruct) | `pub fn beginStruct(self: *Self, comptime T: type) !void` | `!void` | Begins reading a struct or tagged union value. |
+| [nextField](#fn-decoder-nextfield) | `pub fn nextField(self: *Self) !?[]u8` | `!?[]u8` | Returns the next field name as allocator-owned bytes, or null when done. |
+| [endStruct](#fn-decoder-endstruct) | `pub fn endStruct(self: *Self) !void` | `!void` | Ends the current struct or tagged union value. |
+| [skipValue](#fn-decoder-skipvalue) | `pub fn skipValue(self: *Self) !void` | `!void` | Skips the next value when supported by the binary format. |
+| [finish](#fn-decoder-finish) | `pub fn finish(self: *Self) !void` | `!void` | Verifies that the binary document was completely read. |
 
 <a id="fn-decoder-peek"></a>
 
