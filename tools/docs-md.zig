@@ -830,16 +830,6 @@ fn renderModuleNavigation(
     try appendHeading(allocator, out, heading_level, "Navigation");
     try out.append(allocator, '\n');
     try out.print(allocator, "- [API Index]({s})\n", .{try indexHref(allocator, module.name)});
-
-    const current_index = findModuleIndex(docs, module.name) orelse 0;
-    if (current_index > 0) {
-        const previous = docs.modules.items[current_index - 1];
-        try out.print(allocator, "- Previous: [{s}]({s})\n", .{ previous.name, try moduleHref(allocator, module.name, previous.name) });
-    }
-    if (current_index + 1 < docs.modules.items.len) {
-        const next = docs.modules.items[current_index + 1];
-        try out.print(allocator, "- Next: [{s}]({s})\n", .{ next.name, try moduleHref(allocator, module.name, next.name) });
-    }
     if (parentModuleName(module.name)) |parent_name| {
         if (findModuleIndex(docs, parent_name) != null) {
             try out.print(allocator, "- Parent: [{s}]({s})\n", .{ parent_name, try moduleHref(allocator, module.name, parent_name) });
@@ -859,6 +849,15 @@ fn renderModuleNavigation(
     }
     if (wrote_submodules) try out.append(allocator, '\n');
     try out.append(allocator, '\n');
+    try renderAllDocumentsNavigation(allocator, out, docs, module.name);
+}
+
+fn renderAllDocumentsNavigation(allocator: Allocator, out: *std.ArrayList(u8), docs: *const PackageDocs, current_module: []const u8) !void {
+    try out.appendSlice(allocator, "<details>\n<summary>All documents</summary>\n\n");
+    for (docs.modules.items) |module| {
+        try out.print(allocator, "- [{s}]({s})\n", .{ module.name, try moduleHref(allocator, current_module, module.name) });
+    }
+    try out.appendSlice(allocator, "\n</details>\n\n");
 }
 
 fn findModuleIndex(docs: *const PackageDocs, module_name: []const u8) ?usize {
@@ -1423,6 +1422,8 @@ fn isAnchorByte(byte: u8) bool {
 }
 
 fn moduleOutputRelativePath(allocator: Allocator, module_name: []const u8) ![]const u8 {
+    if (std.mem.eql(u8, module_name, "root")) return allocator.dupe(u8, "root.md");
+
     var out = std.ArrayList(u8).empty;
     defer out.deinit(allocator);
     for (module_name) |byte| {
@@ -1490,6 +1491,45 @@ test "anchor generation is deterministic" {
     const anchor = try anchorAlloc(allocator, "fn", "Foo.bar!");
     defer allocator.free(anchor);
     try std.testing.expectEqualStrings("fn-foo-bar", anchor);
+}
+
+test "root module output path is stable" {
+    const allocator = std.testing.allocator;
+    const root_path = try moduleOutputRelativePath(allocator, "root");
+    defer allocator.free(root_path);
+    try std.testing.expectEqualStrings("root.md", root_path);
+}
+
+test "module navigation lists all documents without previous and next" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var docs = PackageDocs{ .name = "pkg" };
+    try docs.modules.append(allocator, .{ .name = "root", .path = "/tmp/zerde.zig", .doc = "" });
+    try docs.modules.append(allocator, .{ .name = "codec", .path = "/tmp/codec.zig", .doc = "" });
+    try docs.modules.append(allocator, .{ .name = "codec.json", .path = "/tmp/codec/json.zig", .doc = "" });
+
+    var out = std.ArrayList(u8).empty;
+    try renderModuleNavigation(allocator, &out, &docs, &docs.modules.items[1], 2, false);
+
+    try std.testing.expectEqualStrings(
+        \\## Navigation
+        \\
+        \\- [API Index](README.md)
+        \\- Submodules: [codec.json](codec/json.md)
+        \\
+        \\<details>
+        \\<summary>All documents</summary>
+        \\
+        \\- [root](root.md)
+        \\- [codec](codec.md)
+        \\- [codec.json](codec/json.md)
+        \\
+        \\</details>
+        \\
+        \\
+    , out.items);
 }
 
 test "type field signatures render inline with docs" {
