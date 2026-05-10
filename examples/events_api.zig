@@ -67,8 +67,8 @@ const TraceSink = struct {
     }
 };
 
-pub fn main() !void {
-    const allocator = std.heap.page_allocator;
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
     const input =
         \\{
         \\  "id": 42,

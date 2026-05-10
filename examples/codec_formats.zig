@@ -8,8 +8,8 @@ const Release = struct {
     downloads: u64,
 };
 
-pub fn main() !void {
-    const allocator = std.heap.page_allocator;
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
     const value = Release{
         .name = "zerde",
         .version = "0.1.0",

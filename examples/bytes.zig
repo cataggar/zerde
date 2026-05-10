@@ -23,8 +23,8 @@ fn printBase64(allocator: std.mem.Allocator, label: []const u8, bytes: []const u
     std.debug.print("{s}: {s}\n", .{ label, encoded });
 }
 
-pub fn main() !void {
-    const allocator = std.heap.page_allocator;
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
     const payload = [_]u8{ 0, 1, 2, 3, 4, 5 };
     const wrapped = [_]u8{ 'z', 'e', 'r', 'd', 'e' };
 

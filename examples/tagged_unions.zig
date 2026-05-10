@@ -20,8 +20,8 @@ const InternalEvent = union(enum) {
     pub const zerde = .{ .union_repr = .internal };
 };
 
-pub fn main() !void {
-    const allocator = std.heap.page_allocator;
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
 
     const external = try zerde.json.writeAlloc(allocator, ExternalEvent{ .login = .{ .user = "Ada" } });
     defer allocator.free(external);

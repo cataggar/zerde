@@ -18,8 +18,8 @@ const Config = struct {
     features: []const Feature,
 };
 
-pub fn main() !void {
-    const allocator = std.heap.page_allocator;
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
     const input =
         \\app_name = "zerde-demo"
         \\started_at = 2026-05-09T12:30:00Z

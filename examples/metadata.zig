@@ -21,8 +21,8 @@ const ApiUser = struct {
     };
 };
 
-pub fn main() !void {
-    const allocator = std.heap.page_allocator;
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
 
     const user = ApiUser{
         .user_id = 42,
