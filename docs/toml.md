@@ -15,6 +15,8 @@ TOML format support.
 - [write](#fn-write)
 - [writeWithOptions](#fn-writewithoptions)
 - [encoder](#fn-encoder)
+- [encoderWithOptions](#fn-encoderwithoptions)
+- [sectionEncoder](#fn-sectionencoder)
 - [read](#fn-read)
 - [writeAlloc](#fn-writealloc)
 - [writeAllocWithOptions](#fn-writeallocwithoptions)
@@ -27,6 +29,8 @@ TOML format support.
 - [WriteOptions](#type-writeoptions)
 - [Kind](#type-kind)
 - [Encoder](#type-encoder)
+- [EventEncoder](#type-eventencoder)
+- [SectionEncoder](#type-sectionencoder)
 - [Decoder](#type-decoder)
 
 <a id="type-writelayout"></a>
@@ -94,6 +98,34 @@ pub fn encoder(writer: *std.Io.Writer) Encoder
 ```
 
 References: [`Encoder`](#type-encoder)
+
+<a id="fn-encoderwithoptions"></a>
+
+## encoderWithOptions
+
+Returns a low-level TOML encoder using explicit writer options.
+
+Section layout buffers into an allocator-backed document tree until
+`EventEncoder.finish` is called. Call `EventEncoder.deinit` when done.
+
+```zig
+pub fn encoderWithOptions(allocator: std.mem.Allocator, writer: *std.Io.Writer, options: WriteOptions) EventEncoder
+```
+
+References: [`WriteOptions`](#type-writeoptions), [`EventEncoder`](#type-eventencoder)
+
+<a id="fn-sectionencoder"></a>
+
+## sectionEncoder
+
+Returns an allocator-backed low-level TOML encoder that emits section layout.
+Call `SectionEncoder.deinit` when done.
+
+```zig
+pub fn sectionEncoder(allocator: std.mem.Allocator, writer: *std.Io.Writer) SectionEncoder
+```
+
+References: [`SectionEncoder`](#type-sectionencoder)
 
 <a id="fn-read"></a>
 
@@ -316,6 +348,339 @@ pub fn emitEnumTag(self: *Self, tag: []const u8) !void
 <a id="fn-encoder-finish"></a>
 
 ### Encoder.finish
+
+```zig
+pub fn finish(self: *Self) !void
+```
+
+<a id="type-eventencoder"></a>
+
+## EventEncoder
+
+Options-aware low-level TOML encoder used by event-based serialization.
+
+The inline variant streams directly. The section variant buffers values until
+`finish`, then renders nested tables as `[table]` and `[[array]]` sections.
+
+```zig
+pub const EventEncoder = union(enum) { ... };
+```
+
+### Fields
+
+```zig
+    inline_tables: Encoder
+    sections: SectionEncoder
+```
+
+
+### Nested Declarations
+
+- [deinit](#fn-eventencoder-deinit)
+- [emitNull](#fn-eventencoder-emitnull)
+- [emitBool](#fn-eventencoder-emitbool)
+- [emitInt](#fn-eventencoder-emitint)
+- [emitFloat](#fn-eventencoder-emitfloat)
+- [emitString](#fn-eventencoder-emitstring)
+- [emitBytes](#fn-eventencoder-emitbytes)
+- [emitDateTime](#fn-eventencoder-emitdatetime)
+- [emitDateTimeRaw](#fn-eventencoder-emitdatetimeraw)
+- [beginSeq](#fn-eventencoder-beginseq)
+- [endSeq](#fn-eventencoder-endseq)
+- [beginStruct](#fn-eventencoder-beginstruct)
+- [emitFieldName](#fn-eventencoder-emitfieldname)
+- [endStruct](#fn-eventencoder-endstruct)
+- [emitEnumTag](#fn-eventencoder-emitenumtag)
+- [finish](#fn-eventencoder-finish)
+
+<a id="fn-eventencoder-deinit"></a>
+
+### EventEncoder.deinit
+
+```zig
+pub fn deinit(self: *Self) void
+```
+
+<a id="fn-eventencoder-emitnull"></a>
+
+### EventEncoder.emitNull
+
+```zig
+pub fn emitNull(self: *Self) !void
+```
+
+<a id="fn-eventencoder-emitbool"></a>
+
+### EventEncoder.emitBool
+
+```zig
+pub fn emitBool(self: *Self, value: bool) !void
+```
+
+<a id="fn-eventencoder-emitint"></a>
+
+### EventEncoder.emitInt
+
+```zig
+pub fn emitInt(self: *Self, value: anytype) !void
+```
+
+<a id="fn-eventencoder-emitfloat"></a>
+
+### EventEncoder.emitFloat
+
+```zig
+pub fn emitFloat(self: *Self, value: anytype) !void
+```
+
+<a id="fn-eventencoder-emitstring"></a>
+
+### EventEncoder.emitString
+
+```zig
+pub fn emitString(self: *Self, value: []const u8) !void
+```
+
+<a id="fn-eventencoder-emitbytes"></a>
+
+### EventEncoder.emitBytes
+
+```zig
+pub fn emitBytes(self: *Self, value: []const u8) !void
+```
+
+<a id="fn-eventencoder-emitdatetime"></a>
+
+### EventEncoder.emitDateTime
+
+```zig
+pub fn emitDateTime(self: *Self, comptime T: type, value: T) !void
+```
+
+<a id="fn-eventencoder-emitdatetimeraw"></a>
+
+### EventEncoder.emitDateTimeRaw
+
+```zig
+pub fn emitDateTimeRaw(self: *Self, value: []const u8) !void
+```
+
+<a id="fn-eventencoder-beginseq"></a>
+
+### EventEncoder.beginSeq
+
+```zig
+pub fn beginSeq(self: *Self, len: ?usize) !void
+```
+
+<a id="fn-eventencoder-endseq"></a>
+
+### EventEncoder.endSeq
+
+```zig
+pub fn endSeq(self: *Self) !void
+```
+
+<a id="fn-eventencoder-beginstruct"></a>
+
+### EventEncoder.beginStruct
+
+```zig
+pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void
+```
+
+<a id="fn-eventencoder-emitfieldname"></a>
+
+### EventEncoder.emitFieldName
+
+```zig
+pub fn emitFieldName(self: *Self, name: []const u8) !void
+```
+
+<a id="fn-eventencoder-endstruct"></a>
+
+### EventEncoder.endStruct
+
+```zig
+pub fn endStruct(self: *Self) !void
+```
+
+<a id="fn-eventencoder-emitenumtag"></a>
+
+### EventEncoder.emitEnumTag
+
+```zig
+pub fn emitEnumTag(self: *Self, tag: []const u8) !void
+```
+
+<a id="fn-eventencoder-finish"></a>
+
+### EventEncoder.finish
+
+```zig
+pub fn finish(self: *Self) !void
+```
+
+<a id="type-sectionencoder"></a>
+
+## SectionEncoder
+
+Allocator-backed low-level TOML encoder that emits section layout.
+
+```zig
+pub const SectionEncoder = struct { ... };
+```
+
+### Fields
+
+```zig
+    writer: *std.Io.Writer
+    tree: TreeEncoder
+```
+
+
+### Nested Declarations
+
+- [deinit](#fn-sectionencoder-deinit)
+- [emitNull](#fn-sectionencoder-emitnull)
+- [emitBool](#fn-sectionencoder-emitbool)
+- [emitInt](#fn-sectionencoder-emitint)
+- [emitFloat](#fn-sectionencoder-emitfloat)
+- [emitString](#fn-sectionencoder-emitstring)
+- [emitBytes](#fn-sectionencoder-emitbytes)
+- [emitDateTime](#fn-sectionencoder-emitdatetime)
+- [emitDateTimeRaw](#fn-sectionencoder-emitdatetimeraw)
+- [beginSeq](#fn-sectionencoder-beginseq)
+- [endSeq](#fn-sectionencoder-endseq)
+- [beginStruct](#fn-sectionencoder-beginstruct)
+- [emitFieldName](#fn-sectionencoder-emitfieldname)
+- [endStruct](#fn-sectionencoder-endstruct)
+- [emitEnumTag](#fn-sectionencoder-emitenumtag)
+- [finish](#fn-sectionencoder-finish)
+
+<a id="fn-sectionencoder-deinit"></a>
+
+### SectionEncoder.deinit
+
+```zig
+pub fn deinit(self: *Self) void
+```
+
+<a id="fn-sectionencoder-emitnull"></a>
+
+### SectionEncoder.emitNull
+
+```zig
+pub fn emitNull(self: *Self) !void
+```
+
+<a id="fn-sectionencoder-emitbool"></a>
+
+### SectionEncoder.emitBool
+
+```zig
+pub fn emitBool(self: *Self, value: bool) !void
+```
+
+<a id="fn-sectionencoder-emitint"></a>
+
+### SectionEncoder.emitInt
+
+```zig
+pub fn emitInt(self: *Self, value: anytype) !void
+```
+
+<a id="fn-sectionencoder-emitfloat"></a>
+
+### SectionEncoder.emitFloat
+
+```zig
+pub fn emitFloat(self: *Self, value: anytype) !void
+```
+
+<a id="fn-sectionencoder-emitstring"></a>
+
+### SectionEncoder.emitString
+
+```zig
+pub fn emitString(self: *Self, value: []const u8) !void
+```
+
+<a id="fn-sectionencoder-emitbytes"></a>
+
+### SectionEncoder.emitBytes
+
+```zig
+pub fn emitBytes(self: *Self, value: []const u8) !void
+```
+
+<a id="fn-sectionencoder-emitdatetime"></a>
+
+### SectionEncoder.emitDateTime
+
+```zig
+pub fn emitDateTime(self: *Self, comptime T: type, value: T) !void
+```
+
+<a id="fn-sectionencoder-emitdatetimeraw"></a>
+
+### SectionEncoder.emitDateTimeRaw
+
+```zig
+pub fn emitDateTimeRaw(self: *Self, value: []const u8) !void
+```
+
+<a id="fn-sectionencoder-beginseq"></a>
+
+### SectionEncoder.beginSeq
+
+```zig
+pub fn beginSeq(self: *Self, len: ?usize) !void
+```
+
+<a id="fn-sectionencoder-endseq"></a>
+
+### SectionEncoder.endSeq
+
+```zig
+pub fn endSeq(self: *Self) !void
+```
+
+<a id="fn-sectionencoder-beginstruct"></a>
+
+### SectionEncoder.beginStruct
+
+```zig
+pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void
+```
+
+<a id="fn-sectionencoder-emitfieldname"></a>
+
+### SectionEncoder.emitFieldName
+
+```zig
+pub fn emitFieldName(self: *Self, name: []const u8) !void
+```
+
+<a id="fn-sectionencoder-endstruct"></a>
+
+### SectionEncoder.endStruct
+
+```zig
+pub fn endStruct(self: *Self) !void
+```
+
+<a id="fn-sectionencoder-emitenumtag"></a>
+
+### SectionEncoder.emitEnumTag
+
+```zig
+pub fn emitEnumTag(self: *Self, tag: []const u8) !void
+```
+
+<a id="fn-sectionencoder-finish"></a>
+
+### SectionEncoder.finish
 
 ```zig
 pub fn finish(self: *Self) !void

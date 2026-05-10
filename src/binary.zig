@@ -20,7 +20,7 @@ pub fn write(writer: *std.Io.Writer, value: anytype) !void {
 
 /// Serializes `value` as compact binary to `writer` with explicit options.
 pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: Options) !void {
-    var enc = encoder(writer, options);
+    var enc = encoderWithOptions(writer, options);
     try serialize(value, &enc);
     try enc.finish();
 }
@@ -65,7 +65,12 @@ pub fn readSliceWithOptions(comptime T: type, allocator: std.mem.Allocator, inpu
 }
 
 /// Returns a low-level binary encoder for use with `zerde.serialize`.
-pub fn encoder(writer: *std.Io.Writer, options: Options) Encoder {
+pub fn encoder(writer: *std.Io.Writer) Encoder {
+    return encoderWithOptions(writer, .{});
+}
+
+/// Returns a low-level binary encoder with explicit options.
+pub fn encoderWithOptions(writer: *std.Io.Writer, options: Options) Encoder {
     return .{ .writer = writer, .options = options };
 }
 
@@ -773,8 +778,15 @@ test "binary honors endian differences" {
     const big = try writeAllocWithOptions(std.testing.allocator, @as(u32, 0x12345678), .{ .endian = .big });
     defer std.testing.allocator.free(big);
 
+    var buffer: [4]u8 = undefined;
+    var writer: std.Io.Writer = .fixed(&buffer);
+    var enc = encoderWithOptions(&writer, .{ .endian = .big });
+    try serialize(@as(u32, 0x12345678), &enc);
+    try enc.finish();
+
     try std.testing.expectEqualSlices(u8, &.{ 0x78, 0x56, 0x34, 0x12 }, little);
     try std.testing.expectEqualSlices(u8, &.{ 0x12, 0x34, 0x56, 0x78 }, big);
+    try std.testing.expectEqualSlices(u8, &.{ 0x12, 0x34, 0x56, 0x78 }, writer.buffered());
 }
 
 test "binary writes struct output in declaration order" {

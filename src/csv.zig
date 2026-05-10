@@ -96,7 +96,12 @@ pub fn readSliceWithOptions(comptime T: type, allocator: std.mem.Allocator, inpu
 }
 
 /// Returns a low-level CSV encoder for use with `zerde.serialize`.
-pub fn encoder(writer: *std.Io.Writer, options: Options) Encoder {
+pub fn encoder(writer: *std.Io.Writer) Encoder {
+    return encoderWithOptions(writer, .{});
+}
+
+/// Returns a low-level CSV encoder with explicit options.
+pub fn encoderWithOptions(writer: *std.Io.Writer, options: Options) Encoder {
     return .{ .writer = writer, .options = options };
 }
 
@@ -1823,12 +1828,20 @@ test "csv low-level encoder flattens nested structs" {
 
     var buffer: [256]u8 = undefined;
     var writer: std.Io.Writer = .fixed(&buffer);
-    var enc = encoder(&writer, .{});
+    var enc = encoder(&writer);
     const slice: []const Row = rows[0..];
     try @import("serialize.zig").serialize(slice, &enc);
     try enc.finish();
 
     try std.testing.expectEqualStrings("id,detail.code,detail.label,timestamp.seconds,timestamp.nanoseconds\r\n1,7,ok,10,20", writer.buffered());
+
+    var tab_buffer: [256]u8 = undefined;
+    var tab_writer: std.Io.Writer = .fixed(&tab_buffer);
+    var tab_enc = encoderWithOptions(&tab_writer, .{ .delimiter = .tab });
+    try @import("serialize.zig").serialize(slice, &tab_enc);
+    try tab_enc.finish();
+
+    try std.testing.expectEqualStrings("id\tdetail.code\tdetail.label\ttimestamp.seconds\ttimestamp.nanoseconds\r\n1\t7\tok\t10\t20", tab_writer.buffered());
 }
 
 test "csv low-level decoder reads flattened structs into trees" {

@@ -21,6 +21,7 @@ Compact binary format support.
 - [readSlice](#fn-readslice)
 - [readSliceWithOptions](#fn-readslicewithoptions)
 - [encoder](#fn-encoder)
+- [encoderWithOptions](#fn-encoderwithoptions)
 - [decoder](#fn-decoder)
 
 ## Types
@@ -142,7 +143,19 @@ References: [`Options`](#type-options)
 Returns a low-level binary encoder for use with `zerde.serialize`.
 
 ```zig
-pub fn encoder(writer: *std.Io.Writer, options: Options) Encoder
+pub fn encoder(writer: *std.Io.Writer) Encoder
+```
+
+References: [`Encoder`](#type-encoder)
+
+<a id="fn-encoderwithoptions"></a>
+
+## encoderWithOptions
+
+Returns a low-level binary encoder with explicit options.
+
+```zig
+pub fn encoderWithOptions(writer: *std.Io.Writer, options: Options) Encoder
 ```
 
 References: [`Options`](#type-options), [`Encoder`](#type-encoder)

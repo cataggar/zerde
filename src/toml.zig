@@ -52,13 +52,11 @@ pub fn writeWithOptions(allocator: std.mem.Allocator, writer: *std.Io.Writer, va
             try write(writer, value);
         },
         .sections => {
-            var enc = TreeEncoder.init(allocator);
+            var enc = sectionEncoder(allocator, writer);
             defer enc.deinit();
 
             try serialize(value, &enc);
-            const root = try enc.finish();
-            if (root.* != .table) return error.TomlRootMustBeStruct;
-            try renderDocument(writer, root.table);
+            try enc.finish();
         },
     }
 }
@@ -67,6 +65,23 @@ pub fn writeWithOptions(allocator: std.mem.Allocator, writer: *std.Io.Writer, va
 /// serialization code.
 pub fn encoder(writer: *std.Io.Writer) Encoder {
     return .{ .writer = writer };
+}
+
+/// Returns a low-level TOML encoder using explicit writer options.
+///
+/// Section layout buffers into an allocator-backed document tree until
+/// `EventEncoder.finish` is called. Call `EventEncoder.deinit` when done.
+pub fn encoderWithOptions(allocator: std.mem.Allocator, writer: *std.Io.Writer, options: WriteOptions) EventEncoder {
+    return switch (options.layout) {
+        .inline_tables => .{ .inline_tables = encoder(writer) },
+        .sections => .{ .sections = sectionEncoder(allocator, writer) },
+    };
+}
+
+/// Returns an allocator-backed low-level TOML encoder that emits section layout.
+/// Call `SectionEncoder.deinit` when done.
+pub fn sectionEncoder(allocator: std.mem.Allocator, writer: *std.Io.Writer) SectionEncoder {
+    return .{ .writer = writer, .tree = TreeEncoder.init(allocator) };
 }
 
 /// Deserializes TOML from `reader` into `T`.
@@ -358,6 +373,203 @@ pub const Encoder = struct {
         try self.writer.writeAll(value[run_start.*..index]);
         try self.writer.writeAll(escaped);
         run_start.* = index + 1;
+    }
+};
+
+/// Options-aware low-level TOML encoder used by event-based serialization.
+///
+/// The inline variant streams directly. The section variant buffers values until
+/// `finish`, then renders nested tables as `[table]` and `[[array]]` sections.
+pub const EventEncoder = union(enum) {
+    const Self = @This();
+
+    inline_tables: Encoder,
+    sections: SectionEncoder,
+
+    pub fn deinit(self: *Self) void {
+        switch (self.*) {
+            .inline_tables => {},
+            .sections => |*enc| enc.deinit(),
+        }
+    }
+
+    pub fn emitNull(self: *Self) !void {
+        switch (self.*) {
+            .inline_tables => |*enc| try enc.emitNull(),
+            .sections => |*enc| try enc.emitNull(),
+        }
+    }
+
+    pub fn emitBool(self: *Self, value: bool) !void {
+        switch (self.*) {
+            .inline_tables => |*enc| try enc.emitBool(value),
+            .sections => |*enc| try enc.emitBool(value),
+        }
+    }
+
+    pub fn emitInt(self: *Self, value: anytype) !void {
+        switch (self.*) {
+            .inline_tables => |*enc| try enc.emitInt(value),
+            .sections => |*enc| try enc.emitInt(value),
+        }
+    }
+
+    pub fn emitFloat(self: *Self, value: anytype) !void {
+        switch (self.*) {
+            .inline_tables => |*enc| try enc.emitFloat(value),
+            .sections => |*enc| try enc.emitFloat(value),
+        }
+    }
+
+    pub fn emitString(self: *Self, value: []const u8) !void {
+        switch (self.*) {
+            .inline_tables => |*enc| try enc.emitString(value),
+            .sections => |*enc| try enc.emitString(value),
+        }
+    }
+
+    pub fn emitBytes(self: *Self, value: []const u8) !void {
+        switch (self.*) {
+            .inline_tables => |*enc| try enc.emitBytes(value),
+            .sections => |*enc| try enc.emitBytes(value),
+        }
+    }
+
+    pub fn emitDateTime(self: *Self, comptime T: type, value: T) !void {
+        switch (self.*) {
+            .inline_tables => |*enc| try enc.emitDateTime(T, value),
+            .sections => |*enc| try enc.emitDateTime(T, value),
+        }
+    }
+
+    pub fn emitDateTimeRaw(self: *Self, value: []const u8) !void {
+        switch (self.*) {
+            .inline_tables => |*enc| try enc.emitDateTimeRaw(value),
+            .sections => |*enc| try enc.emitDateTimeRaw(value),
+        }
+    }
+
+    pub fn beginSeq(self: *Self, len: ?usize) !void {
+        switch (self.*) {
+            .inline_tables => |*enc| try enc.beginSeq(len),
+            .sections => |*enc| try enc.beginSeq(len),
+        }
+    }
+
+    pub fn endSeq(self: *Self) !void {
+        switch (self.*) {
+            .inline_tables => |*enc| try enc.endSeq(),
+            .sections => |*enc| try enc.endSeq(),
+        }
+    }
+
+    pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void {
+        switch (self.*) {
+            .inline_tables => |*enc| try enc.beginStruct(T, field_count),
+            .sections => |*enc| try enc.beginStruct(T, field_count),
+        }
+    }
+
+    pub fn emitFieldName(self: *Self, name: []const u8) !void {
+        switch (self.*) {
+            .inline_tables => |*enc| try enc.emitFieldName(name),
+            .sections => |*enc| try enc.emitFieldName(name),
+        }
+    }
+
+    pub fn endStruct(self: *Self) !void {
+        switch (self.*) {
+            .inline_tables => |*enc| try enc.endStruct(),
+            .sections => |*enc| try enc.endStruct(),
+        }
+    }
+
+    pub fn emitEnumTag(self: *Self, tag: []const u8) !void {
+        switch (self.*) {
+            .inline_tables => |*enc| try enc.emitEnumTag(tag),
+            .sections => |*enc| try enc.emitEnumTag(tag),
+        }
+    }
+
+    pub fn finish(self: *Self) !void {
+        switch (self.*) {
+            .inline_tables => |*enc| try enc.finish(),
+            .sections => |*enc| try enc.finish(),
+        }
+    }
+};
+
+/// Allocator-backed low-level TOML encoder that emits section layout.
+pub const SectionEncoder = struct {
+    const Self = @This();
+
+    writer: *std.Io.Writer,
+    tree: TreeEncoder,
+
+    pub fn deinit(self: *Self) void {
+        self.tree.deinit();
+    }
+
+    pub fn emitNull(self: *Self) !void {
+        try self.tree.emitNull();
+    }
+
+    pub fn emitBool(self: *Self, value: bool) !void {
+        try self.tree.emitBool(value);
+    }
+
+    pub fn emitInt(self: *Self, value: anytype) !void {
+        try self.tree.emitInt(value);
+    }
+
+    pub fn emitFloat(self: *Self, value: anytype) !void {
+        try self.tree.emitFloat(value);
+    }
+
+    pub fn emitString(self: *Self, value: []const u8) !void {
+        try self.tree.emitString(value);
+    }
+
+    pub fn emitBytes(self: *Self, value: []const u8) !void {
+        try self.tree.emitBytes(value);
+    }
+
+    pub fn emitDateTime(self: *Self, comptime T: type, value: T) !void {
+        try self.tree.emitDateTime(T, value);
+    }
+
+    pub fn emitDateTimeRaw(self: *Self, value: []const u8) !void {
+        try self.tree.emitDateTimeRaw(value);
+    }
+
+    pub fn beginSeq(self: *Self, len: ?usize) !void {
+        try self.tree.beginSeq(len);
+    }
+
+    pub fn endSeq(self: *Self) !void {
+        try self.tree.endSeq();
+    }
+
+    pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void {
+        try self.tree.beginStruct(T, field_count);
+    }
+
+    pub fn emitFieldName(self: *Self, name: []const u8) !void {
+        try self.tree.emitFieldName(name);
+    }
+
+    pub fn endStruct(self: *Self) !void {
+        try self.tree.endStruct();
+    }
+
+    pub fn emitEnumTag(self: *Self, tag: []const u8) !void {
+        try self.tree.emitEnumTag(tag);
+    }
+
+    pub fn finish(self: *Self) !void {
+        const root = try self.tree.finish();
+        if (root.* != .table) return error.TomlRootMustBeStruct;
+        try renderDocument(self.writer, root.table);
     }
 };
 
@@ -2231,6 +2443,41 @@ test "toml writes nested structs as table sections" {
         \\[logging]
         \\level = "debug"
     );
+}
+
+test "toml event encoder supports section layout" {
+    var reader: std.Io.Reader = .fixed(
+        \\name = "app"
+        \\database = { host = "localhost", port = 5432 }
+        \\servers = [{ host = "one", port = 1 }, { host = "two", port = 2 }]
+    );
+    var dec = try decoder(&reader, std.testing.allocator);
+    defer dec.deinit();
+
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer out.deinit();
+    var enc = encoderWithOptions(std.testing.allocator, &out.writer, .{ .layout = .sections });
+    defer enc.deinit();
+
+    try @import("events.zig").pipe(std.testing.allocator, &dec, &enc);
+    try dec.finish();
+    try enc.finish();
+
+    try std.testing.expectEqualStrings(
+        \\name = "app"
+        \\
+        \\[database]
+        \\host = "localhost"
+        \\port = 5432
+        \\
+        \\[[servers]]
+        \\host = "one"
+        \\port = 1
+        \\
+        \\[[servers]]
+        \\host = "two"
+        \\port = 2
+    , out.writer.buffered());
 }
 
 test "toml write streams arrays of structs inline" {

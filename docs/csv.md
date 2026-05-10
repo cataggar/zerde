@@ -21,6 +21,7 @@ CSV and delimiter-separated tabular text support.
 - [readSlice](#fn-readslice)
 - [readSliceWithOptions](#fn-readslicewithoptions)
 - [encoder](#fn-encoder)
+- [encoderWithOptions](#fn-encoderwithoptions)
 - [decoder](#fn-decoder)
 
 ## Types
@@ -167,7 +168,19 @@ References: [`Options`](#type-options)
 Returns a low-level CSV encoder for use with `zerde.serialize`.
 
 ```zig
-pub fn encoder(writer: *std.Io.Writer, options: Options) Encoder
+pub fn encoder(writer: *std.Io.Writer) Encoder
+```
+
+References: [`Encoder`](#type-encoder)
+
+<a id="fn-encoderwithoptions"></a>
+
+## encoderWithOptions
+
+Returns a low-level CSV encoder with explicit options.
+
+```zig
+pub fn encoderWithOptions(writer: *std.Io.Writer, options: Options) Encoder
 ```
 
 References: [`Options`](#type-options), [`Encoder`](#type-encoder)
@@ -424,6 +437,7 @@ pub const Decoder = struct { ... };
 - [hasNextSeqElem](#fn-decoder-hasnextseqelem)
 - [endSeq](#fn-decoder-endseq)
 - [beginStruct](#fn-decoder-beginstruct)
+- [beginStructEvent](#fn-decoder-beginstructevent)
 - [nextField](#fn-decoder-nextfield)
 - [endStruct](#fn-decoder-endstruct)
 - [skipValue](#fn-decoder-skipvalue)
@@ -533,6 +547,14 @@ pub fn endSeq(self: *Self) !void
 
 ```zig
 pub fn beginStruct(self: *Self, comptime T: type) !void
+```
+
+<a id="fn-decoder-beginstructevent"></a>
+
+### Decoder.beginStructEvent
+
+```zig
+pub fn beginStructEvent(self: *Self) !?usize
 ```
 
 <a id="fn-decoder-nextfield"></a>

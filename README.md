@@ -17,14 +17,14 @@ Zerde is a small Zig 0.16 serialization framework built around comptime reflecti
 
 ## Status
 
-The current version is `0.2.0` and targets Zig `0.16.0` or newer. The API is usable, but still early.
+The current version is `0.2.1` and targets Zig `0.16.0` or newer. The API is usable, but still early.
 
 ## Quick Start
 
 1. Add `zerde` to your Zig package dependencies:
 
 ```sh
-zig fetch --save git+https://codeberg.org/gron/zerde#v0.2.0
+zig fetch --save git+https://codeberg.org/gron/zerde#v0.2.1
 ```
 
 2. Wire the dependency into your executable in `build.zig`:
@@ -104,7 +104,7 @@ Common helpers:
 - `writeAllocWithOptions(...)`
 - `read(T, allocator, reader)`
 - `readSlice(T, allocator, input)`
-- `encoder(...)` and `decoder(...)` for low-level integration with `zerde.serialize` and `zerde.deserialize`
+- `encoder(...)`, `encoderWithOptions(...)`, and `decoder(...)` for low-level integration with `zerde.serialize` and `zerde.deserialize`
 
 ## Structural Events
 
@@ -419,6 +419,7 @@ TOML:
 - TOML has no null value, so serializing null optionals returns `error.UnsupportedTomlNull`.
 - Integers are limited to TOML's signed 64-bit range.
 - Writer layout can be `.inline_tables` or `.sections`.
+- Section layout is also available to event/low-level writers through `toml.encoderWithOptions(...)`.
 - `zerde.LocalDate`, `zerde.LocalTime`, `zerde.LocalDateTime`, and `zerde.OffsetDateTime` use native TOML date/time literals.
 
 MessagePack:
@@ -531,7 +532,7 @@ zig build docs-serve -- 0.0.0.0 9000
 - Direct read: `read` and `readWithOptions` when options exist.
 - Alloc write: `writeAlloc` and `writeAllocWithOptions` when options exist.
 - Slice read: `readSlice` and `readSliceWithOptions` when options exist.
-- Low-level API: `encoder` and/or `decoder` for integration with `zerde.serialize`, `zerde.deserialize`, custom hooks, and structural events.
+- Low-level API: `encoder`, `encoderWithOptions`, and/or `decoder` for integration with `zerde.serialize`, `zerde.deserialize`, custom hooks, and structural events.
 
 Structural event targets are more format dependent than sources. JSON, MessagePack, ZON, and Human can generally receive `events.Value.write` output. TOML can receive object-shaped values that satisfy TOML's root-table and no-null constraints. CSV and Binary should be treated as type-directed targets rather than dynamic event targets.
 
