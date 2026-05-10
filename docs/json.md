@@ -188,23 +188,23 @@ pub const Decoder = struct {
 
 ### Nested Declarations
 
-| Name | Signature | Return Type | Description |
+| Name | Parameters | Return Type | Description |
 | --- | --- | --- | --- |
-| [peek](#fn-decoder-peek) | `pub fn peek(self: *Self) !Kind` | `!Kind` | Returns the kind of the next JSON value. |
-| [readNull](#fn-decoder-readnull) | `pub fn readNull(self: *Self) !void` | `!void` | Reads a JSON null value. |
-| [readBool](#fn-decoder-readbool) | `pub fn readBool(self: *Self) !bool` | `!bool` | Reads a JSON boolean value. |
-| [readInt](#fn-decoder-readint) | `pub fn readInt(self: *Self, comptime T: type) !T` | `!T` | Reads a JSON integer into &#96;T&#96;. |
-| [readFloat](#fn-decoder-readfloat) | `pub fn readFloat(self: *Self, comptime T: type) !T` | `!T` | Reads a JSON number into floating-point type &#96;T&#96;. |
-| [readString](#fn-decoder-readstring) | `pub fn readString(self: *Self, allocator: std.mem.Allocator) ![]u8` | `![]u8` | Reads a JSON string as allocator-owned UTF-8 bytes. |
-| [beginSeq](#fn-decoder-beginseq) | `pub fn beginSeq(self: *Self) !?usize` | `!?usize` | Begins reading a JSON array. |
-| [hasNextSeqElem](#fn-decoder-hasnextseqelem) | `pub fn hasNextSeqElem(self: *Self) !bool` | `!bool` | Returns whether the current JSON array has another element. |
-| [endSeq](#fn-decoder-endseq) | `pub fn endSeq(self: *Self) !void` | `!void` | Ends the current JSON array. |
-| [beginStruct](#fn-decoder-beginstruct) | `pub fn beginStruct(self: *Self, comptime T: type) !void` | `!void` | Begins reading a JSON object. |
-| [beginStructEvent](#fn-decoder-beginstructevent) | `pub fn beginStructEvent(self: *Self) !?usize` | `!?usize` | Begins reading a JSON object for event consumers. JSON does not expose the object field count before the object has been read. |
-| [nextField](#fn-decoder-nextfield) | `pub fn nextField(self: *Self) !?[]u8` | `!?[]u8` | Returns the next object field name as allocator-owned bytes, or null when done. |
-| [endStruct](#fn-decoder-endstruct) | `pub fn endStruct(self: *Self) !void` | `!void` | Ends the current JSON object. |
-| [skipValue](#fn-decoder-skipvalue) | `pub fn skipValue(self: *Self) !void` | `!void` | Skips one complete JSON value. |
-| [finish](#fn-decoder-finish) | `pub fn finish(self: *Self) !void` | `!void` | Verifies that the JSON document was completely read. |
+| [peek](#fn-decoder-peek) | `self: *Self` | `!Kind` | Returns the kind of the next JSON value. |
+| [readNull](#fn-decoder-readnull) | `self: *Self` | `!void` | Reads a JSON null value. |
+| [readBool](#fn-decoder-readbool) | `self: *Self` | `!bool` | Reads a JSON boolean value. |
+| [readInt](#fn-decoder-readint) | `self: *Self, comptime T: type` | `!T` | Reads a JSON integer into &#96;T&#96;. |
+| [readFloat](#fn-decoder-readfloat) | `self: *Self, comptime T: type` | `!T` | Reads a JSON number into floating-point type &#96;T&#96;. |
+| [readString](#fn-decoder-readstring) | `self: *Self, allocator: std.mem.Allocator` | `![]u8` | Reads a JSON string as allocator-owned UTF-8 bytes. |
+| [beginSeq](#fn-decoder-beginseq) | `self: *Self` | `!?usize` | Begins reading a JSON array. |
+| [hasNextSeqElem](#fn-decoder-hasnextseqelem) | `self: *Self` | `!bool` | Returns whether the current JSON array has another element. |
+| [endSeq](#fn-decoder-endseq) | `self: *Self` | `!void` | Ends the current JSON array. |
+| [beginStruct](#fn-decoder-beginstruct) | `self: *Self, comptime T: type` | `!void` | Begins reading a JSON object. |
+| [beginStructEvent](#fn-decoder-beginstructevent) | `self: *Self` | `!?usize` | Begins reading a JSON object for event consumers. JSON does not expose the object field count before the object has been read. |
+| [nextField](#fn-decoder-nextfield) | `self: *Self` | `!?[]u8` | Returns the next object field name as allocator-owned bytes, or null when done. |
+| [endStruct](#fn-decoder-endstruct) | `self: *Self` | `!void` | Ends the current JSON object. |
+| [skipValue](#fn-decoder-skipvalue) | `self: *Self` | `!void` | Skips one complete JSON value. |
+| [finish](#fn-decoder-finish) | `self: *Self` | `!void` | Verifies that the JSON document was completely read. |
 
 <a id="fn-decoder-peek"></a>
 
@@ -381,21 +381,21 @@ pub const Encoder = struct {
 
 ### Nested Declarations
 
-| Name | Signature | Return Type | Description |
+| Name | Parameters | Return Type | Description |
 | --- | --- | --- | --- |
-| [emitNull](#fn-encoder-emitnull) | `pub fn emitNull(self: *Self) !void` | `!void` | Emits the JSON &#96;null&#96; value. |
-| [emitBool](#fn-encoder-emitbool) | `pub fn emitBool(self: *Self, value: bool) !void` | `!void` | Emits a JSON boolean value. |
-| [emitInt](#fn-encoder-emitint) | `pub fn emitInt(self: *Self, value: anytype) !void` | `!void` | Emits a JSON integer value. |
-| [emitFloat](#fn-encoder-emitfloat) | `pub fn emitFloat(self: *Self, value: anytype) !void` | `!void` | Emits a JSON number from a finite float. |
-| [emitString](#fn-encoder-emitstring) | `pub fn emitString(self: *Self, value: []const u8) !void` | `!void` | Emits a JSON string after validating that &#96;value&#96; is valid UTF-8. |
-| [emitBytes](#fn-encoder-emitbytes) | `pub fn emitBytes(self: *Self, value: []const u8) !void` | `!void` | Emits raw bytes as a base64 JSON string. |
-| [beginSeq](#fn-encoder-beginseq) | `pub fn beginSeq(self: *Self, len: ?usize) !void` | `!void` | Begins a JSON array. |
-| [endSeq](#fn-encoder-endseq) | `pub fn endSeq(self: *Self) !void` | `!void` | Ends the current JSON array. |
-| [beginStruct](#fn-encoder-beginstruct) | `pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void` | `!void` | Begins a JSON object for a Zig struct. |
-| [emitFieldName](#fn-encoder-emitfieldname) | `pub fn emitFieldName(self: *Self, name: []const u8) !void` | `!void` | Emits a JSON object field name after validating that &#96;name&#96; is valid UTF-8. |
-| [endStruct](#fn-encoder-endstruct) | `pub fn endStruct(self: *Self) !void` | `!void` | Ends the current JSON object. |
-| [emitEnumTag](#fn-encoder-emitenumtag) | `pub fn emitEnumTag(self: *Self, tag: []const u8) !void` | `!void` | Emits an enum tag as a JSON string. |
-| [finish](#fn-encoder-finish) | `pub fn finish(self: *Self) !void` | `!void` | Verifies that exactly one complete JSON root value has been emitted. |
+| [emitNull](#fn-encoder-emitnull) | `self: *Self` | `!void` | Emits the JSON &#96;null&#96; value. |
+| [emitBool](#fn-encoder-emitbool) | `self: *Self, value: bool` | `!void` | Emits a JSON boolean value. |
+| [emitInt](#fn-encoder-emitint) | `self: *Self, value: anytype` | `!void` | Emits a JSON integer value. |
+| [emitFloat](#fn-encoder-emitfloat) | `self: *Self, value: anytype` | `!void` | Emits a JSON number from a finite float. |
+| [emitString](#fn-encoder-emitstring) | `self: *Self, value: []const u8` | `!void` | Emits a JSON string after validating that &#96;value&#96; is valid UTF-8. |
+| [emitBytes](#fn-encoder-emitbytes) | `self: *Self, value: []const u8` | `!void` | Emits raw bytes as a base64 JSON string. |
+| [beginSeq](#fn-encoder-beginseq) | `self: *Self, len: ?usize` | `!void` | Begins a JSON array. |
+| [endSeq](#fn-encoder-endseq) | `self: *Self` | `!void` | Ends the current JSON array. |
+| [beginStruct](#fn-encoder-beginstruct) | `self: *Self, comptime T: type, field_count: usize` | `!void` | Begins a JSON object for a Zig struct. |
+| [emitFieldName](#fn-encoder-emitfieldname) | `self: *Self, name: []const u8` | `!void` | Emits a JSON object field name after validating that &#96;name&#96; is valid UTF-8. |
+| [endStruct](#fn-encoder-endstruct) | `self: *Self` | `!void` | Ends the current JSON object. |
+| [emitEnumTag](#fn-encoder-emitenumtag) | `self: *Self, tag: []const u8` | `!void` | Emits an enum tag as a JSON string. |
+| [finish](#fn-encoder-finish) | `self: *Self` | `!void` | Verifies that exactly one complete JSON root value has been emitted. |
 
 <a id="fn-encoder-emitnull"></a>
 

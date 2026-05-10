@@ -81,20 +81,20 @@ pub const Encoder = struct {
 
 ### Nested Declarations
 
-| Name | Signature | Return Type | Description |
+| Name | Parameters | Return Type | Description |
 | --- | --- | --- | --- |
-| [emitNull](#fn-encoder-emitnull) | `pub fn emitNull(self: *Self) !void` | `!void` | Emits the &#96;null&#96; value. |
-| [emitBool](#fn-encoder-emitbool) | `pub fn emitBool(self: *Self, value: bool) !void` | `!void` | Emits a boolean value. |
-| [emitInt](#fn-encoder-emitint) | `pub fn emitInt(self: *Self, value: anytype) !void` | `!void` | Emits an integer value. |
-| [emitFloat](#fn-encoder-emitfloat) | `pub fn emitFloat(self: *Self, value: anytype) !void` | `!void` | Emits a float value. |
-| [emitString](#fn-encoder-emitstring) | `pub fn emitString(self: *Self, value: []const u8) !void` | `!void` | Emits a quoted string with common escapes. |
-| [emitBytes](#fn-encoder-emitbytes) | `pub fn emitBytes(self: *Self, value: []const u8) !void` | `!void` | Emits raw bytes as a base64 string. |
-| [beginSeq](#fn-encoder-beginseq) | `pub fn beginSeq(self: *Self, len: ?usize) !void` | `!void` | Begins a sequence. |
-| [endSeq](#fn-encoder-endseq) | `pub fn endSeq(self: *Self) !void` | `!void` | Ends the current sequence. |
-| [beginStruct](#fn-encoder-beginstruct) | `pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void` | `!void` | Begins a struct representation using the short Zig type name. |
-| [emitFieldName](#fn-encoder-emitfieldname) | `pub fn emitFieldName(self: *Self, name: []const u8) !void` | `!void` | Emits the next struct field name. |
-| [endStruct](#fn-encoder-endstruct) | `pub fn endStruct(self: *Self) !void` | `!void` | Ends the current struct representation. |
-| [emitEnumTag](#fn-encoder-emitenumtag) | `pub fn emitEnumTag(self: *Self, tag: []const u8) !void` | `!void` | Emits an enum tag as a string. |
+| [emitNull](#fn-encoder-emitnull) | `self: *Self` | `!void` | Emits the &#96;null&#96; value. |
+| [emitBool](#fn-encoder-emitbool) | `self: *Self, value: bool` | `!void` | Emits a boolean value. |
+| [emitInt](#fn-encoder-emitint) | `self: *Self, value: anytype` | `!void` | Emits an integer value. |
+| [emitFloat](#fn-encoder-emitfloat) | `self: *Self, value: anytype` | `!void` | Emits a float value. |
+| [emitString](#fn-encoder-emitstring) | `self: *Self, value: []const u8` | `!void` | Emits a quoted string with common escapes. |
+| [emitBytes](#fn-encoder-emitbytes) | `self: *Self, value: []const u8` | `!void` | Emits raw bytes as a base64 string. |
+| [beginSeq](#fn-encoder-beginseq) | `self: *Self, len: ?usize` | `!void` | Begins a sequence. |
+| [endSeq](#fn-encoder-endseq) | `self: *Self` | `!void` | Ends the current sequence. |
+| [beginStruct](#fn-encoder-beginstruct) | `self: *Self, comptime T: type, field_count: usize` | `!void` | Begins a struct representation using the short Zig type name. |
+| [emitFieldName](#fn-encoder-emitfieldname) | `self: *Self, name: []const u8` | `!void` | Emits the next struct field name. |
+| [endStruct](#fn-encoder-endstruct) | `self: *Self` | `!void` | Ends the current struct representation. |
+| [emitEnumTag](#fn-encoder-emitenumtag) | `self: *Self, tag: []const u8` | `!void` | Emits an enum tag as a string. |
 
 <a id="fn-encoder-emitnull"></a>
 

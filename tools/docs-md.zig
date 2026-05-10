@@ -957,16 +957,21 @@ fn renderDecl(
 }
 
 fn renderNestedDeclarationsTable(allocator: Allocator, out: *std.ArrayList(u8), children: []const DeclDocs, parent_name: []const u8) !void {
-    try out.appendSlice(allocator, "| Name | Signature | Return Type | Description |\n");
+    try out.appendSlice(allocator, "| Name | Parameters | Return Type | Description |\n");
     try out.appendSlice(allocator, "| --- | --- | --- | --- |\n");
     for (children) |child| {
         const child_anchor = try declAnchor(allocator, child, parent_name);
+        const parameters = functionParameters(child.signature);
         const return_type = functionReturnType(child.signature);
         try out.appendSlice(allocator, "| [");
         try appendTableCellEscaped(allocator, out, child.name);
-        try out.print(allocator, "](#{s}) | `", .{child_anchor});
-        try appendTableCellEscaped(allocator, out, singleLineText(child.signature));
-        try out.appendSlice(allocator, "` | ");
+        try out.print(allocator, "](#{s}) | ", .{child_anchor});
+        if (parameters.len != 0) {
+            try out.append(allocator, '`');
+            try appendTableCellEscaped(allocator, out, parameters);
+            try out.append(allocator, '`');
+        }
+        try out.appendSlice(allocator, " | ");
         if (return_type.len != 0) {
             try out.append(allocator, '`');
             try appendTableCellEscaped(allocator, out, return_type);
@@ -1072,30 +1077,41 @@ fn appendTableCellEscaped(allocator: Allocator, out: *std.ArrayList(u8), text: [
     }
 }
 
-fn singleLineText(text: []const u8) []const u8 {
-    return std.mem.trim(u8, text, &std.ascii.whitespace);
-}
-
 fn firstDocSentence(doc: []const u8) []const u8 {
     const trimmed = std.mem.trim(u8, doc, &std.ascii.whitespace);
     if (std.mem.indexOf(u8, trimmed, "\n\n")) |end| return trimmed[0..end];
     return trimmed;
 }
 
-fn functionReturnType(signature: []const u8) []const u8 {
-    const fn_index = std.mem.indexOf(u8, signature, "fn") orelse return "";
-    if (fn_index > 0 and isIdentContinue(signature[fn_index - 1])) return "";
-    const after_fn = fn_index + 2;
-    if (after_fn < signature.len and isIdentContinue(signature[after_fn])) return "";
-    const lparen = std.mem.indexOfScalarPos(u8, signature, after_fn, '(') orelse return "";
-    const params_end = matchingParenEnd(signature, lparen) orelse return "";
+const FunctionParamBounds = struct {
+    lparen: usize,
+    end: usize,
+};
 
-    var tail = std.mem.trim(u8, signature[params_end..], &std.ascii.whitespace);
+fn functionParameters(signature: []const u8) []const u8 {
+    const bounds = functionParamBounds(signature) orelse return "";
+    return std.mem.trim(u8, signature[bounds.lparen + 1 .. bounds.end - 1], &std.ascii.whitespace);
+}
+
+fn functionReturnType(signature: []const u8) []const u8 {
+    const bounds = functionParamBounds(signature) orelse return "";
+
+    var tail = std.mem.trim(u8, signature[bounds.end..], &std.ascii.whitespace);
     while (consumeFnModifier(tail)) |next| tail = std.mem.trim(u8, next, &std.ascii.whitespace);
     if (std.mem.indexOfScalar(u8, tail, '{')) |brace| tail = tail[0..brace];
     tail = std.mem.trim(u8, tail, &std.ascii.whitespace);
     if (std.mem.endsWith(u8, tail, ";")) tail = std.mem.trim(u8, tail[0 .. tail.len - 1], &std.ascii.whitespace);
     return tail;
+}
+
+fn functionParamBounds(signature: []const u8) ?FunctionParamBounds {
+    const fn_index = std.mem.indexOf(u8, signature, "fn") orelse return null;
+    if (fn_index > 0 and isIdentContinue(signature[fn_index - 1])) return null;
+    const after_fn = fn_index + 2;
+    if (after_fn < signature.len and isIdentContinue(signature[after_fn])) return null;
+    const lparen = std.mem.indexOfScalarPos(u8, signature, after_fn, '(') orelse return null;
+    const end = matchingParenEnd(signature, lparen) orelse return null;
+    return .{ .lparen = lparen, .end = end };
 }
 
 fn consumeFnModifier(text: []const u8) ?[]const u8 {
@@ -1708,9 +1724,9 @@ test "nested declarations render summary table before details" {
         \\
         \\### Nested Declarations
         \\
-        \\| Name | Signature | Return Type | Description |
+        \\| Name | Parameters | Return Type | Description |
         \\| --- | --- | --- | --- |
-        \\| [init](#fn-api-init) | `pub fn init(name: []const u8) !Api` | `!Api` | Create an Api. Second line. |
+        \\| [init](#fn-api-init) | `name: []const u8` | `!Api` | Create an Api. Second line. |
         \\
         \\<a id="fn-api-init"></a>
         \\

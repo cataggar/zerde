@@ -78,10 +78,10 @@ pub const Value = union(enum) {
 
 ### Nested Declarations
 
-| Name | Signature | Return Type | Description |
+| Name | Parameters | Return Type | Description |
 | --- | --- | --- | --- |
-| [deinit](#fn-value-deinit) | `pub fn deinit(self: *Value, allocator: std.mem.Allocator) void` | `void` | Frees memory owned by this value and all nested values. |
-| [write](#fn-value-write) | `pub fn write(self: Value, encoder: anytype) !void` | `!void` | Emits this value into any Zerde encoder. |
+| [deinit](#fn-value-deinit) | `self: *Value, allocator: std.mem.Allocator` | `void` | Frees memory owned by this value and all nested values. |
+| [write](#fn-value-write) | `self: Value, encoder: anytype` | `!void` | Emits this value into any Zerde encoder. |
 
 <a id="fn-value-deinit"></a>
 

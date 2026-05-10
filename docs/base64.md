@@ -36,11 +36,11 @@ pub const Bytes = struct {
 
 ### Nested Declarations
 
-| Name | Signature | Return Type | Description |
+| Name | Parameters | Return Type | Description |
 | --- | --- | --- | --- |
-| [slice](#fn-bytes-slice) | `pub fn slice(self: Bytes) []const u8` | `[]const u8` | Returns the wrapped byte slice. |
-| [len](#fn-bytes-len) | `pub fn len(self: Bytes) usize` | `usize` | Returns the number of wrapped bytes. |
-| [isEmpty](#fn-bytes-isempty) | `pub fn isEmpty(self: Bytes) bool` | `bool` | Returns true when no bytes are wrapped. |
+| [slice](#fn-bytes-slice) | `self: Bytes` | `[]const u8` | Returns the wrapped byte slice. |
+| [len](#fn-bytes-len) | `self: Bytes` | `usize` | Returns the number of wrapped bytes. |
+| [isEmpty](#fn-bytes-isempty) | `self: Bytes` | `bool` | Returns true when no bytes are wrapped. |
 
 <a id="fn-bytes-slice"></a>
 

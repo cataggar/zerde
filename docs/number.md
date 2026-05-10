@@ -145,10 +145,10 @@ pub const Token = union(enum) {
 
 ### Nested Declarations
 
-| Name | Signature | Return Type | Description |
+| Name | Parameters | Return Type | Description |
 | --- | --- | --- | --- |
-| [deinit](#fn-token-deinit) | `pub fn deinit(self: Token, allocator: std.mem.Allocator) void` | `void` | Frees the token bytes owned by &#96;self&#96;. |
-| [isFloat](#fn-token-isfloat) | `pub fn isFloat(self: Token) bool` | `bool` | Returns whether this token is a float token. |
+| [deinit](#fn-token-deinit) | `self: Token, allocator: std.mem.Allocator` | `void` | Frees the token bytes owned by &#96;self&#96;. |
+| [isFloat](#fn-token-isfloat) | `self: Token` | `bool` | Returns whether this token is a float token. |
 
 <a id="fn-token-deinit"></a>
 
