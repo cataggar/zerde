@@ -149,7 +149,16 @@ References: [`Decoder`](#type-decoder)
 ZON value kinds reported by `Decoder.peek`.
 
 ```zig
-pub const Kind = enum {};
+pub const Kind = enum {
+    null,
+    bool,
+    int,
+    float,
+    string,
+    enum_,
+    seq,
+    struct_,
+};
 ```
 
 <a id="type-encoder"></a>

@@ -25,7 +25,15 @@ Type-specialized codec API.
 Formats supported by the simple codec dispatch API.
 
 ```zig
-pub const Format = enum {};
+pub const Format = enum {
+    json,
+    toml,
+    msgpack,
+    zon,
+    binary,
+    csv,
+    human,
+};
 ```
 
 <a id="fn-codec"></a>

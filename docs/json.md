@@ -160,7 +160,15 @@ References: [`Decoder`](#type-decoder)
 JSON value kinds reported by `Decoder.peek`.
 
 ```zig
-pub const Kind = enum {};
+pub const Kind = enum {
+    null,
+    bool,
+    int,
+    float,
+    string,
+    seq,
+    struct_,
+};
 ```
 
 <a id="type-decoder"></a>

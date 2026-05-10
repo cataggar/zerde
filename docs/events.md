@@ -62,6 +62,7 @@ for `consume` instead.
 
 ```zig
 pub const Value = union(enum) {
+    null,
     bool: bool,
     int: i128,
     float: f64,

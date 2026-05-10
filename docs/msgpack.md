@@ -165,7 +165,26 @@ References: [`Decoder`](#type-decoder)
 MessagePack value kinds reported by `Decoder.peek`.
 
 ```zig
-pub const Kind = enum {};
+pub const Kind = enum {
+    /// MessagePack nil.
+    null,
+    /// MessagePack boolean.
+    bool,
+    /// MessagePack integer.
+    int,
+    /// MessagePack 32-bit or 64-bit float.
+    float,
+    /// MessagePack str value.
+    string,
+    /// MessagePack bin value.
+    binary,
+    /// MessagePack array value.
+    seq,
+    /// MessagePack map value.
+    struct_,
+    /// MessagePack extension value.
+    extension,
+};
 ```
 
 <a id="type-encoder"></a>

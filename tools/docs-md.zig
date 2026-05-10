@@ -433,7 +433,7 @@ fn collectDecls(
 
             var kind: DeclKind = if (mut == .keyword_var) .variable else .constant;
             if (init_node) |init| {
-                if (containerKind(tree, init) != null) {
+                if (containerKind(tree, init) != null or isErrorSetDecl(tree, init)) {
                     kind = .type;
                 } else if (import_path != null) {
                     kind = .import;
@@ -456,7 +456,9 @@ fn collectDecls(
             if (init_node) |init| {
                 var container_buffer: [2]Ast.Node.Index = undefined;
                 if (tree.fullContainerDecl(&container_buffer, init)) |container| {
-                    try collectContainerMembers(allocator, config, project_root_abs, source_path_abs, tree, container.ast.members, &decl);
+                    try collectContainerMembers(allocator, config, project_root_abs, source_path_abs, tree, container.ast.main_token, container.ast.members, &decl);
+                } else if (isErrorSetDecl(tree, init)) {
+                    try collectErrorSetMembers(allocator, tree, init, &decl);
                 }
             }
 
@@ -472,17 +474,21 @@ fn collectContainerMembers(
     project_root_abs: []const u8,
     source_path_abs: []const u8,
     tree: Ast,
+    container_token: Ast.TokenIndex,
     members: []const Ast.Node.Index,
     owner: *DeclDocs,
 ) anyerror!void {
     var nested_imports = std.ArrayList(ImportDocs).empty;
+    const is_enum = tree.tokenTag(container_token) == .keyword_enum;
     for (members) |member| {
         if (tree.fullContainerField(member)) |field| {
-            if (field.ast.tuple_like) continue;
             const first = field.firstToken();
-            const name = tree.tokenSlice(field.ast.main_token);
+            const name = if (field.ast.tuple_like and !is_enum)
+                try std.fmt.allocPrint(allocator, "{d}", .{owner.fields.items.len})
+            else
+                try allocator.dupe(u8, tree.tokenSlice(field.ast.main_token));
             try owner.fields.append(allocator, .{
-                .name = try allocator.dupe(u8, name),
+                .name = name,
                 .doc = try collectDocComment(allocator, tree, first),
                 .signature = try simpleNodeSignature(allocator, tree, member),
                 .line = lineNumber(tree, first),
@@ -490,6 +496,21 @@ fn collectContainerMembers(
         }
     }
     try collectDecls(allocator, config, project_root_abs, source_path_abs, tree, members, &owner.children, &nested_imports);
+}
+
+fn collectErrorSetMembers(allocator: Allocator, tree: Ast, node: Ast.Node.Index, owner: *DeclDocs) !void {
+    const lbrace, const rbrace = tree.nodeData(node).token_and_token;
+    var tok = lbrace + 1;
+    while (tok < rbrace) : (tok += 1) {
+        if (tree.tokenTag(tok) != .identifier) continue;
+        const name = tree.tokenSlice(tok);
+        try owner.fields.append(allocator, .{
+            .name = try allocator.dupe(u8, name),
+            .doc = try collectDocComment(allocator, tree, tok),
+            .signature = try allocator.dupe(u8, name),
+            .line = lineNumber(tree, tok),
+        });
+    }
 }
 
 fn collectModuleDoc(allocator: Allocator, tree: Ast) ![]const u8 {
@@ -570,6 +591,10 @@ fn containerKind(tree: Ast, node: Ast.Node.Index) ?[]const u8 {
     };
 }
 
+fn isErrorSetDecl(tree: Ast, node: Ast.Node.Index) bool {
+    return tree.nodeTag(node) == .error_set_decl;
+}
+
 fn isAliasExpr(tree: Ast, node: Ast.Node.Index) bool {
     return switch (tree.nodeTag(node)) {
         .identifier, .field_access, .deref, .unwrap_optional => true,
@@ -627,6 +652,7 @@ fn varSignature(
         if (var_decl.ast.init_node.unwrap()) |init| {
             const has_semicolon = tree.tokenTag(tree.lastToken(node) + 1) == .semicolon;
             if (containerHeaderSignature(allocator, tree, var_decl.firstToken(), init, has_semicolon)) |sig| return sig;
+            if (errorSetHeaderSignature(allocator, tree, var_decl.firstToken(), init, has_semicolon)) |sig| return sig;
         }
     }
 
@@ -667,6 +693,19 @@ fn containerHeaderSignature(allocator: Allocator, tree: Ast, start_token: Ast.To
         }
     }
     return null;
+}
+
+fn errorSetHeaderSignature(allocator: Allocator, tree: Ast, start_token: Ast.TokenIndex, init: Ast.Node.Index, has_semicolon: bool) ?[]const u8 {
+    if (!isErrorSetDecl(tree, init)) return null;
+    const lbrace, _ = tree.nodeData(init).token_and_token;
+    const start = tree.tokenStart(start_token);
+    const end = tree.tokenStart(lbrace) + 1;
+    var out = std.ArrayList(u8).empty;
+    defer out.deinit(allocator);
+    out.appendSlice(allocator, std.mem.trimEnd(u8, tree.source[start..end], &std.ascii.whitespace)) catch return null;
+    out.appendSlice(allocator, " ... }") catch return null;
+    if (has_semicolon) out.append(allocator, ';') catch return null;
+    return out.toOwnedSlice(allocator) catch null;
 }
 
 fn simpleNodeSignature(allocator: Allocator, tree: Ast, node: Ast.Node.Index) ![]const u8 {
@@ -1398,6 +1437,135 @@ test "empty type signatures omit ellipsis" {
     try std.testing.expectEqualStrings(
         \\```zig
         \\pub const GcOptions = struct {};
+        \\```
+        \\
+        \\
+    , out.items);
+}
+
+test "enum fields collect and render inline with docs" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const source =
+        \\pub const Status = enum {
+        \\    /// Ready for use.
+        \\    ready,
+        \\    /// Failed with code.
+        \\    failed = 2,
+        \\};
+    ;
+
+    var tree = try Ast.parse(allocator, source, .zig);
+    defer tree.deinit(allocator);
+
+    var decls = std.ArrayList(DeclDocs).empty;
+    var imports = std.ArrayList(ImportDocs).empty;
+    const config = Config{};
+    try collectDecls(allocator, &config, "/tmp", "/tmp/status.zig", tree, tree.rootDecls(), &decls, &imports);
+
+    try std.testing.expectEqual(@as(usize, 1), decls.items.len);
+    try std.testing.expectEqual(@as(usize, 2), decls.items[0].fields.items.len);
+
+    var out = std.ArrayList(u8).empty;
+    try appendDeclSignatureCodeBlock(allocator, &out, &decls.items[0]);
+
+    try std.testing.expectEqualStrings(
+        \\```zig
+        \\pub const Status = enum {
+        \\    /// Ready for use.
+        \\    ready,
+        \\    /// Failed with code.
+        \\    failed = 2,
+        \\};
+        \\```
+        \\
+        \\
+    , out.items);
+}
+
+test "tuple struct fields collect and render inline with docs" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const source =
+        \\pub const Pair = struct {
+        \\    /// First item.
+        \\    u32,
+        \\    /// Second item.
+        \\    []const u8,
+        \\};
+    ;
+
+    var tree = try Ast.parse(allocator, source, .zig);
+    defer tree.deinit(allocator);
+
+    var decls = std.ArrayList(DeclDocs).empty;
+    var imports = std.ArrayList(ImportDocs).empty;
+    const config = Config{};
+    try collectDecls(allocator, &config, "/tmp", "/tmp/pair.zig", tree, tree.rootDecls(), &decls, &imports);
+
+    try std.testing.expectEqual(@as(usize, 1), decls.items.len);
+    try std.testing.expectEqual(@as(usize, 2), decls.items[0].fields.items.len);
+    try std.testing.expectEqualStrings("0", decls.items[0].fields.items[0].name);
+    try std.testing.expectEqualStrings("1", decls.items[0].fields.items[1].name);
+
+    var out = std.ArrayList(u8).empty;
+    try appendDeclSignatureCodeBlock(allocator, &out, &decls.items[0]);
+
+    try std.testing.expectEqualStrings(
+        \\```zig
+        \\pub const Pair = struct {
+        \\    /// First item.
+        \\    u32,
+        \\    /// Second item.
+        \\    []const u8,
+        \\};
+        \\```
+        \\
+        \\
+    , out.items);
+}
+
+test "error set fields collect and render inline with docs" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const source =
+        \\pub const ParseError = error {
+        \\    /// Encountered an invalid token.
+        \\    BadToken,
+        \\    /// Reached the end of input unexpectedly.
+        \\    EndOfStream,
+        \\};
+    ;
+
+    var tree = try Ast.parse(allocator, source, .zig);
+    defer tree.deinit(allocator);
+
+    var decls = std.ArrayList(DeclDocs).empty;
+    var imports = std.ArrayList(ImportDocs).empty;
+    const config = Config{};
+    try collectDecls(allocator, &config, "/tmp", "/tmp/errors.zig", tree, tree.rootDecls(), &decls, &imports);
+
+    try std.testing.expectEqual(@as(usize, 1), decls.items.len);
+    try std.testing.expectEqual(.type, decls.items[0].kind);
+    try std.testing.expectEqual(@as(usize, 2), decls.items[0].fields.items.len);
+
+    var out = std.ArrayList(u8).empty;
+    try appendDeclSignatureCodeBlock(allocator, &out, &decls.items[0]);
+
+    try std.testing.expectEqualStrings(
+        \\```zig
+        \\pub const ParseError = error {
+        \\    /// Encountered an invalid token.
+        \\    BadToken,
+        \\    /// Reached the end of input unexpectedly.
+        \\    EndOfStream,
+        \\};
         \\```
         \\
         \\

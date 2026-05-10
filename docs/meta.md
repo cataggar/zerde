@@ -53,7 +53,11 @@ pub const Options = struct {
 Supported tagged union wire representations.
 
 ```zig
-pub const UnionRepr = enum {};
+pub const UnionRepr = enum {
+    external,
+    internal,
+    adjacent,
+};
 ```
 
 <a id="const-union_tag_field_name"></a>

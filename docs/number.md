@@ -34,7 +34,14 @@ Shared numeric token parsing, normalization, and typed conversion helpers.
 Allowed leading sign forms for a numeric token.
 
 ```zig
-pub const SignPolicy = enum {};
+pub const SignPolicy = enum {
+    /// Reject both `+` and `-`.
+    none,
+    /// Accept `-` only.
+    negative,
+    /// Accept both `+` and `-`.
+    positive_and_negative,
+};
 ```
 
 <a id="type-integerprefixes"></a>

@@ -50,8 +50,11 @@ High-level shape of a reflected Zig type.
 
 ```zig
 pub const Shape = union(enum) {
+    bool,
     int: IntInfo,
     float: FloatInfo,
+    string,
+    bytes,
     optional: *const Schema,
     seq: SeqInfo,
     map: MapInfo,

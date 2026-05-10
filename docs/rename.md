@@ -25,7 +25,11 @@ Field-name rename rules.
 Supported field-name rename policies.
 
 ```zig
-pub const RenameRule = enum {};
+pub const RenameRule = enum {
+    none,
+    snake_case,
+    camel_case,
+};
 ```
 
 <a id="fn-apply"></a>
