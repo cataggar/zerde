@@ -31,11 +31,11 @@ Zig Object Notation format support.
 
 ## WriteOptions
 
+ZON writer configuration.
+
 ```zig
 pub const WriteOptions = struct { ... };
 ```
-
-ZON writer configuration.
 
 ### Fields
 
@@ -49,15 +49,17 @@ ZON writer configuration.
 
 ## write
 
+Serializes `value` as compact ZON to `writer`.
+
 ```zig
 pub fn write(writer: *std.Io.Writer, value: anytype) !void
 ```
 
-Serializes `value` as compact ZON to `writer`.
-
 <a id="fn-writewithoptions"></a>
 
 ## writeWithOptions
+
+Serializes `value` as ZON to `writer` with explicit writer options.
 
 ```zig
 pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void
@@ -65,21 +67,21 @@ pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: WriteOp
 
 References: [`WriteOptions`](#type-writeoptions)
 
-Serializes `value` as ZON to `writer` with explicit writer options.
-
 <a id="fn-writealloc"></a>
 
 ## writeAlloc
+
+Serializes `value` as ZON and returns allocator-owned bytes.
 
 ```zig
 pub fn writeAlloc(allocator: std.mem.Allocator, value: anytype) ![]u8
 ```
 
-Serializes `value` as ZON and returns allocator-owned bytes.
-
 <a id="fn-writeallocwithoptions"></a>
 
 ## writeAllocWithOptions
+
+Serializes `value` as ZON with explicit writer options and returns allocator-owned bytes.
 
 ```zig
 pub fn writeAllocWithOptions(allocator: std.mem.Allocator, value: anytype, options: WriteOptions) ![]u8
@@ -87,11 +89,11 @@ pub fn writeAllocWithOptions(allocator: std.mem.Allocator, value: anytype, optio
 
 References: [`WriteOptions`](#type-writeoptions)
 
-Serializes `value` as ZON with explicit writer options and returns allocator-owned bytes.
-
 <a id="fn-encoder"></a>
 
 ## encoder
+
+Returns a low-level ZON encoder for use with `zerde.serialize`.
 
 ```zig
 pub fn encoder(writer: *std.Io.Writer) Encoder
@@ -99,11 +101,11 @@ pub fn encoder(writer: *std.Io.Writer) Encoder
 
 References: [`Encoder`](#type-encoder)
 
-Returns a low-level ZON encoder for use with `zerde.serialize`.
-
 <a id="fn-encoderwithoptions"></a>
 
 ## encoderWithOptions
+
+Returns a low-level ZON encoder with explicit writer options.
 
 ```zig
 pub fn encoderWithOptions(writer: *std.Io.Writer, options: WriteOptions) Encoder
@@ -111,31 +113,31 @@ pub fn encoderWithOptions(writer: *std.Io.Writer, options: WriteOptions) Encoder
 
 References: [`WriteOptions`](#type-writeoptions), [`Encoder`](#type-encoder)
 
-Returns a low-level ZON encoder with explicit writer options.
-
 <a id="fn-read"></a>
 
 ## read
+
+Deserializes ZON from `reader` into `T`.
 
 ```zig
 pub fn read(comptime T: type, allocator: std.mem.Allocator, reader: *std.Io.Reader) !T
 ```
 
-Deserializes ZON from `reader` into `T`.
-
 <a id="fn-readslice"></a>
 
 ## readSlice
+
+Deserializes ZON from `input` into `T`.
 
 ```zig
 pub fn readSlice(comptime T: type, allocator: std.mem.Allocator, input: []const u8) !T
 ```
 
-Deserializes ZON from `input` into `T`.
-
 <a id="fn-decoder"></a>
 
 ## decoder
+
+Returns a low-level ZON decoder for use with `zerde.deserialize`.
 
 ```zig
 pub fn decoder(reader: *std.Io.Reader, allocator: std.mem.Allocator) Decoder
@@ -143,27 +145,25 @@ pub fn decoder(reader: *std.Io.Reader, allocator: std.mem.Allocator) Decoder
 
 References: [`Decoder`](#type-decoder)
 
-Returns a low-level ZON decoder for use with `zerde.deserialize`.
-
 <a id="type-kind"></a>
 
 ## Kind
+
+ZON value kinds reported by `Decoder.peek`.
 
 ```zig
 pub const Kind = enum { ... };
 ```
 
-ZON value kinds reported by `Decoder.peek`.
-
 <a id="type-encoder"></a>
 
 ## Encoder
 
+Low-level ZON encoder used by the generic serializer.
+
 ```zig
 pub const Encoder = struct { ... };
 ```
-
-Low-level ZON encoder used by the generic serializer.
 
 ### Fields
 
@@ -309,11 +309,11 @@ pub fn finish(self: *Self) !void
 
 ## Decoder
 
+Low-level ZON decoder used by the generic deserializer.
+
 ```zig
 pub const Decoder = struct { ... };
 ```
-
-Low-level ZON decoder used by the generic deserializer.
 
 ### Fields
 

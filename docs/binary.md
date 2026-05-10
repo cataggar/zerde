@@ -32,11 +32,11 @@ Compact binary format support.
 
 ## Options
 
+Binary format configuration.
+
 ```zig
 pub const Options = struct { ... };
 ```
-
-Binary format configuration.
 
 ### Fields
 
@@ -49,15 +49,17 @@ Binary format configuration.
 
 ## write
 
+Serializes `value` as compact binary to `writer`.
+
 ```zig
 pub fn write(writer: *std.Io.Writer, value: anytype) !void
 ```
 
-Serializes `value` as compact binary to `writer`.
-
 <a id="fn-writewithoptions"></a>
 
 ## writeWithOptions
+
+Serializes `value` as compact binary to `writer` with explicit options.
 
 ```zig
 pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: Options) !void
@@ -65,21 +67,21 @@ pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: Options
 
 References: [`Options`](#type-options)
 
-Serializes `value` as compact binary to `writer` with explicit options.
-
 <a id="fn-read"></a>
 
 ## read
+
+Deserializes binary data from `reader` into `T`.
 
 ```zig
 pub fn read(comptime T: type, allocator: std.mem.Allocator, reader: *std.Io.Reader) !T
 ```
 
-Deserializes binary data from `reader` into `T`.
-
 <a id="fn-readwithoptions"></a>
 
 ## readWithOptions
+
+Deserializes binary data from `reader` into `T` with explicit options.
 
 ```zig
 pub fn readWithOptions(comptime T: type, allocator: std.mem.Allocator, reader: *std.Io.Reader, options: Options) !T
@@ -87,21 +89,21 @@ pub fn readWithOptions(comptime T: type, allocator: std.mem.Allocator, reader: *
 
 References: [`Options`](#type-options)
 
-Deserializes binary data from `reader` into `T` with explicit options.
-
 <a id="fn-writealloc"></a>
 
 ## writeAlloc
+
+Serializes `value` as binary and returns allocator-owned bytes.
 
 ```zig
 pub fn writeAlloc(allocator: std.mem.Allocator, value: anytype) ![]u8
 ```
 
-Serializes `value` as binary and returns allocator-owned bytes.
-
 <a id="fn-writeallocwithoptions"></a>
 
 ## writeAllocWithOptions
+
+Serializes `value` as binary with explicit options and returns allocator-owned bytes.
 
 ```zig
 pub fn writeAllocWithOptions(allocator: std.mem.Allocator, value: anytype, options: Options) ![]u8
@@ -109,21 +111,21 @@ pub fn writeAllocWithOptions(allocator: std.mem.Allocator, value: anytype, optio
 
 References: [`Options`](#type-options)
 
-Serializes `value` as binary with explicit options and returns allocator-owned bytes.
-
 <a id="fn-readslice"></a>
 
 ## readSlice
+
+Deserializes binary data from `input` into `T`.
 
 ```zig
 pub fn readSlice(comptime T: type, allocator: std.mem.Allocator, input: []const u8) !T
 ```
 
-Deserializes binary data from `input` into `T`.
-
 <a id="fn-readslicewithoptions"></a>
 
 ## readSliceWithOptions
+
+Deserializes binary data from `input` into `T` with explicit options.
 
 ```zig
 pub fn readSliceWithOptions(comptime T: type, allocator: std.mem.Allocator, input: []const u8, options: Options) !T
@@ -131,11 +133,11 @@ pub fn readSliceWithOptions(comptime T: type, allocator: std.mem.Allocator, inpu
 
 References: [`Options`](#type-options)
 
-Deserializes binary data from `input` into `T` with explicit options.
-
 <a id="fn-encoder"></a>
 
 ## encoder
+
+Returns a low-level binary encoder for use with `zerde.serialize`.
 
 ```zig
 pub fn encoder(writer: *std.Io.Writer, options: Options) Encoder
@@ -143,19 +145,17 @@ pub fn encoder(writer: *std.Io.Writer, options: Options) Encoder
 
 References: [`Options`](#type-options), [`Encoder`](#type-encoder)
 
-Returns a low-level binary encoder for use with `zerde.serialize`.
-
 <a id="fn-decoder"></a>
 
 ## decoder
+
+Returns a low-level binary decoder for use with `zerde.deserialize`.
 
 ```zig
 pub fn decoder(reader: *std.Io.Reader, allocator: std.mem.Allocator, options: Options) Decoder
 ```
 
 References: [`Options`](#type-options), [`Decoder`](#type-decoder)
-
-Returns a low-level binary decoder for use with `zerde.deserialize`.
 
 <a id="type-encoder"></a>
 

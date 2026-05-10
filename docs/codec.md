@@ -20,20 +20,20 @@ Type-specialized codec API.
 
 ## Format
 
+Formats supported by the simple codec dispatch API.
+
 ```zig
 pub const Format = enum { ... };
 ```
-
-Formats supported by the simple codec dispatch API.
 
 <a id="fn-codec"></a>
 
 ## Codec
 
+Returns a type-specific namespace for serialization, deserialization,
+validation, schema generation, and cleanup.
+
 ```zig
 pub fn Codec(comptime T: type) type
 ```
-
-Returns a type-specific namespace for serialization, deserialization,
-validation, schema generation, and cleanup.
 

@@ -20,11 +20,11 @@ First-class date and time value types.
 
 ## Timestamp
 
+[Timestamp](#type-timestamp) with seconds elapsed since the Unix epoch and nanosecond precision.
+
 ```zig
 pub const Timestamp = struct { ... };
 ```
-
-[Timestamp](#type-timestamp) with seconds elapsed since the Unix epoch and nanosecond precision.
 
 ### Fields
 
@@ -45,17 +45,19 @@ pub const Timestamp = struct { ... };
 
 ### Timestamp.zerdeWrite
 
+Serializes as a MessagePack timestamp extension when supported, otherwise as a struct.
+
 ```zig
 pub fn zerdeWrite(self: Timestamp, enc: anytype) !void
 ```
 
 References: [`Timestamp`](#type-timestamp)
 
-Serializes as a MessagePack timestamp extension when supported, otherwise as a struct.
-
 <a id="fn-timestamp-zerderead"></a>
 
 ### Timestamp.zerdeRead
+
+Deserializes from a MessagePack timestamp extension when supported, otherwise from a struct.
 
 ```zig
 pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !Timestamp
@@ -63,17 +65,15 @@ pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !Timestamp
 
 References: [`Timestamp`](#type-timestamp)
 
-Deserializes from a MessagePack timestamp extension when supported, otherwise from a struct.
-
 <a id="type-localdate"></a>
 
 ## LocalDate
 
+Local date: `YYYY-MM-DD`.
+
 ```zig
 pub const LocalDate = struct { ... };
 ```
-
-Local date: `YYYY-MM-DD`.
 
 ### Fields
 
@@ -135,11 +135,11 @@ References: [`LocalDate`](#type-localdate)
 
 ## LocalTime
 
+Local time: `HH:MM:SS[.fraction]`.
+
 ```zig
 pub const LocalTime = struct { ... };
 ```
-
-Local time: `HH:MM:SS[.fraction]`.
 
 ### Fields
 
@@ -202,11 +202,11 @@ References: [`LocalTime`](#type-localtime)
 
 ## LocalDateTime
 
+Local date-time: `YYYY-MM-DDTHH:MM:SS[.fraction]`.
+
 ```zig
 pub const LocalDateTime = struct { ... };
 ```
-
-Local date-time: `YYYY-MM-DDTHH:MM:SS[.fraction]`.
 
 ### Fields
 
@@ -267,11 +267,11 @@ References: [`LocalDateTime`](#type-localdatetime)
 
 ## OffsetDateTime
 
+Offset date-time: `YYYY-MM-DDTHH:MM:SS[.fraction]Z` or with `+/-HH:MM`.
+
 ```zig
 pub const OffsetDateTime = struct { ... };
 ```
-
-Offset date-time: `YYYY-MM-DDTHH:MM:SS[.fraction]Z` or with `+/-HH:MM`.
 
 ### Fields
 

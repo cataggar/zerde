@@ -23,25 +23,27 @@ Human-readable serialization format.
 
 ## WriteOptions
 
+Human writer configuration. Reserved for future formatting options.
+
 ```zig
 pub const WriteOptions = struct { ... };
 ```
-
-Human writer configuration. Reserved for future formatting options.
 
 <a id="fn-write"></a>
 
 ## write
 
+Serializes `value` to a compact human-readable representation.
+
 ```zig
 pub fn write(writer: *std.Io.Writer, value: anytype) !void
 ```
 
-Serializes `value` to a compact human-readable representation.
-
 <a id="fn-writewithoptions"></a>
 
 ## writeWithOptions
+
+Serializes `value` to a compact human-readable representation with options.
 
 ```zig
 pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void
@@ -49,11 +51,11 @@ pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: WriteOp
 
 References: [`WriteOptions`](#type-writeoptions)
 
-Serializes `value` to a compact human-readable representation with options.
-
 <a id="fn-encoder"></a>
 
 ## encoder
+
+Returns a low-level human-readable encoder for use with `zerde.serialize`.
 
 ```zig
 pub fn encoder(writer: *std.Io.Writer) Encoder
@@ -61,17 +63,15 @@ pub fn encoder(writer: *std.Io.Writer) Encoder
 
 References: [`Encoder`](#type-encoder)
 
-Returns a low-level human-readable encoder for use with `zerde.serialize`.
-
 <a id="type-encoder"></a>
 
 ## Encoder
 
+Low-level human-readable encoder used by the generic serializer.
+
 ```zig
 pub const Encoder = struct { ... };
 ```
-
-Low-level human-readable encoder used by the generic serializer.
 
 ### Fields
 
@@ -101,119 +101,119 @@ Low-level human-readable encoder used by the generic serializer.
 
 ### Encoder.emitNull
 
+Emits the `null` value.
+
 ```zig
 pub fn emitNull(self: *Self) !void
 ```
-
-Emits the `null` value.
 
 <a id="fn-encoder-emitbool"></a>
 
 ### Encoder.emitBool
 
+Emits a boolean value.
+
 ```zig
 pub fn emitBool(self: *Self, value: bool) !void
 ```
-
-Emits a boolean value.
 
 <a id="fn-encoder-emitint"></a>
 
 ### Encoder.emitInt
 
+Emits an integer value.
+
 ```zig
 pub fn emitInt(self: *Self, value: anytype) !void
 ```
-
-Emits an integer value.
 
 <a id="fn-encoder-emitfloat"></a>
 
 ### Encoder.emitFloat
 
+Emits a float value.
+
 ```zig
 pub fn emitFloat(self: *Self, value: anytype) !void
 ```
-
-Emits a float value.
 
 <a id="fn-encoder-emitstring"></a>
 
 ### Encoder.emitString
 
+Emits a quoted string with common escapes.
+
 ```zig
 pub fn emitString(self: *Self, value: []const u8) !void
 ```
-
-Emits a quoted string with common escapes.
 
 <a id="fn-encoder-emitbytes"></a>
 
 ### Encoder.emitBytes
 
+Emits raw bytes as a base64 string.
+
 ```zig
 pub fn emitBytes(self: *Self, value: []const u8) !void
 ```
-
-Emits raw bytes as a base64 string.
 
 <a id="fn-encoder-beginseq"></a>
 
 ### Encoder.beginSeq
 
+Begins a sequence.
+
 ```zig
 pub fn beginSeq(self: *Self, len: ?usize) !void
 ```
-
-Begins a sequence.
 
 <a id="fn-encoder-endseq"></a>
 
 ### Encoder.endSeq
 
+Ends the current sequence.
+
 ```zig
 pub fn endSeq(self: *Self) !void
 ```
-
-Ends the current sequence.
 
 <a id="fn-encoder-beginstruct"></a>
 
 ### Encoder.beginStruct
 
+Begins a struct representation using the short Zig type name.
+
 ```zig
 pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void
 ```
-
-Begins a struct representation using the short Zig type name.
 
 <a id="fn-encoder-emitfieldname"></a>
 
 ### Encoder.emitFieldName
 
+Emits the next struct field name.
+
 ```zig
 pub fn emitFieldName(self: *Self, name: []const u8) !void
 ```
-
-Emits the next struct field name.
 
 <a id="fn-encoder-endstruct"></a>
 
 ### Encoder.endStruct
 
+Ends the current struct representation.
+
 ```zig
 pub fn endStruct(self: *Self) !void
 ```
-
-Ends the current struct representation.
 
 <a id="fn-encoder-emitenumtag"></a>
 
 ### Encoder.emitEnumTag
 
+Emits an enum tag as a string.
+
 ```zig
 pub fn emitEnumTag(self: *Self, tag: []const u8) !void
 ```
-
-Emits an enum tag as a string.
 

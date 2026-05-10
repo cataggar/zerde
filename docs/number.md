@@ -29,21 +29,21 @@ Shared numeric token parsing, normalization, and typed conversion helpers.
 
 ## SignPolicy
 
+Allowed leading sign forms for a numeric token.
+
 ```zig
 pub const SignPolicy = enum { ... };
 ```
-
-Allowed leading sign forms for a numeric token.
 
 <a id="type-integerprefixes"></a>
 
 ## IntegerPrefixes
 
+[Integer](#type-integer) radix prefixes accepted by a syntax.
+
 ```zig
 pub const IntegerPrefixes = struct { ... };
 ```
-
-[Integer](#type-integer) radix prefixes accepted by a syntax.
 
 ### Fields
 
@@ -61,11 +61,11 @@ pub const IntegerPrefixes = struct { ... };
 
 ## IntegerBounds
 
+Optional normalized integer bounds checked during token parsing.
+
 ```zig
 pub const IntegerBounds = struct { ... };
 ```
-
-Optional normalized integer bounds checked during token parsing.
 
 ### Fields
 
@@ -81,11 +81,11 @@ Optional normalized integer bounds checked during token parsing.
 
 ## Syntax
 
+Numeric grammar and conversion capabilities for a format.
+
 ```zig
 pub const Syntax = struct { ... };
 ```
-
-Numeric grammar and conversion capabilities for a format.
 
 ### Fields
 
@@ -123,11 +123,11 @@ Numeric grammar and conversion capabilities for a format.
 
 ## Integer
 
+Normalized integer token bytes and their radix.
+
 ```zig
 pub const Integer = struct { ... };
 ```
-
-Normalized integer token bytes and their radix.
 
 ### Fields
 
@@ -143,11 +143,11 @@ Normalized integer token bytes and their radix.
 
 ## Token
 
+Allocator-owned normalized numeric token.
+
 ```zig
 pub const Token = union(enum) { ... };
 ```
-
-Allocator-owned normalized numeric token.
 
 ### Fields
 
@@ -168,17 +168,19 @@ Allocator-owned normalized numeric token.
 
 ### Token.deinit
 
+Frees the token bytes owned by `self`.
+
 ```zig
 pub fn deinit(self: Token, allocator: std.mem.Allocator) void
 ```
 
 References: [`Token`](#type-token)
 
-Frees the token bytes owned by `self`.
-
 <a id="fn-token-isfloat"></a>
 
 ### Token.isFloat
+
+Returns whether this token is a float token.
 
 ```zig
 pub fn isFloat(self: Token) bool
@@ -186,11 +188,11 @@ pub fn isFloat(self: Token) bool
 
 References: [`Token`](#type-token)
 
-Returns whether this token is a float token.
-
 <a id="fn-parser"></a>
 
 ## Parser
+
+Returns a numeric parser specialized for `syntax`.
 
 ```zig
 pub fn Parser(comptime syntax: Syntax) type
@@ -198,11 +200,11 @@ pub fn Parser(comptime syntax: Syntax) type
 
 References: [`Syntax`](#type-syntax)
 
-Returns a numeric parser specialized for `syntax`.
-
 <a id="fn-readinteger"></a>
 
 ## readInteger
+
+Converts a normalized integer token to `T`.
 
 ```zig
 pub fn readInteger(comptime T: type, integer: Integer) !T
@@ -210,21 +212,21 @@ pub fn readInteger(comptime T: type, integer: Integer) !T
 
 References: [`Integer`](#type-integer)
 
-Converts a normalized integer token to `T`.
-
 <a id="fn-readfloatbytes"></a>
 
 ## readFloatBytes
+
+Parses normalized float bytes into `T`.
 
 ```zig
 pub fn readFloatBytes(comptime T: type, bytes: []const u8) !T
 ```
 
-Parses normalized float bytes into `T`.
-
 <a id="fn-readfloatfrominteger"></a>
 
 ## readFloatFromInteger
+
+Converts a normalized integer token to a float `T`.
 
 ```zig
 pub fn readFloatFromInteger(comptime T: type, integer: Integer) !T
@@ -232,15 +234,13 @@ pub fn readFloatFromInteger(comptime T: type, integer: Integer) !T
 
 References: [`Integer`](#type-integer)
 
-Converts a normalized integer token to a float `T`.
-
 <a id="fn-ensurefinitefloat"></a>
 
 ## ensureFiniteFloat
 
+Returns `error.InvalidJsonFloat` if `value` is not finite.
+
 ```zig
 pub fn ensureFiniteFloat(value: anytype) !void
 ```
-
-Returns `error.InvalidJsonFloat` if `value` is not finite.
 

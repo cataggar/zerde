@@ -30,11 +30,11 @@ Internal schema descriptors for reflected Zig types.
 
 ## Schema
 
+Internal inspection-oriented schema descriptor.
+
 ```zig
 pub const Schema = struct { ... };
 ```
-
-Internal inspection-oriented schema descriptor.
 
 ### Fields
 
@@ -217,21 +217,21 @@ pub const UnionInfo = struct { ... };
 
 ## forType
 
+Builds the internal schema descriptor for `T`.
+
 ```zig
 pub fn forType(comptime T: type) Schema
 ```
 
 References: [`Schema`](#type-schema)
 
-Builds the internal schema descriptor for `T`.
-
 <a id="fn-validatetype"></a>
 
 ## validateType
 
+Validates that `T` is representable by Zerde's current traversal.
+
 ```zig
 pub fn validateType(comptime T: type) void
 ```
-
-Validates that `T` is representable by Zerde's current traversal.
 

@@ -31,11 +31,11 @@ TOML format support.
 
 ## WriteLayout
 
+TOML writer configuration.
+
 ```zig
 pub const WriteLayout = enum { ... };
 ```
-
-TOML writer configuration.
 
 <a id="type-writeoptions"></a>
 
@@ -56,18 +56,23 @@ pub const WriteOptions = struct { ... };
 
 ## write
 
-```zig
-pub fn write(writer: *std.Io.Writer, value: anytype) !void
-```
-
 Serializes `value` as TOML to `writer` without heap allocation.
 
 TOML documents are tables, so the root value must be a struct. TOML has no
 null value; serializing null optionals returns `error.UnsupportedTomlNull`.
 
+```zig
+pub fn write(writer: *std.Io.Writer, value: anytype) !void
+```
+
 <a id="fn-writewithoptions"></a>
 
 ## writeWithOptions
+
+Serializes `value` as TOML to `writer` with explicit writer options.
+
+Section layout requires `allocator` for a temporary document tree. Inline
+`inline_tables` layout ignores `allocator` and streams directly.
 
 ```zig
 pub fn writeWithOptions(allocator: std.mem.Allocator, writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void
@@ -75,14 +80,12 @@ pub fn writeWithOptions(allocator: std.mem.Allocator, writer: *std.Io.Writer, va
 
 References: [`WriteOptions`](#type-writeoptions)
 
-Serializes `value` as TOML to `writer` with explicit writer options.
-
-Section layout requires `allocator` for a temporary document tree. Inline
-`inline_tables` layout ignores `allocator` and streams directly.
-
 <a id="fn-encoder"></a>
 
 ## encoder
+
+Returns a low-level TOML encoder for use with `zerde.serialize` or custom
+serialization code.
 
 ```zig
 pub fn encoder(writer: *std.Io.Writer) Encoder
@@ -90,32 +93,32 @@ pub fn encoder(writer: *std.Io.Writer) Encoder
 
 References: [`Encoder`](#type-encoder)
 
-Returns a low-level TOML encoder for use with `zerde.serialize` or custom
-serialization code.
-
 <a id="fn-read"></a>
 
 ## read
+
+Deserializes TOML from `reader` into `T`.
 
 ```zig
 pub fn read(comptime T: type, allocator: std.mem.Allocator, reader: *std.Io.Reader) !T
 ```
 
-Deserializes TOML from `reader` into `T`.
-
 <a id="fn-writealloc"></a>
 
 ## writeAlloc
+
+Serializes `value` as TOML and returns allocator-owned bytes.
 
 ```zig
 pub fn writeAlloc(allocator: std.mem.Allocator, value: anytype) ![]u8
 ```
 
-Serializes `value` as TOML and returns allocator-owned bytes.
-
 <a id="fn-writeallocwithoptions"></a>
 
 ## writeAllocWithOptions
+
+Serializes `value` as TOML with explicit writer options and returns
+allocator-owned bytes.
 
 ```zig
 pub fn writeAllocWithOptions(allocator: std.mem.Allocator, value: anytype, options: WriteOptions) ![]u8
@@ -123,22 +126,22 @@ pub fn writeAllocWithOptions(allocator: std.mem.Allocator, value: anytype, optio
 
 References: [`WriteOptions`](#type-writeoptions)
 
-Serializes `value` as TOML with explicit writer options and returns
-allocator-owned bytes.
-
 <a id="fn-readslice"></a>
 
 ## readSlice
+
+Deserializes TOML from `input` into `T`.
 
 ```zig
 pub fn readSlice(comptime T: type, allocator: std.mem.Allocator, input: []const u8) !T
 ```
 
-Deserializes TOML from `input` into `T`.
-
 <a id="fn-decoder"></a>
 
 ## decoder
+
+Returns a low-level TOML decoder for use with `zerde.deserialize` or custom
+deserialization code. Call `Decoder.deinit` when done.
 
 ```zig
 pub fn decoder(reader: *std.Io.Reader, allocator: std.mem.Allocator) !Decoder
@@ -146,28 +149,25 @@ pub fn decoder(reader: *std.Io.Reader, allocator: std.mem.Allocator) !Decoder
 
 References: [`Decoder`](#type-decoder)
 
-Returns a low-level TOML decoder for use with `zerde.deserialize` or custom
-deserialization code. Call `Decoder.deinit` when done.
-
 <a id="type-kind"></a>
 
 ## Kind
+
+TOML value kinds reported by `Decoder.peek`.
 
 ```zig
 pub const Kind = enum { ... };
 ```
 
-TOML value kinds reported by `Decoder.peek`.
-
 <a id="type-encoder"></a>
 
 ## Encoder
 
+Low-level TOML encoder used by the generic serializer.
+
 ```zig
 pub const Encoder = struct { ... };
 ```
-
-Low-level TOML encoder used by the generic serializer.
 
 ### Fields
 
@@ -312,11 +312,11 @@ pub fn finish(self: *Self) !void
 
 ## Decoder
 
+Low-level TOML decoder used by the generic deserializer.
+
 ```zig
 pub const Decoder = struct { ... };
 ```
-
-Low-level TOML decoder used by the generic deserializer.
 
 ### Fields
 

@@ -16,13 +16,13 @@ Generic type-directed serialization traversal.
 
 ## serialize
 
-```zig
-pub fn serialize(value: anytype, encoder: anytype) !void
-```
-
 Serializes `value` by walking its Zig type at comptime and calling methods
 on `encoder`'s structural protocol.
 
 Supported types currently include bools, integers, floats, strings, arrays,
 slices, optionals, enums, plain structs, and tagged unions.
+
+```zig
+pub fn serialize(value: anytype, encoder: anytype) !void
+```
 

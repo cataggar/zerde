@@ -16,10 +16,10 @@ Type-directed cleanup for values produced by Zerde deserialization.
 
 ## deinit
 
+Releases allocations owned by `value` when it was produced by Zerde
+deserialization.
+
 ```zig
 pub fn deinit(comptime T: type, allocator: std.mem.Allocator, value: T) void
 ```
-
-Releases allocations owned by `value` when it was produced by Zerde
-deserialization.
 

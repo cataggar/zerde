@@ -31,11 +31,11 @@ JSON format support.
 
 ## WriteOptions
 
+JSON writer configuration.
+
 ```zig
 pub const WriteOptions = struct { ... };
 ```
-
-JSON writer configuration.
 
 ### Fields
 
@@ -49,18 +49,20 @@ JSON writer configuration.
 
 ## write
 
-```zig
-pub fn write(writer: *std.Io.Writer, value: anytype) !void
-```
-
 Serializes `value` as compact JSON to `writer`.
 
 Strings must be valid UTF-8. Non-finite floats are rejected because JSON has
 no representation for NaN or infinity.
 
+```zig
+pub fn write(writer: *std.Io.Writer, value: anytype) !void
+```
+
 <a id="fn-writewithoptions"></a>
 
 ## writeWithOptions
+
+Serializes `value` as JSON to `writer` with explicit writer options.
 
 ```zig
 pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void
@@ -68,17 +70,9 @@ pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: WriteOp
 
 References: [`WriteOptions`](#type-writeoptions)
 
-Serializes `value` as JSON to `writer` with explicit writer options.
-
 <a id="fn-encoder"></a>
 
 ## encoder
-
-```zig
-pub fn encoder(writer: *std.Io.Writer) Encoder
-```
-
-References: [`Encoder`](#type-encoder)
 
 Returns a low-level JSON encoder for use with `zerde.serialize` or custom
 serialization code.
@@ -86,9 +80,17 @@ serialization code.
 Call `Encoder.finish` after writing the root value to validate that a
 complete JSON document was produced.
 
+```zig
+pub fn encoder(writer: *std.Io.Writer) Encoder
+```
+
+References: [`Encoder`](#type-encoder)
+
 <a id="fn-encoderwithoptions"></a>
 
 ## encoderWithOptions
+
+Returns a low-level JSON encoder with explicit writer options.
 
 ```zig
 pub fn encoderWithOptions(writer: *std.Io.Writer, options: WriteOptions) Encoder
@@ -96,33 +98,34 @@ pub fn encoderWithOptions(writer: *std.Io.Writer, options: WriteOptions) Encoder
 
 References: [`WriteOptions`](#type-writeoptions), [`Encoder`](#type-encoder)
 
-Returns a low-level JSON encoder with explicit writer options.
-
 <a id="fn-read"></a>
 
 ## read
+
+Deserializes JSON from `reader` into `T`.
 
 ```zig
 pub fn read(comptime T: type, allocator: std.mem.Allocator, reader: *std.Io.Reader) !T
 ```
 
-Deserializes JSON from `reader` into `T`.
-
 <a id="fn-writealloc"></a>
 
 ## writeAlloc
-
-```zig
-pub fn writeAlloc(allocator: std.mem.Allocator, value: anytype) ![]u8
-```
 
 Serializes `value` as compact JSON and returns allocator-owned bytes.
 
 The caller owns the returned slice and must free it with `allocator.free`.
 
+```zig
+pub fn writeAlloc(allocator: std.mem.Allocator, value: anytype) ![]u8
+```
+
 <a id="fn-writeallocwithoptions"></a>
 
 ## writeAllocWithOptions
+
+Serializes `value` as JSON with explicit writer options and returns
+allocator-owned bytes.
 
 ```zig
 pub fn writeAllocWithOptions(allocator: std.mem.Allocator, value: anytype, options: WriteOptions) ![]u8
@@ -130,22 +133,22 @@ pub fn writeAllocWithOptions(allocator: std.mem.Allocator, value: anytype, optio
 
 References: [`WriteOptions`](#type-writeoptions)
 
-Serializes `value` as JSON with explicit writer options and returns
-allocator-owned bytes.
-
 <a id="fn-readslice"></a>
 
 ## readSlice
+
+Deserializes JSON from `input` into `T`.
 
 ```zig
 pub fn readSlice(comptime T: type, allocator: std.mem.Allocator, input: []const u8) !T
 ```
 
-Deserializes JSON from `input` into `T`.
-
 <a id="fn-decoder"></a>
 
 ## decoder
+
+Returns a low-level JSON decoder for use with `zerde.deserialize` or custom
+deserialization code.
 
 ```zig
 pub fn decoder(reader: *std.Io.Reader, allocator: std.mem.Allocator) Decoder
@@ -153,28 +156,25 @@ pub fn decoder(reader: *std.Io.Reader, allocator: std.mem.Allocator) Decoder
 
 References: [`Decoder`](#type-decoder)
 
-Returns a low-level JSON decoder for use with `zerde.deserialize` or custom
-deserialization code.
-
 <a id="type-kind"></a>
 
 ## Kind
+
+JSON value kinds reported by `Decoder.peek`.
 
 ```zig
 pub const Kind = enum { ... };
 ```
 
-JSON value kinds reported by `Decoder.peek`.
-
 <a id="type-decoder"></a>
 
 ## Decoder
 
+Low-level JSON decoder used by the generic deserializer.
+
 ```zig
 pub const Decoder = struct { ... };
 ```
-
-Low-level JSON decoder used by the generic deserializer.
 
 ### Fields
 
@@ -321,15 +321,15 @@ pub fn finish(self: *Self) !void
 
 ## Encoder
 
-```zig
-pub const Encoder = struct { ... };
-```
-
 Low-level JSON encoder used by the generic serializer.
 
 The encoder owns no memory. It writes directly to the supplied
 `std.Io.Writer`, tracks container state for comma insertion, validates UTF-8
 strings, rejects non-finite floats, and enforces a fixed nesting limit.
+
+```zig
+pub const Encoder = struct { ... };
+```
 
 ### Fields
 
@@ -362,138 +362,138 @@ strings, rejects non-finite floats, and enforces a fixed nesting limit.
 
 ### Encoder.emitNull
 
+Emits the JSON `null` value.
+
 ```zig
 pub fn emitNull(self: *Self) !void
 ```
-
-Emits the JSON `null` value.
 
 <a id="fn-encoder-emitbool"></a>
 
 ### Encoder.emitBool
 
+Emits a JSON boolean value.
+
 ```zig
 pub fn emitBool(self: *Self, value: bool) !void
 ```
-
-Emits a JSON boolean value.
 
 <a id="fn-encoder-emitint"></a>
 
 ### Encoder.emitInt
 
+Emits a JSON integer value.
+
 ```zig
 pub fn emitInt(self: *Self, value: anytype) !void
 ```
-
-Emits a JSON integer value.
 
 <a id="fn-encoder-emitfloat"></a>
 
 ### Encoder.emitFloat
 
+Emits a JSON number from a finite float.
+
 ```zig
 pub fn emitFloat(self: *Self, value: anytype) !void
 ```
-
-Emits a JSON number from a finite float.
 
 <a id="fn-encoder-emitstring"></a>
 
 ### Encoder.emitString
 
+Emits a JSON string after validating that `value` is valid UTF-8.
+
 ```zig
 pub fn emitString(self: *Self, value: []const u8) !void
 ```
-
-Emits a JSON string after validating that `value` is valid UTF-8.
 
 <a id="fn-encoder-emitbytes"></a>
 
 ### Encoder.emitBytes
 
+Emits raw bytes as a base64 JSON string.
+
 ```zig
 pub fn emitBytes(self: *Self, value: []const u8) !void
 ```
 
-Emits raw bytes as a base64 JSON string.
-
 <a id="fn-encoder-beginseq"></a>
 
 ### Encoder.beginSeq
-
-```zig
-pub fn beginSeq(self: *Self, len: ?usize) !void
-```
 
 Begins a JSON array.
 
 `len` is accepted for the generic encoder protocol but is not required
 by JSON output.
 
+```zig
+pub fn beginSeq(self: *Self, len: ?usize) !void
+```
+
 <a id="fn-encoder-endseq"></a>
 
 ### Encoder.endSeq
+
+Ends the current JSON array.
 
 ```zig
 pub fn endSeq(self: *Self) !void
 ```
 
-Ends the current JSON array.
-
 <a id="fn-encoder-beginstruct"></a>
 
 ### Encoder.beginStruct
-
-```zig
-pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void
-```
 
 Begins a JSON object for a Zig struct.
 
 `T` and `field_count` are accepted for the generic encoder protocol but
 are not required by JSON output.
 
+```zig
+pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void
+```
+
 <a id="fn-encoder-emitfieldname"></a>
 
 ### Encoder.emitFieldName
+
+Emits a JSON object field name after validating that `name` is valid UTF-8.
 
 ```zig
 pub fn emitFieldName(self: *Self, name: []const u8) !void
 ```
 
-Emits a JSON object field name after validating that `name` is valid UTF-8.
-
 <a id="fn-encoder-endstruct"></a>
 
 ### Encoder.endStruct
+
+Ends the current JSON object.
 
 ```zig
 pub fn endStruct(self: *Self) !void
 ```
 
-Ends the current JSON object.
-
 <a id="fn-encoder-emitenumtag"></a>
 
 ### Encoder.emitEnumTag
+
+Emits an enum tag as a JSON string.
 
 ```zig
 pub fn emitEnumTag(self: *Self, tag: []const u8) !void
 ```
 
-Emits an enum tag as a JSON string.
-
 <a id="fn-encoder-finish"></a>
 
 ### Encoder.finish
-
-```zig
-pub fn finish(self: *Self) !void
-```
 
 Verifies that exactly one complete JSON root value has been emitted.
 
 This catches incomplete custom encoder usage, such as an unclosed array
 or an object field name without a following value.
+
+```zig
+pub fn finish(self: *Self) !void
+```
 

@@ -34,11 +34,11 @@ Metadata parsing and validation helpers.
 
 ## Options
 
+Normalized type-level metadata options.
+
 ```zig
 pub const Options = struct { ... };
 ```
-
-Normalized type-level metadata options.
 
 ### Fields
 
@@ -53,11 +53,11 @@ Normalized type-level metadata options.
 
 ## UnionRepr
 
+Supported tagged union wire representations.
+
 ```zig
 pub const UnionRepr = enum { ... };
 ```
-
-Supported tagged union wire representations.
 
 <a id="const-union_tag_field_name"></a>
 
@@ -79,11 +79,11 @@ pub const union_content_field_name = "value";
 
 ## FieldOptions
 
+Normalized field-level metadata options.
+
 ```zig
 pub const FieldOptions = struct { ... };
 ```
-
-Normalized field-level metadata options.
 
 ### Fields
 
@@ -103,17 +103,19 @@ Normalized field-level metadata options.
 
 ## optionsFor
 
+Returns normalized metadata options for `T`.
+
 ```zig
 pub fn optionsFor(comptime T: type) Options
 ```
 
 References: [`Options`](#type-options)
 
-Returns normalized metadata options for `T`.
-
 <a id="fn-validate"></a>
 
 ## validate
+
+Validates metadata options for `T` at comptime.
 
 ```zig
 pub fn validate(comptime T: type, comptime options: Options) void
@@ -121,11 +123,11 @@ pub fn validate(comptime T: type, comptime options: Options) void
 
 References: [`Options`](#type-options)
 
-Validates metadata options for `T` at comptime.
-
 <a id="fn-fieldoptionsfor"></a>
 
 ## fieldOptionsFor
+
+Returns normalized metadata options for one field of `T`.
 
 ```zig
 pub fn fieldOptionsFor(comptime T: type, comptime field_name: []const u8) FieldOptions
@@ -133,11 +135,11 @@ pub fn fieldOptionsFor(comptime T: type, comptime field_name: []const u8) FieldO
 
 References: [`FieldOptions`](#type-fieldoptions)
 
-Returns normalized metadata options for one field of `T`.
-
 <a id="fn-shouldserialize"></a>
 
 ## shouldSerialize
+
+Returns true when a field should be included in serialized output.
 
 ```zig
 pub fn shouldSerialize(comptime field_options: FieldOptions) bool
@@ -145,11 +147,11 @@ pub fn shouldSerialize(comptime field_options: FieldOptions) bool
 
 References: [`FieldOptions`](#type-fieldoptions)
 
-Returns true when a field should be included in serialized output.
-
 <a id="fn-shoulddeserialize"></a>
 
 ## shouldDeserialize
+
+Returns true when a field should be read from input.
 
 ```zig
 pub fn shouldDeserialize(comptime field_options: FieldOptions) bool
@@ -157,11 +159,11 @@ pub fn shouldDeserialize(comptime field_options: FieldOptions) bool
 
 References: [`FieldOptions`](#type-fieldoptions)
 
-Returns true when a field should be read from input.
-
 <a id="fn-writehook"></a>
 
 ## writeHook
+
+Returns the effective field write hook, if configured.
 
 ```zig
 pub fn writeHook(comptime field_options: FieldOptions) ?type
@@ -169,11 +171,11 @@ pub fn writeHook(comptime field_options: FieldOptions) ?type
 
 References: [`FieldOptions`](#type-fieldoptions)
 
-Returns the effective field write hook, if configured.
-
 <a id="fn-readhook"></a>
 
 ## readHook
+
+Returns the effective field read hook, if configured.
 
 ```zig
 pub fn readHook(comptime field_options: FieldOptions) ?type
@@ -181,11 +183,11 @@ pub fn readHook(comptime field_options: FieldOptions) ?type
 
 References: [`FieldOptions`](#type-fieldoptions)
 
-Returns the effective field read hook, if configured.
-
 <a id="fn-fieldwirename"></a>
 
 ## fieldWireName
+
+Returns the serialized wire name for a field.
 
 ```zig
 pub fn fieldWireName(
@@ -196,6 +198,4 @@ pub fn fieldWireName(
 ```
 
 References: [`FieldOptions`](#type-fieldoptions), [`Options`](#type-options)
-
-Returns the serialized wire name for a field.
 

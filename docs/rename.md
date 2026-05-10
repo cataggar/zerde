@@ -20,21 +20,21 @@ Field-name rename rules.
 
 ## RenameRule
 
+Supported field-name rename policies.
+
 ```zig
 pub const RenameRule = enum { ... };
 ```
 
-Supported field-name rename policies.
-
 <a id="fn-apply"></a>
 
 ## apply
+
+Applies a rename rule to a Zig field name at comptime.
 
 ```zig
 pub fn apply(comptime rule: RenameRule, comptime name: []const u8) []const u8
 ```
 
 References: [`RenameRule`](#type-renamerule)
-
-Applies a rename rule to a Zig field name at comptime.
 

@@ -16,9 +16,9 @@ Type trait helpers.
 
 ## isString
 
+Returns whether `T` is one of Zerde's default string slice types.
+
 ```zig
 pub fn isString(comptime T: type) bool
 ```
-
-Returns whether `T` is one of Zerde's default string slice types.
 

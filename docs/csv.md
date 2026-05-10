@@ -34,31 +34,31 @@ CSV and delimiter-separated tabular text support.
 
 ## Delimiter
 
+Supported delimiter-separated dialects.
+
 ```zig
 pub const Delimiter = enum { ... };
 ```
-
-Supported delimiter-separated dialects.
 
 <a id="type-recordterminator"></a>
 
 ## RecordTerminator
 
+Record terminators emitted by the writer.
+
 ```zig
 pub const RecordTerminator = enum { ... };
 ```
-
-Record terminators emitted by the writer.
 
 <a id="type-options"></a>
 
 ## Options
 
+CSV format configuration. Use `.delimiter = .tab` for TSV.
+
 ```zig
 pub const Options = struct { ... };
 ```
-
-CSV format configuration. Use `.delimiter = .tab` for TSV.
 
 ### Fields
 
@@ -74,15 +74,17 @@ CSV format configuration. Use `.delimiter = .tab` for TSV.
 
 ## write
 
+Serializes a sequence of flat structs as CSV.
+
 ```zig
 pub fn write(writer: *std.Io.Writer, value: anytype) !void
 ```
 
-Serializes a sequence of flat structs as CSV.
-
 <a id="fn-writewithoptions"></a>
 
 ## writeWithOptions
+
+Serializes a sequence of flat structs as CSV with explicit options.
 
 ```zig
 pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: Options) !void
@@ -90,21 +92,21 @@ pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: Options
 
 References: [`Options`](#type-options)
 
-Serializes a sequence of flat structs as CSV with explicit options.
-
 <a id="fn-read"></a>
 
 ## read
+
+Deserializes CSV from `reader` into `T`.
 
 ```zig
 pub fn read(comptime T: type, allocator: std.mem.Allocator, reader: *std.Io.Reader) !T
 ```
 
-Deserializes CSV from `reader` into `T`.
-
 <a id="fn-readwithoptions"></a>
 
 ## readWithOptions
+
+Deserializes CSV from `reader` into `T` with explicit options.
 
 ```zig
 pub fn readWithOptions(comptime T: type, allocator: std.mem.Allocator, reader: *std.Io.Reader, options: Options) !T
@@ -112,21 +114,21 @@ pub fn readWithOptions(comptime T: type, allocator: std.mem.Allocator, reader: *
 
 References: [`Options`](#type-options)
 
-Deserializes CSV from `reader` into `T` with explicit options.
-
 <a id="fn-writealloc"></a>
 
 ## writeAlloc
+
+Serializes `value` as CSV and returns allocator-owned bytes.
 
 ```zig
 pub fn writeAlloc(allocator: std.mem.Allocator, value: anytype) ![]u8
 ```
 
-Serializes `value` as CSV and returns allocator-owned bytes.
-
 <a id="fn-writeallocwithoptions"></a>
 
 ## writeAllocWithOptions
+
+Serializes `value` as CSV with explicit options and returns allocator-owned bytes.
 
 ```zig
 pub fn writeAllocWithOptions(allocator: std.mem.Allocator, value: anytype, options: Options) ![]u8
@@ -134,21 +136,21 @@ pub fn writeAllocWithOptions(allocator: std.mem.Allocator, value: anytype, optio
 
 References: [`Options`](#type-options)
 
-Serializes `value` as CSV with explicit options and returns allocator-owned bytes.
-
 <a id="fn-readslice"></a>
 
 ## readSlice
+
+Deserializes CSV from `input` into `T`.
 
 ```zig
 pub fn readSlice(comptime T: type, allocator: std.mem.Allocator, input: []const u8) !T
 ```
 
-Deserializes CSV from `input` into `T`.
-
 <a id="fn-readslicewithoptions"></a>
 
 ## readSliceWithOptions
+
+Deserializes CSV from `input` into `T` with explicit options.
 
 ```zig
 pub fn readSliceWithOptions(comptime T: type, allocator: std.mem.Allocator, input: []const u8, options: Options) !T
@@ -156,11 +158,11 @@ pub fn readSliceWithOptions(comptime T: type, allocator: std.mem.Allocator, inpu
 
 References: [`Options`](#type-options)
 
-Deserializes CSV from `input` into `T` with explicit options.
-
 <a id="fn-encoder"></a>
 
 ## encoder
+
+Returns a low-level CSV encoder for use with `zerde.serialize`.
 
 ```zig
 pub fn encoder(writer: *std.Io.Writer, options: Options) Encoder
@@ -168,11 +170,12 @@ pub fn encoder(writer: *std.Io.Writer, options: Options) Encoder
 
 References: [`Options`](#type-options), [`Encoder`](#type-encoder)
 
-Returns a low-level CSV encoder for use with `zerde.serialize`.
-
 <a id="fn-decoder"></a>
 
 ## decoder
+
+Returns a low-level CSV decoder for use with `zerde.deserialize`.
+Call `Decoder.deinit` when done.
 
 ```zig
 pub fn decoder(reader: *std.Io.Reader, allocator: std.mem.Allocator, options: Options) !Decoder
@@ -180,28 +183,25 @@ pub fn decoder(reader: *std.Io.Reader, allocator: std.mem.Allocator, options: Op
 
 References: [`Options`](#type-options), [`Decoder`](#type-decoder)
 
-Returns a low-level CSV decoder for use with `zerde.deserialize`.
-Call `Decoder.deinit` when done.
-
 <a id="type-kind"></a>
 
 ## Kind
+
+CSV value kinds reported by `Decoder.peek`.
 
 ```zig
 pub const Kind = enum { ... };
 ```
 
-CSV value kinds reported by `Decoder.peek`.
-
 <a id="type-encoder"></a>
 
 ## Encoder
 
+Low-level CSV encoder used by the generic serializer.
+
 ```zig
 pub const Encoder = struct { ... };
 ```
-
-Low-level CSV encoder used by the generic serializer.
 
 ### Fields
 
@@ -382,11 +382,11 @@ pub fn beginOptional(self: *Self, present: bool) !void
 
 ## Decoder
 
+Low-level CSV decoder used by the generic deserializer.
+
 ```zig
 pub const Decoder = struct { ... };
 ```
-
-Low-level CSV decoder used by the generic deserializer.
 
 ### Fields
 

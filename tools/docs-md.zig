@@ -899,14 +899,14 @@ fn renderDecl(
     try out.print(allocator, "<a id=\"{s}\"></a>\n\n", .{anchor});
     try appendHeading(allocator, out, heading_level, display_name);
     try out.append(allocator, '\n');
-    try out.appendSlice(allocator, "```zig\n");
-    try out.appendSlice(allocator, decl.signature);
-    try out.appendSlice(allocator, "\n```\n\n");
-    try appendSignatureReferences(allocator, out, symbols, current_module, decl.signature, anchor, single_file);
     if (decl.doc.len != 0) {
         try appendLinkedMarkdownText(allocator, out, symbols, current_module, decl.doc, single_file);
         try out.appendSlice(allocator, "\n\n");
     }
+    try out.appendSlice(allocator, "```zig\n");
+    try out.appendSlice(allocator, decl.signature);
+    try out.appendSlice(allocator, "\n```\n\n");
+    try appendSignatureReferences(allocator, out, symbols, current_module, decl.signature, anchor, single_file);
     if (decl.fields.items.len != 0) {
         try appendHeading(allocator, out, heading_level + 1, "Fields");
         try out.append(allocator, '\n');
