@@ -16,7 +16,7 @@ jobs:
       - name: Set up Zig
         uses: https://codeberg.org/mlugg/setup-zig@v2.2.1
         with:
-          use-cache: true
+          use-cache: false
 
       - name: Show Zig version
         run: zig version
