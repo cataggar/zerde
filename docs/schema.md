@@ -5,6 +5,8 @@
 - [API Index](README.md)
 - Previous: [codec](codec.md)
 
+## Overview
+
 Internal schema descriptors for reflected Zig types.
 
 ## Functions

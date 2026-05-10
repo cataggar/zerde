@@ -6,6 +6,8 @@
 - Previous: [zon](zon.md)
 - Next: [csv](csv.md)
 
+## Overview
+
 Compact binary format support.
 
 ## Functions

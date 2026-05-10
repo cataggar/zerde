@@ -6,6 +6,8 @@
 - Previous: [traits](traits.md)
 - Next: [schema](schema.md)
 
+## Overview
+
 Type-specialized codec API.
 
 ## Functions

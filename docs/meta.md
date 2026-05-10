@@ -6,6 +6,8 @@
 - Previous: [containers](containers.md)
 - Next: [rename](rename.md)
 
+## Overview
+
 Metadata parsing and validation helpers.
 
 ## Functions

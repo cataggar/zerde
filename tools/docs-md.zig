@@ -760,6 +760,8 @@ fn renderModuleBody(
     try out.append(allocator, '\n');
     try renderModuleNavigation(allocator, out, docs, module, heading_level + 1, single_file);
     if (module.doc.len != 0) {
+        try appendHeading(allocator, out, heading_level + 1, "Overview");
+        try out.append(allocator, '\n');
         try appendLinkedMarkdownText(allocator, out, symbols, module.name, module.doc, single_file);
         try out.appendSlice(allocator, "\n\n");
     }

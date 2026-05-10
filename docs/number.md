@@ -6,6 +6,8 @@
 - Previous: [deinit](deinit.md)
 - Next: [toml](toml.md)
 
+## Overview
+
 Shared numeric token parsing, normalization, and typed conversion helpers.
 
 ## Functions

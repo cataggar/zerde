@@ -6,6 +6,8 @@
 - Previous: [serialize](serialize.md)
 - Next: [containers](containers.md)
 
+## Overview
+
 Base64 helpers used by byte-oriented serialization.
 
 ## Functions

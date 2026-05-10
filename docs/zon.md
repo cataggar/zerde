@@ -6,6 +6,8 @@
 - Previous: [msgpack](msgpack.md)
 - Next: [binary](binary.md)
 
+## Overview
+
 Zig Object Notation format support.
 
 ## Functions

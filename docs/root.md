@@ -5,6 +5,8 @@
 - [API Index](README.md)
 - Next: [json](json.md)
 
+## Overview
+
 Public root module for Zerde serialization APIs.
 
 ## Aliases

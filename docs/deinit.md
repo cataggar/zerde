@@ -6,6 +6,8 @@
 - Previous: [deserialize](deserialize.md)
 - Next: [number](number.md)
 
+## Overview
+
 Type-directed cleanup for values produced by Zerde deserialization.
 
 ## Functions
