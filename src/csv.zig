@@ -319,6 +319,7 @@ pub const Decoder = struct {
         entries: []const FieldEntry,
         index: usize = 0,
         is_row: bool,
+        dynamic: bool = false,
     };
 
     allocator: std.mem.Allocator,
@@ -341,8 +342,13 @@ pub const Decoder = struct {
     }
 
     pub fn peek(self: *Self) !Kind {
-        const cell = self.current_cell orelse return error.InvalidCsvDecoderState;
+        const cell = self.current_cell orelse {
+            if (!self.in_seq and !self.seq_done and self.current_record_index == null) return .seq;
+            if (self.in_seq and self.current_record_index == null and self.row_index < self.dataRecordCount()) return .struct_;
+            return error.InvalidCsvDecoderState;
+        };
         if (cell.len == 0) return .null;
+        if (self.inDynamicRow()) return .string;
         if (std.mem.eql(u8, cell, "true") or std.mem.eql(u8, cell, "false")) return .bool;
         if (std.mem.indexOfAny(u8, cell, ".eE") != null) return .float;
         return .string;
@@ -449,13 +455,40 @@ pub const Decoder = struct {
         if (self.options.header) try validateHeader(T, self.records[0]);
     }
 
+    pub fn beginStructEvent(self: *Self) !?usize {
+        if (!self.in_seq or self.current_record_index != null) return error.InvalidCsvDecoderState;
+
+        const record_index = self.dataStart() + self.row_index;
+        if (record_index >= self.records.len) return error.InvalidCsvDecoderState;
+
+        const record = self.records[record_index];
+        const field_count = if (self.options.header) self.records[0].cells.len else record.cells.len;
+        self.current_record_index = record_index;
+        self.current_cell = null;
+        self.current_lookup_names = &.{};
+        try self.push(.{ .entries = &.{}, .is_row = true, .dynamic = true });
+        return field_count;
+    }
+
     pub fn nextField(self: *Self) !?[]u8 {
         const record_index = self.current_record_index orelse return error.InvalidCsvDecoderState;
         if (self.current_cell != null) return error.InvalidCsvDecoderState;
         if (self.stack_len == 0) return error.InvalidCsvDecoderState;
 
-        const columns = self.lookup();
         const frame = &self.stack[self.stack_len - 1];
+        if (frame.dynamic) {
+            const record = self.records[record_index];
+            const field_count = if (self.options.header) self.records[0].cells.len else record.cells.len;
+            if (frame.index == field_count) return null;
+
+            const column = frame.index;
+            frame.index += 1;
+            self.current_cell = record.cells[column];
+            if (self.options.header) return try self.allocator.dupe(u8, self.records[0].cells[column]);
+            return try std.fmt.allocPrint(self.allocator, "{d}", .{column});
+        }
+
+        const columns = self.lookup();
         while (frame.index < frame.entries.len) {
             const entry = frame.entries[frame.index];
             frame.index += 1;
@@ -521,6 +554,11 @@ pub const Decoder = struct {
             .{ .header = self.records[0] }
         else
             .{ .generated = self.current_lookup_names };
+    }
+
+    fn inDynamicRow(self: *Self) bool {
+        if (self.stack_len == 0) return false;
+        return self.stack[self.stack_len - 1].dynamic;
     }
 
     fn push(self: *Self, frame: Frame) !void {

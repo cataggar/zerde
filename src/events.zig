@@ -429,3 +429,110 @@ test "events read zon enum tags dynamically" {
 
     try std.testing.expectEqualStrings("\"ready\"", out.writer.buffered());
 }
+
+test "events consume csv rows dynamically" {
+    const Sink = struct {
+        allocator: std.mem.Allocator,
+        out: std.ArrayList(u8) = .empty,
+
+        fn deinit(self: *@This()) void {
+            self.out.deinit(self.allocator);
+        }
+
+        fn appendPrint(self: *@This(), comptime fmt: []const u8, args: anytype) !void {
+            const bytes = try std.fmt.allocPrint(self.allocator, fmt, args);
+            defer self.allocator.free(bytes);
+            try self.out.appendSlice(self.allocator, bytes);
+        }
+
+        pub fn emitNull(self: *@This()) !void {
+            try self.out.appendSlice(self.allocator, "null");
+        }
+
+        pub fn emitBool(self: *@This(), value: bool) !void {
+            try self.appendPrint("bool:{any}", .{value});
+        }
+
+        pub fn emitInt(self: *@This(), value: i128) !void {
+            try self.appendPrint("int:{d}", .{value});
+        }
+
+        pub fn emitFloat(self: *@This(), value: f64) !void {
+            try self.appendPrint("float:{d}", .{value});
+        }
+
+        pub fn emitString(self: *@This(), value: []const u8) !void {
+            try self.out.appendSlice(self.allocator, "string:");
+            try self.out.appendSlice(self.allocator, value);
+        }
+
+        pub fn emitBytes(self: *@This(), value: []const u8) !void {
+            try self.appendPrint("bytes:{d}", .{value.len});
+        }
+
+        pub fn beginSeq(self: *@This(), len: ?usize) !void {
+            try self.appendPrint("seq:{?d}[", .{len});
+        }
+
+        pub fn endSeq(self: *@This()) !void {
+            try self.out.append(self.allocator, ']');
+        }
+
+        pub fn beginStruct(self: *@This(), len: ?usize) !void {
+            try self.appendPrint("struct:{?d}{{", .{len});
+        }
+
+        pub fn emitFieldName(self: *@This(), name: []const u8) !void {
+            try self.out.appendSlice(self.allocator, name);
+            try self.out.append(self.allocator, '=');
+        }
+
+        pub fn endStruct(self: *@This()) !void {
+            try self.out.append(self.allocator, '}');
+        }
+    };
+
+    var reader: std.Io.Reader = .fixed("id,name,note\r\n1,Ada,\r\n2,Bob,ok");
+    var dec = try @import("csv.zig").decoder(&reader, std.testing.allocator, .{});
+    defer dec.deinit();
+    var sink = Sink{ .allocator = std.testing.allocator };
+    defer sink.deinit();
+
+    try consume(std.testing.allocator, &dec, &sink);
+    try dec.finish();
+
+    try std.testing.expectEqualStrings("seq:2[struct:3{id=string:1name=string:Adanote=null}struct:3{id=string:2name=string:Bobnote=string:ok}]", sink.out.items);
+}
+
+test "events read csv rows into value tree" {
+    var reader: std.Io.Reader = .fixed("id,name\r\n1,Ada\r\n2,Bob");
+    var dec = try @import("csv.zig").decoder(&reader, std.testing.allocator, .{});
+    defer dec.deinit();
+
+    var value = try readAlloc(std.testing.allocator, &dec);
+    defer value.deinit(std.testing.allocator);
+    try dec.finish();
+
+    const rows = value.seq;
+    try std.testing.expectEqual(@as(usize, 2), rows.len);
+    try std.testing.expectEqualStrings("id", rows[0].struct_[0].name);
+    try std.testing.expectEqualStrings("1", rows[0].struct_[0].value.string);
+    try std.testing.expectEqualStrings("name", rows[1].struct_[1].name);
+    try std.testing.expectEqualStrings("Bob", rows[1].struct_[1].value.string);
+}
+
+test "events pipe csv to json without application struct" {
+    var reader: std.Io.Reader = .fixed("id,name\r\n1,Ada\r\n2,Bob");
+    var dec = try @import("csv.zig").decoder(&reader, std.testing.allocator, .{});
+    defer dec.deinit();
+
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer out.deinit();
+    var enc = @import("json.zig").encoder(&out.writer);
+
+    try pipe(std.testing.allocator, &dec, &enc);
+    try dec.finish();
+    try enc.finish();
+
+    try std.testing.expectEqualStrings("[{\"id\":\"1\",\"name\":\"Ada\"},{\"id\":\"2\",\"name\":\"Bob\"}]", out.writer.buffered());
+}

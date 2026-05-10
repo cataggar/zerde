@@ -136,7 +136,7 @@ try in.finish();
 try out.finish();
 ```
 
-The event APIs are intended for self-describing data streams such as JSON, TOML, MessagePack, and ZON. Binary and CSV remain type-directed formats because their low-level representation depends on the Zig type shape.
+The event APIs are intended for self-describing data streams such as JSON, TOML, MessagePack, and ZON. CSV is supported as a read-side table stream: rows become structs, headers become field names, non-empty cells become strings, and empty cells become null. Binary remains type-directed because its low-level representation depends on the Zig type shape.
 
 ## Type Codecs
 
@@ -512,6 +512,28 @@ The server listens on `127.0.0.1:8000` by default and serves `zig-out/docs`. You
 ```sh
 zig build docs-serve -- 0.0.0.0 9000
 ```
+
+## Feature Support Matrix
+
+
+| Format | Direct write | Direct read | Alloc write | Slice read | Options | Low-level API | `Codec(T)` | Events source |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| JSON | yes | yes | yes | yes | write | encoder, decoder | yes | yes |
+| TOML | yes | yes | yes | yes | write | encoder, decoder | yes | yes |
+| MessagePack | yes | yes | yes | yes | write | encoder, decoder | yes | yes |
+| ZON | yes | yes | yes | yes | write | encoder, decoder | yes | yes |
+| Binary | yes | yes | yes | yes | read, write | encoder, decoder | yes | no |
+| CSV | yes | yes | yes | yes | read, write | encoder, decoder | yes | yes, as rows |
+| Human | yes | no | no | no | write | encoder only | write only | no |
+
+
+- Direct write: `write` and `writeWithOptions` when options exist.
+- Direct read: `read` and `readWithOptions` when options exist.
+- Alloc write: `writeAlloc` and `writeAllocWithOptions` when options exist.
+- Slice read: `readSlice` and `readSliceWithOptions` when options exist.
+- Low-level API: `encoder` and/or `decoder` for integration with `zerde.serialize`, `zerde.deserialize`, custom hooks, and structural events.
+
+Structural event targets are more format dependent than sources. JSON, MessagePack, ZON, and Human can generally receive `events.Value.write` output. TOML can receive object-shaped values that satisfy TOML's root-table and no-null constraints. CSV and Binary should be treated as type-directed targets rather than dynamic event targets.
 
 ## License
 

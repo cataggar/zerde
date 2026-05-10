@@ -11,6 +11,7 @@ The binaries are installed to `zig-out/bin` and can be run directly, for example
 ```sh
 ./zig-out/bin/basic-json
 ./zig-out/bin/events-api
+./zig-out/bin/events-csv-to-json
 ```
 
 ## Examples
@@ -20,6 +21,7 @@ The binaries are installed to `zig-out/bin` and can be run directly, for example
 - `codec_formats.zig` / `codec-formats`: uses `zerde.Codec(T)` to write JSON, ZON, and MessagePack, printing MessagePack as base64.
 - `custom_field_hook.zig` / `custom-field-hook`: maps a Zig `bool` field to wire strings such as `"yes"` and `"no"`.
 - `events_api.zig` / `events-api`: full structural events example covering event tracing, `readAlloc`, and JSON-to-MessagePack transcoding.
+- `events_csv_to_json.zig` / `events-csv-to-json`: consumes CSV rows through `zerde.events.pipe` and writes JSON without an application struct.
 - `metadata.zig` / `metadata`: demonstrates `rename_all`, explicit field renames, skipped fields, defaulted fields, and unknown-field denial.
 - `tagged_unions.zig` / `tagged-unions`: compares external, adjacent, and internal tagged union representations.
 - `toml_config.zig` / `toml-config`: reads and writes a realistic TOML config with nested tables, arrays of tables, defaults, and date/time values.
