@@ -905,26 +905,8 @@ fn renderDecl(
         try appendLinkedMarkdownText(allocator, out, symbols, current_module, decl.doc, single_file);
         try out.appendSlice(allocator, "\n\n");
     }
-    try out.appendSlice(allocator, "```zig\n");
-    try out.appendSlice(allocator, decl.signature);
-    try out.appendSlice(allocator, "\n```\n\n");
+    try appendDeclSignatureCodeBlock(allocator, out, &decl);
     try appendSignatureReferences(allocator, out, symbols, current_module, decl.signature, anchor, single_file);
-    if (decl.fields.items.len != 0) {
-        try appendHeading(allocator, out, heading_level + 1, "Fields");
-        try out.append(allocator, '\n');
-        try out.appendSlice(allocator, "```zig\n");
-        for (decl.fields.items) |field| {
-            try out.print(allocator, "    {s}\n", .{field.signature});
-        }
-        try out.appendSlice(allocator, "```\n\n");
-        for (decl.fields.items) |field| {
-            if (field.doc.len == 0) continue;
-            try out.print(allocator, "`{s}`: ", .{field.name});
-            try appendLinkedMarkdownText(allocator, out, symbols, current_module, field.doc, single_file);
-            try out.append(allocator, '\n');
-        }
-        try out.append(allocator, '\n');
-    }
     if (decl.children.items.len != 0) {
         try appendHeading(allocator, out, heading_level + 1, "Nested Declarations");
         try out.append(allocator, '\n');
@@ -937,6 +919,75 @@ fn renderDecl(
             try renderDecl(allocator, out, symbols, current_module, child, heading_level + 1, decl.name, single_file);
         }
     }
+}
+
+fn appendDeclSignatureCodeBlock(allocator: Allocator, out: *std.ArrayList(u8), decl: *const DeclDocs) !void {
+    try out.appendSlice(allocator, "```zig\n");
+    if (decl.fields.items.len == 0) {
+        if (decl.children.items.len == 0) {
+            try appendEmptyContainerSignature(allocator, out, decl.signature);
+        } else {
+            try out.appendSlice(allocator, decl.signature);
+        }
+    } else if (std.mem.indexOf(u8, decl.signature, "{ ... }")) |marker_index| {
+        const prefix_end = marker_index + 1;
+        const suffix_start = marker_index + "{ ... }".len;
+        try out.appendSlice(allocator, std.mem.trimEnd(u8, decl.signature[0..prefix_end], &std.ascii.whitespace));
+        try out.append(allocator, '\n');
+        for (decl.fields.items) |field| try appendFieldSignature(allocator, out, field, 4);
+        try out.append(allocator, '}');
+        try out.appendSlice(allocator, std.mem.trimStart(u8, decl.signature[suffix_start..], &std.ascii.whitespace));
+    } else {
+        try out.appendSlice(allocator, decl.signature);
+    }
+    try out.appendSlice(allocator, "\n```\n\n");
+}
+
+fn appendEmptyContainerSignature(allocator: Allocator, out: *std.ArrayList(u8), signature: []const u8) !void {
+    const marker = "{ ... }";
+    const marker_index = std.mem.indexOf(u8, signature, marker) orelse {
+        try out.appendSlice(allocator, signature);
+        return;
+    };
+    const prefix_end = marker_index + 1;
+    const suffix_start = marker_index + marker.len;
+    try out.appendSlice(allocator, std.mem.trimEnd(u8, signature[0..prefix_end], &std.ascii.whitespace));
+    try out.append(allocator, '}');
+    try out.appendSlice(allocator, std.mem.trimStart(u8, signature[suffix_start..], &std.ascii.whitespace));
+}
+
+fn appendFieldSignature(allocator: Allocator, out: *std.ArrayList(u8), field: FieldDocs, indent: usize) !void {
+    if (field.doc.len != 0) {
+        var doc_lines = std.mem.splitScalar(u8, field.doc, '\n');
+        while (doc_lines.next()) |line| {
+            try appendSpaces(allocator, out, indent);
+            try out.appendSlice(allocator, "///");
+            if (line.len != 0) {
+                try out.append(allocator, ' ');
+                try out.appendSlice(allocator, line);
+            }
+            try out.append(allocator, '\n');
+        }
+    }
+
+    const signature = std.mem.trimEnd(u8, field.signature, &std.ascii.whitespace);
+    var line_start: usize = 0;
+    while (line_start < signature.len) {
+        const line_end = std.mem.indexOfScalarPos(u8, signature, line_start, '\n') orelse signature.len;
+        const line = signature[line_start..line_end];
+        try appendSpaces(allocator, out, indent);
+        try out.appendSlice(allocator, line);
+        if (line_end == signature.len and !std.mem.endsWith(u8, std.mem.trimEnd(u8, line, &std.ascii.whitespace), ",")) {
+            try out.append(allocator, ',');
+        }
+        try out.append(allocator, '\n');
+        line_start = line_end + 1;
+    }
+}
+
+fn appendSpaces(allocator: Allocator, out: *std.ArrayList(u8), count: usize) !void {
+    var i: usize = 0;
+    while (i < count) : (i += 1) try out.append(allocator, ' ');
 }
 
 fn appendSignatureReferences(
@@ -1285,4 +1336,70 @@ test "anchor generation is deterministic" {
     const anchor = try anchorAlloc(allocator, "fn", "Foo.bar!");
     defer allocator.free(anchor);
     try std.testing.expectEqualStrings("fn-foo-bar", anchor);
+}
+
+test "type field signatures render inline with docs" {
+    const allocator = std.testing.allocator;
+    var decl = DeclDocs{
+        .name = "Value",
+        .kind = .type,
+        .visibility = .public,
+        .doc = "",
+        .signature = "pub const Value = union(enum) { ... };",
+        .line = 1,
+    };
+    defer decl.fields.deinit(allocator);
+    try decl.fields.append(allocator, .{
+        .name = "boolean",
+        .doc = "Lua boolean.",
+        .signature = "boolean: bool",
+        .line = 2,
+    });
+    try decl.fields.append(allocator, .{
+        .name = "integer",
+        .doc = "Lua integer.",
+        .signature = "integer: i64",
+        .line = 4,
+    });
+
+    var out = std.ArrayList(u8).empty;
+    defer out.deinit(allocator);
+    try appendDeclSignatureCodeBlock(allocator, &out, &decl);
+
+    try std.testing.expectEqualStrings(
+        \\```zig
+        \\pub const Value = union(enum) {
+        \\    /// Lua boolean.
+        \\    boolean: bool,
+        \\    /// Lua integer.
+        \\    integer: i64,
+        \\};
+        \\```
+        \\
+        \\
+    , out.items);
+}
+
+test "empty type signatures omit ellipsis" {
+    const allocator = std.testing.allocator;
+    const decl = DeclDocs{
+        .name = "GcOptions",
+        .kind = .type,
+        .visibility = .public,
+        .doc = "",
+        .signature = "pub const GcOptions = struct { ... };",
+        .line = 1,
+    };
+
+    var out = std.ArrayList(u8).empty;
+    defer out.deinit(allocator);
+    try appendDeclSignatureCodeBlock(allocator, &out, &decl);
+
+    try std.testing.expectEqualStrings(
+        \\```zig
+        \\pub const GcOptions = struct {};
+        \\```
+        \\
+        \\
+    , out.items);
 }

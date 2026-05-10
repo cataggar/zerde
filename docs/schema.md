@@ -35,185 +35,130 @@ Internal schema descriptors for reflected Zig types.
 Internal inspection-oriented schema descriptor.
 
 ```zig
-pub const Schema = struct { ... };
+pub const Schema = struct {
+    /// Fully qualified Zig type name.
+    type_name: []const u8,
+    shape: Shape,
+};
 ```
-
-### Fields
-
-```zig
-    type_name: []const u8
-    shape: Shape
-```
-
-`type_name`: Fully qualified Zig type name.
 
 <a id="type-shape"></a>
 
 ## Shape
 
 ```zig
-pub const Shape = union(enum) { ... };
+pub const Shape = union(enum) {
+    int: IntInfo,
+    float: FloatInfo,
+    optional: *const Schema,
+    seq: SeqInfo,
+    map: MapInfo,
+    struct_: StructInfo,
+    enum_: EnumInfo,
+    union_: UnionInfo,
+};
 ```
-
-### Fields
-
-```zig
-    int: IntInfo
-    float: FloatInfo
-    optional: *const Schema
-    seq: SeqInfo
-    map: MapInfo
-    struct_: StructInfo
-    enum_: EnumInfo
-    union_: UnionInfo
-```
-
 
 <a id="type-intinfo"></a>
 
 ## IntInfo
 
 ```zig
-pub const IntInfo = struct { ... };
+pub const IntInfo = struct {
+    signedness: std.builtin.Signedness,
+    bits: u16,
+};
 ```
-
-### Fields
-
-```zig
-    signedness: std.builtin.Signedness
-    bits: u16
-```
-
 
 <a id="type-floatinfo"></a>
 
 ## FloatInfo
 
 ```zig
-pub const FloatInfo = struct { ... };
+pub const FloatInfo = struct {
+    bits: u16,
+};
 ```
-
-### Fields
-
-```zig
-    bits: u16
-```
-
 
 <a id="type-seqinfo"></a>
 
 ## SeqInfo
 
 ```zig
-pub const SeqInfo = struct { ... };
+pub const SeqInfo = struct {
+    child: *const Schema,
+    len: ?usize,
+};
 ```
-
-### Fields
-
-```zig
-    child: *const Schema
-    len: ?usize
-```
-
 
 <a id="type-mapinfo"></a>
 
 ## MapInfo
 
 ```zig
-pub const MapInfo = struct { ... };
+pub const MapInfo = struct {
+    key: *const Schema,
+    value: *const Schema,
+};
 ```
-
-### Fields
-
-```zig
-    key: *const Schema
-    value: *const Schema
-```
-
 
 <a id="type-fieldinfo"></a>
 
 ## FieldInfo
 
 ```zig
-pub const FieldInfo = struct { ... };
+pub const FieldInfo = struct {
+    zig_name: []const u8,
+    wire_name: []const u8,
+    schema: *const Schema,
+    required: bool,
+    has_default: bool,
+    serializes: bool,
+    deserializes: bool,
+};
 ```
-
-### Fields
-
-```zig
-    zig_name: []const u8
-    wire_name: []const u8
-    schema: *const Schema
-    required: bool
-    has_default: bool
-    serializes: bool
-    deserializes: bool
-```
-
 
 <a id="type-structinfo"></a>
 
 ## StructInfo
 
 ```zig
-pub const StructInfo = struct { ... };
+pub const StructInfo = struct {
+    fields: []const FieldInfo,
+};
 ```
-
-### Fields
-
-```zig
-    fields: []const FieldInfo
-```
-
 
 <a id="type-enuminfo"></a>
 
 ## EnumInfo
 
 ```zig
-pub const EnumInfo = struct { ... };
+pub const EnumInfo = struct {
+    tags: []const []const u8,
+};
 ```
-
-### Fields
-
-```zig
-    tags: []const []const u8
-```
-
 
 <a id="type-unionvariantinfo"></a>
 
 ## UnionVariantInfo
 
 ```zig
-pub const UnionVariantInfo = struct { ... };
+pub const UnionVariantInfo = struct {
+    zig_name: []const u8,
+    schema: ?*const Schema,
+};
 ```
-
-### Fields
-
-```zig
-    zig_name: []const u8
-    schema: ?*const Schema
-```
-
 
 <a id="type-unioninfo"></a>
 
 ## UnionInfo
 
 ```zig
-pub const UnionInfo = struct { ... };
+pub const UnionInfo = struct {
+    repr: meta.UnionRepr,
+    variants: []const UnionVariantInfo,
+};
 ```
-
-### Fields
-
-```zig
-    repr: meta.UnionRepr
-    variants: []const UnionVariantInfo
-```
-
 
 <a id="fn-fortype"></a>
 

@@ -7,6 +7,7 @@ const containers = @import("containers.zig");
 const deinitValue = @import("deinit.zig").deinit;
 const deserialize = @import("deserialize.zig").deserialize;
 const datetime = @import("datetime.zig");
+const events = @import("events.zig");
 const meta = @import("meta.zig");
 const number = @import("number.zig");
 
@@ -126,6 +127,11 @@ pub const Kind = enum {
 };
 
 /// Low-level CSV encoder used by the generic serializer.
+///
+/// This can also receive `zerde.events.Value.write` output when the event value
+/// is a sequence of row structs. For event writes, the first row defines the
+/// fixed schema, nested structs are flattened with dot-separated headers,
+/// missing later fields become empty cells, and extra later fields are rejected.
 pub const Encoder = struct {
     const Self = @This();
     const max_depth = 64;
@@ -183,6 +189,58 @@ pub const Encoder = struct {
 
     pub fn emitEnumTag(self: *Self, tag: []const u8) !void {
         try self.emitString(tag);
+    }
+
+    /// Writes a buffered structural event value as CSV.
+    ///
+    /// The value must be a sequence of row structs, and the first row defines
+    /// the fixed schema.
+    pub fn emitEventValue(self: *Self, value: events.Value) !void {
+        if (self.root_started or self.stack_len != 0 or self.seq_done) return error.InvalidCsvEncoderState;
+        self.root_started = true;
+
+        const rows = switch (value) {
+            .seq => |rows| rows,
+            else => return error.InvalidCsvEventShape,
+        };
+
+        if (rows.len == 0) {
+            self.seq_done = true;
+            return;
+        }
+
+        const schema = switch (rows[0]) {
+            .struct_ => |fields| fields,
+            else => return error.InvalidCsvEventShape,
+        };
+        try validateEventSchema(schema);
+
+        var wrote_record = false;
+        if (self.options.header) {
+            var header_index: usize = 0;
+            var path_parts: [max_depth][]const u8 = undefined;
+            try writeEventHeaderFields(schema, &path_parts, 0, self.writer, self.options, &header_index);
+            self.header_written = true;
+            wrote_record = true;
+        }
+
+        for (rows) |row| {
+            const fields = switch (row) {
+                .struct_ => |fields| fields,
+                else => return error.InvalidCsvEventShape,
+            };
+
+            if (wrote_record) try writeRecordTerminator(self.writer, self.options.record_terminator);
+            var field_index: usize = 0;
+            try writeEventRowFields(schema, fields, self.writer, self.options, &field_index);
+            self.row_count += 1;
+            wrote_record = true;
+        }
+
+        if (self.options.final_record_terminator and (self.header_written or self.row_count != 0)) {
+            try writeRecordTerminator(self.writer, self.options.record_terminator);
+        }
+        self.seq_done = true;
     }
 
     pub fn beginArray(self: *Self, comptime T: type, len: usize) !void {
@@ -789,6 +847,128 @@ fn writeEscapedCell(writer: *std.Io.Writer, value: []const u8, delimiter: u8) !v
         try writer.writeByte(byte);
     }
     try writer.writeByte('"');
+}
+
+fn validateEventSchema(schema: []const events.ObjectField) !void {
+    for (schema, 0..) |field, i| {
+        if (!std.unicode.utf8ValidateSlice(field.name)) return error.InvalidUtf8;
+        for (schema[0..i]) |previous| {
+            if (std.mem.eql(u8, field.name, previous.name)) return error.DuplicateField;
+        }
+        switch (field.value) {
+            .struct_ => |nested| try validateEventSchema(nested),
+            else => {},
+        }
+    }
+}
+
+fn writeEventHeaderFields(schema: []const events.ObjectField, path_parts: *[Encoder.max_depth][]const u8, path_len: usize, writer: *std.Io.Writer, options: Options, index: *usize) !void {
+    if (path_len == path_parts.len) return error.NestingTooDeep;
+
+    for (schema) |field| {
+        path_parts[path_len] = field.name;
+        switch (field.value) {
+            .struct_ => |nested| try writeEventHeaderFields(nested, path_parts, path_len + 1, writer, options, index),
+            else => {
+                if (index.* != 0) try writer.writeByte(options.delimiter.byte());
+                try writeEscapedPathCell(writer, path_parts[0 .. path_len + 1], options.delimiter.byte());
+                index.* += 1;
+            },
+        }
+    }
+}
+
+fn writeEventRowFields(schema: []const events.ObjectField, fields: []const events.ObjectField, writer: *std.Io.Writer, options: Options, index: *usize) !void {
+    for (schema) |schema_field| {
+        const row_field = findEventField(fields, schema_field.name);
+        switch (schema_field.value) {
+            .struct_ => |nested_schema| {
+                if (row_field) |field| {
+                    switch (field.value) {
+                        .null => try writeEmptyCells(countEventLeaves(nested_schema), writer, options, index),
+                        .struct_ => |nested_fields| try writeEventRowFields(nested_schema, nested_fields, writer, options, index),
+                        else => return error.InvalidCsvEventShape,
+                    }
+                } else {
+                    try writeEmptyCells(countEventLeaves(nested_schema), writer, options, index);
+                }
+            },
+            else => {
+                if (index.* != 0) try writer.writeByte(options.delimiter.byte());
+                if (row_field) |field| try writeEventCellValue(field.value, writer, options.delimiter.byte());
+                index.* += 1;
+            },
+        }
+    }
+
+    for (fields) |field| {
+        if (findEventField(schema, field.name) == null) return error.UnknownField;
+    }
+}
+
+fn writeEventCellValue(value: events.Value, writer: *std.Io.Writer, delimiter: u8) !void {
+    switch (value) {
+        .null => {},
+        .bool => |cell| try writer.writeAll(if (cell) "true" else "false"),
+        .int => |cell| try writer.print("{d}", .{cell}),
+        .float => |cell| {
+            try CsvNumber.emitFloat(cell);
+            try writer.print("{d}", .{cell});
+        },
+        .string, .enum_tag, .datetime => |cell| {
+            if (!std.unicode.utf8ValidateSlice(cell)) return error.InvalidUtf8;
+            try writeEscapedCell(writer, cell, delimiter);
+        },
+        .bytes => |cell| try base64.writeEncoded(writer, cell),
+        .extension, .seq, .struct_ => return error.InvalidCsvEventShape,
+    }
+}
+
+fn writeEscapedPathCell(writer: *std.Io.Writer, parts: []const []const u8, delimiter: u8) !void {
+    const specials = [_]u8{ delimiter, '"', '\r', '\n' };
+    var must_quote = false;
+    for (parts) |part| {
+        if (std.mem.indexOfAny(u8, part, &specials) != null) {
+            must_quote = true;
+            break;
+        }
+    }
+
+    if (!must_quote) {
+        for (parts, 0..) |part, i| {
+            if (i != 0) try writer.writeByte('.');
+            try writer.writeAll(part);
+        }
+        return;
+    }
+
+    try writer.writeByte('"');
+    for (parts, 0..) |part, i| {
+        if (i != 0) try writer.writeByte('.');
+        for (part) |byte| {
+            if (byte == '"') try writer.writeByte('"');
+            try writer.writeByte(byte);
+        }
+    }
+    try writer.writeByte('"');
+}
+
+fn findEventField(fields: []const events.ObjectField, name: []const u8) ?events.ObjectField {
+    for (fields) |field| {
+        if (std.mem.eql(u8, field.name, name)) return field;
+    }
+    return null;
+}
+
+fn countEventLeaves(schema: []const events.ObjectField) usize {
+    var count: usize = 0;
+    for (schema) |field| {
+        count += switch (field.value) {
+            .struct_ => |nested| countEventLeaves(nested),
+            else => 1,
+        };
+    }
+    return count;
 }
 
 fn writeRecordTerminator(writer: *std.Io.Writer, terminator: RecordTerminator) !void {

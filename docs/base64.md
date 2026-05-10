@@ -29,15 +29,10 @@ Base64 helpers used by byte-oriented serialization.
 Wrapper type for serializing raw bytes distinctly from UTF-8 strings.
 
 ```zig
-pub const Bytes = struct { ... };
+pub const Bytes = struct {
+    value: []const u8,
+};
 ```
-
-### Fields
-
-```zig
-    value: []const u8
-```
-
 
 ### Nested Declarations
 

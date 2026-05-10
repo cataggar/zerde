@@ -25,18 +25,13 @@ First-class date and time value types.
 [Timestamp](#type-timestamp) with seconds elapsed since the Unix epoch and nanosecond precision.
 
 ```zig
-pub const Timestamp = struct { ... };
+pub const Timestamp = struct {
+    /// Seconds elapsed since 1970-01-01 00:00:00 UTC.
+    seconds: i64,
+    /// Nanoseconds within the current second.
+    nanoseconds: u32 = 0,
+};
 ```
-
-### Fields
-
-```zig
-    seconds: i64
-    nanoseconds: u32 = 0
-```
-
-`seconds`: Seconds elapsed since 1970-01-01 00:00:00 UTC.
-`nanoseconds`: Nanoseconds within the current second.
 
 ### Nested Declarations
 
@@ -74,17 +69,12 @@ References: [`Timestamp`](#type-timestamp)
 Local date: `YYYY-MM-DD`.
 
 ```zig
-pub const LocalDate = struct { ... };
+pub const LocalDate = struct {
+    year: u16,
+    month: u8,
+    day: u8,
+};
 ```
-
-### Fields
-
-```zig
-    year: u16
-    month: u8
-    day: u8
-```
-
 
 ### Nested Declarations
 
@@ -140,18 +130,13 @@ References: [`LocalDate`](#type-localdate)
 Local time: `HH:MM:SS[.fraction]`.
 
 ```zig
-pub const LocalTime = struct { ... };
+pub const LocalTime = struct {
+    hour: u8,
+    minute: u8,
+    second: u8,
+    nanosecond: u32 = 0,
+};
 ```
-
-### Fields
-
-```zig
-    hour: u8
-    minute: u8
-    second: u8
-    nanosecond: u32 = 0
-```
-
 
 ### Nested Declarations
 
@@ -207,16 +192,11 @@ References: [`LocalTime`](#type-localtime)
 Local date-time: `YYYY-MM-DDTHH:MM:SS[.fraction]`.
 
 ```zig
-pub const LocalDateTime = struct { ... };
+pub const LocalDateTime = struct {
+    date: LocalDate,
+    time: LocalTime,
+};
 ```
-
-### Fields
-
-```zig
-    date: LocalDate
-    time: LocalTime
-```
-
 
 ### Nested Declarations
 
@@ -272,17 +252,12 @@ References: [`LocalDateTime`](#type-localdatetime)
 Offset date-time: `YYYY-MM-DDTHH:MM:SS[.fraction]Z` or with `+/-HH:MM`.
 
 ```zig
-pub const OffsetDateTime = struct { ... };
+pub const OffsetDateTime = struct {
+    date: LocalDate,
+    time: LocalTime,
+    offset_minutes: i16,
+};
 ```
-
-### Fields
-
-```zig
-    date: LocalDate
-    time: LocalTime
-    offset_minutes: i16
-```
-
 
 ### Nested Declarations
 

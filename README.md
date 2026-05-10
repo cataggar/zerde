@@ -17,14 +17,14 @@ Zerde is a small Zig 0.16 serialization framework built around comptime reflecti
 
 ## Status
 
-The current version is `0.2.1` and targets Zig `0.16.0` or newer. The API is usable, but still early.
+The current version is `0.2.2` and targets Zig `0.16.0` or newer. The API is usable, but still early.
 
 ## Quick Start
 
 1. Add `zerde` to your Zig package dependencies:
 
 ```sh
-zig fetch --save git+https://codeberg.org/gron/zerde#v0.2.1
+zig fetch --save git+https://codeberg.org/gron/zerde#v0.2.2
 ```
 
 2. Wire the dependency into your executable in `build.zig`:
@@ -136,7 +136,7 @@ try in.finish();
 try out.finish();
 ```
 
-The event APIs are intended for self-describing data streams such as JSON, TOML, MessagePack, and ZON. CSV is supported as a read-side table stream: rows become structs, headers become field names, non-empty cells become strings, and empty cells become null. Binary remains type-directed because its low-level representation depends on the Zig type shape.
+The event APIs are intended for self-describing data streams such as JSON, TOML, MessagePack, and ZON. CSV can participate as a table stream: reads produce a sequence of row structs, and writes accept a sequence of row structs whose first row defines the CSV schema. Later rows may omit first-row fields, which become empty cells, but extra fields are rejected. Binary remains type-directed because its low-level representation depends on the Zig type shape.
 
 ## Type Codecs
 
@@ -534,7 +534,7 @@ zig build docs-serve -- 0.0.0.0 9000
 - Slice read: `readSlice` and `readSliceWithOptions` when options exist.
 - Low-level API: `encoder`, `encoderWithOptions`, and/or `decoder` for integration with `zerde.serialize`, `zerde.deserialize`, custom hooks, and structural events.
 
-Structural event targets are more format dependent than sources. JSON, MessagePack, ZON, and Human can generally receive `events.Value.write` output. TOML can receive object-shaped values that satisfy TOML's root-table and no-null constraints. CSV and Binary should be treated as type-directed targets rather than dynamic event targets.
+Structural event targets are more format dependent than sources. JSON, MessagePack, ZON, and Human can generally receive `events.Value.write` output. TOML can receive object-shaped values that satisfy TOML's root-table and no-null constraints. CSV can receive a sequence of row structs, using the first row as the fixed schema. Binary should be treated as a type-directed target rather than a dynamic event target.
 
 ## License
 

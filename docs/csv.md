@@ -4,7 +4,7 @@
 
 - [API Index](README.md)
 - Previous: [binary](binary.md)
-- Next: [human](human.md)
+- Next: [events](events.md)
 
 ## Overview
 
@@ -40,7 +40,7 @@ CSV and delimiter-separated tabular text support.
 Supported delimiter-separated dialects.
 
 ```zig
-pub const Delimiter = enum { ... };
+pub const Delimiter = enum {};
 ```
 
 <a id="type-recordterminator"></a>
@@ -50,7 +50,7 @@ pub const Delimiter = enum { ... };
 Record terminators emitted by the writer.
 
 ```zig
-pub const RecordTerminator = enum { ... };
+pub const RecordTerminator = enum {};
 ```
 
 <a id="type-options"></a>
@@ -60,18 +60,13 @@ pub const RecordTerminator = enum { ... };
 CSV format configuration. Use `.delimiter = .tab` for TSV.
 
 ```zig
-pub const Options = struct { ... };
+pub const Options = struct {
+    delimiter: Delimiter = .comma,
+    header: bool = true,
+    record_terminator: RecordTerminator = .crlf,
+    final_record_terminator: bool = false,
+};
 ```
-
-### Fields
-
-```zig
-    delimiter: Delimiter = .comma
-    header: bool = true
-    record_terminator: RecordTerminator = .crlf
-    final_record_terminator: bool = false
-```
-
 
 <a id="fn-write"></a>
 
@@ -205,7 +200,7 @@ References: [`Options`](#type-options), [`Decoder`](#type-decoder)
 CSV value kinds reported by `Decoder.peek`.
 
 ```zig
-pub const Kind = enum { ... };
+pub const Kind = enum {};
 ```
 
 <a id="type-encoder"></a>
@@ -214,28 +209,28 @@ pub const Kind = enum { ... };
 
 Low-level CSV encoder used by the generic serializer.
 
+This can also receive `zerde.events.Value.write` output when the event value
+is a sequence of row structs. For event writes, the first row defines the
+fixed schema, nested structs are flattened with dot-separated headers,
+missing later fields become empty cells, and extra later fields are rejected.
+
 ```zig
-pub const Encoder = struct { ... };
+pub const Encoder = struct {
+    writer: *std.Io.Writer,
+    options: Options,
+    stack: [max_depth]Frame = undefined,
+    stack_len: usize = 0,
+    root_started: bool = false,
+    seq_done: bool = false,
+    row_count: usize = 0,
+    row_field_index: usize = 0,
+    expecting_cell: bool = false,
+    header_written: bool = false,
+    pending_path: []const u8 = "",
+    pending_leaf_count: usize = 0,
+    pending_nested_entries: []const FieldEntry = &.{},
+};
 ```
-
-### Fields
-
-```zig
-    writer: *std.Io.Writer
-    options: Options
-    stack: [max_depth]Frame = undefined
-    stack_len: usize = 0
-    root_started: bool = false
-    seq_done: bool = false
-    row_count: usize = 0
-    row_field_index: usize = 0
-    expecting_cell: bool = false
-    header_written: bool = false
-    pending_path: []const u8 = ""
-    pending_leaf_count: usize = 0
-    pending_nested_entries: []const FieldEntry = &.{}
-```
-
 
 ### Nested Declarations
 
@@ -246,6 +241,7 @@ pub const Encoder = struct { ... };
 - [emitString](#fn-encoder-emitstring)
 - [emitBytes](#fn-encoder-emitbytes)
 - [emitEnumTag](#fn-encoder-emitenumtag)
+- [emitEventValue](#fn-encoder-emiteventvalue)
 - [beginArray](#fn-encoder-beginarray)
 - [beginSlice](#fn-encoder-beginslice)
 - [beginSeq](#fn-encoder-beginseq)
@@ -312,6 +308,21 @@ pub fn emitBytes(self: *Self, value: []const u8) !void
 ```zig
 pub fn emitEnumTag(self: *Self, tag: []const u8) !void
 ```
+
+<a id="fn-encoder-emiteventvalue"></a>
+
+### Encoder.emitEventValue
+
+Writes a buffered structural event value as CSV.
+
+The value must be a sequence of row structs, and the first row defines
+the fixed schema.
+
+```zig
+pub fn emitEventValue(self: *Self, value: events.Value) !void
+```
+
+References: [`events.Value`](events.md#type-value)
 
 <a id="fn-encoder-beginarray"></a>
 
@@ -400,27 +411,22 @@ pub fn beginOptional(self: *Self, present: bool) !void
 Low-level CSV decoder used by the generic deserializer.
 
 ```zig
-pub const Decoder = struct { ... };
+pub const Decoder = struct {
+    allocator: std.mem.Allocator,
+    options: Options,
+    records: []Record,
+    stack: [max_depth]Frame = undefined,
+    stack_len: usize = 0,
+    in_seq: bool = false,
+    seq_done: bool = false,
+    row_index: usize = 0,
+    current_record_index: ?usize = null,
+    current_cell: ?[]const u8 = null,
+    pending_nested_entries: []const FieldEntry = &.{},
+    pending_path: []const u8 = "",
+    current_lookup_names: []const []const u8 = &.{},
+};
 ```
-
-### Fields
-
-```zig
-    allocator: std.mem.Allocator
-    options: Options
-    records: []Record
-    stack: [max_depth]Frame = undefined
-    stack_len: usize = 0
-    in_seq: bool = false
-    seq_done: bool = false
-    row_index: usize = 0
-    current_record_index: ?usize = null
-    current_cell: ?[]const u8 = null
-    pending_nested_entries: []const FieldEntry = &.{}
-    pending_path: []const u8 = ""
-    current_lookup_names: []const []const u8 = &.{}
-```
-
 
 ### Nested Declarations
 

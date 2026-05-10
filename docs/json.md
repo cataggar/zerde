@@ -36,16 +36,11 @@ JSON format support.
 JSON writer configuration.
 
 ```zig
-pub const WriteOptions = struct { ... };
+pub const WriteOptions = struct {
+    pretty: bool = false,
+    indent: usize = 2,
+};
 ```
-
-### Fields
-
-```zig
-    pretty: bool = false
-    indent: usize = 2
-```
-
 
 <a id="fn-write"></a>
 
@@ -165,7 +160,7 @@ References: [`Decoder`](#type-decoder)
 JSON value kinds reported by `Decoder.peek`.
 
 ```zig
-pub const Kind = enum { ... };
+pub const Kind = enum {};
 ```
 
 <a id="type-decoder"></a>
@@ -175,18 +170,13 @@ pub const Kind = enum { ... };
 Low-level JSON decoder used by the generic deserializer.
 
 ```zig
-pub const Decoder = struct { ... };
+pub const Decoder = struct {
+    reader: *std.Io.Reader,
+    allocator: std.mem.Allocator,
+    stack: [max_depth]Frame = undefined,
+    stack_len: usize = 0,
+};
 ```
-
-### Fields
-
-```zig
-    reader: *std.Io.Reader
-    allocator: std.mem.Allocator
-    stack: [max_depth]Frame = undefined
-    stack_len: usize = 0
-```
-
 
 ### Nested Declarations
 
@@ -342,19 +332,14 @@ The encoder owns no memory. It writes directly to the supplied
 strings, rejects non-finite floats, and enforces a fixed nesting limit.
 
 ```zig
-pub const Encoder = struct { ... };
+pub const Encoder = struct {
+    writer: *std.Io.Writer,
+    options: WriteOptions = .{},
+    stack: [max_depth]Frame = undefined,
+    stack_len: usize = 0,
+    root_count: usize = 0,
+};
 ```
-
-### Fields
-
-```zig
-    writer: *std.Io.Writer
-    options: WriteOptions = .{}
-    stack: [max_depth]Frame = undefined
-    stack_len: usize = 0
-    root_count: usize = 0
-```
-
 
 ### Nested Declarations
 

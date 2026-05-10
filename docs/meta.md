@@ -39,17 +39,12 @@ Metadata parsing and validation helpers.
 Normalized type-level metadata options.
 
 ```zig
-pub const Options = struct { ... };
+pub const Options = struct {
+    rename_all: rename.RenameRule = .none,
+    deny_unknown_fields: bool = false,
+    union_repr: UnionRepr = .external,
+};
 ```
-
-### Fields
-
-```zig
-    rename_all: rename.RenameRule = .none
-    deny_unknown_fields: bool = false
-    union_repr: UnionRepr = .external
-```
-
 
 <a id="type-unionrepr"></a>
 
@@ -58,7 +53,7 @@ pub const Options = struct { ... };
 Supported tagged union wire representations.
 
 ```zig
-pub const UnionRepr = enum { ... };
+pub const UnionRepr = enum {};
 ```
 
 <a id="const-union_tag_field_name"></a>
@@ -84,22 +79,17 @@ pub const union_content_field_name = "value";
 Normalized field-level metadata options.
 
 ```zig
-pub const FieldOptions = struct { ... };
+pub const FieldOptions = struct {
+    rename: ?[]const u8 = null,
+    skip: bool = false,
+    skip_writing: bool = false,
+    skip_reading: bool = false,
+    with: ?type = null,
+    write_with: ?type = null,
+    read_with: ?type = null,
+    bytes: bool = false,
+};
 ```
-
-### Fields
-
-```zig
-    rename: ?[]const u8 = null
-    skip: bool = false
-    skip_writing: bool = false
-    skip_reading: bool = false
-    with: ?type = null
-    write_with: ?type = null
-    read_with: ?type = null
-    bytes: bool = false
-```
-
 
 <a id="fn-optionsfor"></a>
 

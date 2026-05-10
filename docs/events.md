@@ -3,8 +3,8 @@
 ## Navigation
 
 - [API Index](README.md)
-- Previous: [traits](traits.md)
-- Next: [codec](codec.md)
+- Previous: [csv](csv.md)
+- Next: [human](human.md)
 
 ## Overview
 
@@ -30,16 +30,11 @@ without deserializing into an application Zig struct.
 Opaque extension payload used by formats that support extension values.
 
 ```zig
-pub const Extension = struct { ... };
+pub const Extension = struct {
+    type_id: i8,
+    data: []u8,
+};
 ```
-
-### Fields
-
-```zig
-    type_id: i8
-    data: []u8
-```
-
 
 <a id="type-objectfield"></a>
 
@@ -48,16 +43,11 @@ pub const Extension = struct { ... };
 Allocator-owned field in a structural object value.
 
 ```zig
-pub const ObjectField = struct { ... };
+pub const ObjectField = struct {
+    name: []u8,
+    value: Value,
+};
 ```
-
-### Fields
-
-```zig
-    name: []u8
-    value: Value
-```
-
 
 <a id="type-value"></a>
 
@@ -70,24 +60,19 @@ existing representation can avoid this tree and implement a streaming sink
 for `consume` instead.
 
 ```zig
-pub const Value = union(enum) { ... };
+pub const Value = union(enum) {
+    bool: bool,
+    int: i128,
+    float: f64,
+    string: []u8,
+    bytes: []u8,
+    enum_tag: []u8,
+    datetime: []u8,
+    extension: Extension,
+    seq: []Value,
+    struct_: []ObjectField,
+};
 ```
-
-### Fields
-
-```zig
-    bool: bool
-    int: i128
-    float: f64
-    string: []u8
-    bytes: []u8
-    enum_tag: []u8
-    datetime: []u8
-    extension: Extension
-    seq: []Value
-    struct_: []ObjectField
-```
-
 
 ### Nested Declarations
 
@@ -154,6 +139,10 @@ References: [`Value`](#type-value)
 Reads one value from `decoder` and writes it to `encoder` without requiring an
 application Zig struct. This buffers the value so encoders that require known
 sequence or object lengths can still be targeted.
+
+CSV targets require the buffered value to be a sequence of row structs. The
+first row defines the fixed CSV schema; later rows may omit those fields but
+may not add fields outside that schema.
 
 ```zig
 pub fn pipe(allocator: std.mem.Allocator, decoder: anytype, encoder: anytype) !void

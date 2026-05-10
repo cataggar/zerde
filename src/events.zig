@@ -56,6 +56,11 @@ pub const Value = union(enum) {
 
     /// Emits this value into any Zerde encoder.
     pub fn write(self: Value, encoder: anytype) !void {
+        if (comptime hasMethod(@TypeOf(encoder), "emitEventValue")) {
+            try encoder.emitEventValue(self);
+            return;
+        }
+
         switch (self) {
             .null => try encoder.emitNull(),
             .bool => |value| try encoder.emitBool(value),
@@ -103,6 +108,10 @@ pub fn readAlloc(allocator: std.mem.Allocator, decoder: anytype) !Value {
 /// Reads one value from `decoder` and writes it to `encoder` without requiring an
 /// application Zig struct. This buffers the value so encoders that require known
 /// sequence or object lengths can still be targeted.
+///
+/// CSV targets require the buffered value to be a sequence of row structs. The
+/// first row defines the fixed CSV schema; later rows may omit those fields but
+/// may not add fields outside that schema.
 pub fn pipe(allocator: std.mem.Allocator, decoder: anytype, encoder: anytype) !void {
     var value = try readAlloc(allocator, decoder);
     defer value.deinit(allocator);
@@ -535,4 +544,81 @@ test "events pipe csv to json without application struct" {
     try enc.finish();
 
     try std.testing.expectEqualStrings("[{\"id\":\"1\",\"name\":\"Ada\"},{\"id\":\"2\",\"name\":\"Bob\"}]", out.writer.buffered());
+}
+
+test "events pipe json rows to csv using first row schema" {
+    var reader: std.Io.Reader = .fixed(
+        \\[{"id":1,"name":"Ada, \"Countess\"","note":null},{"id":2,"name":"Bob","note":"ok"}]
+    );
+    var dec = @import("json.zig").decoder(&reader, std.testing.allocator);
+
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer out.deinit();
+    var enc = @import("csv.zig").encoder(&out.writer);
+
+    try pipe(std.testing.allocator, &dec, &enc);
+    try dec.finish();
+    try enc.finish();
+
+    try std.testing.expectEqualStrings("id,name,note\r\n1,\"Ada, \"\"Countess\"\"\",\r\n2,Bob,ok", out.writer.buffered());
+}
+
+test "events csv writer leaves missing first row fields empty" {
+    var reader: std.Io.Reader = .fixed(
+        \\[{"id":1,"name":"Ada"},{"id":2}]
+    );
+    var dec = @import("json.zig").decoder(&reader, std.testing.allocator);
+
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer out.deinit();
+    var enc = @import("csv.zig").encoder(&out.writer);
+
+    try pipe(std.testing.allocator, &dec, &enc);
+    try dec.finish();
+    try enc.finish();
+
+    try std.testing.expectEqualStrings("id,name\r\n1,Ada\r\n2,", out.writer.buffered());
+}
+
+test "events csv writer rejects fields outside first row schema" {
+    var reader: std.Io.Reader = .fixed(
+        \\[{"id":1},{"id":2,"extra":"nope"}]
+    );
+    var dec = @import("json.zig").decoder(&reader, std.testing.allocator);
+
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer out.deinit();
+    var enc = @import("csv.zig").encoder(&out.writer);
+
+    try std.testing.expectError(error.UnknownField, pipe(std.testing.allocator, &dec, &enc));
+}
+
+test "events csv writer flattens nested first row objects" {
+    var reader: std.Io.Reader = .fixed(
+        \\[{"id":1,"detail":{"code":7,"label":"ok"}},{"id":2,"detail":null}]
+    );
+    var dec = @import("json.zig").decoder(&reader, std.testing.allocator);
+
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer out.deinit();
+    var enc = @import("csv.zig").encoderWithOptions(&out.writer, .{ .record_terminator = .lf });
+
+    try pipe(std.testing.allocator, &dec, &enc);
+    try dec.finish();
+    try enc.finish();
+
+    try std.testing.expectEqualStrings("id,detail.code,detail.label\n1,7,ok\n2,,", out.writer.buffered());
+}
+
+test "events csv writer keeps null first row fields scalar" {
+    var reader: std.Io.Reader = .fixed(
+        \\[{"id":1,"detail":null},{"id":2,"detail":{"code":7}}]
+    );
+    var dec = @import("json.zig").decoder(&reader, std.testing.allocator);
+
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer out.deinit();
+    var enc = @import("csv.zig").encoder(&out.writer);
+
+    try std.testing.expectError(error.InvalidCsvEventShape, pipe(std.testing.allocator, &dec, &enc));
 }

@@ -3,7 +3,7 @@
 ## Navigation
 
 - [API Index](README.md)
-- Previous: [events](events.md)
+- Previous: [traits](traits.md)
 - Next: [schema](schema.md)
 
 ## Overview
@@ -25,7 +25,7 @@ Type-specialized codec API.
 Formats supported by the simple codec dispatch API.
 
 ```zig
-pub const Format = enum { ... };
+pub const Format = enum {};
 ```
 
 <a id="fn-codec"></a>

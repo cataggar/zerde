@@ -36,7 +36,7 @@ MessagePack format support.
 MessagePack writer configuration. Reserved for future profile options.
 
 ```zig
-pub const WriteOptions = struct { ... };
+pub const WriteOptions = struct {};
 ```
 
 <a id="type-extension"></a>
@@ -46,18 +46,13 @@ pub const WriteOptions = struct { ... };
 Opaque MessagePack extension value for low-level custom hooks.
 
 ```zig
-pub const Extension = struct { ... };
+pub const Extension = struct {
+    /// Application or predefined extension type identifier.
+    type_id: i8,
+    /// Allocator-owned extension payload bytes.
+    data: []u8,
+};
 ```
-
-### Fields
-
-```zig
-    type_id: i8
-    data: []u8
-```
-
-`type_id`: Application or predefined extension type identifier.
-`data`: Allocator-owned extension payload bytes.
 
 ### Nested Declarations
 
@@ -170,7 +165,7 @@ References: [`Decoder`](#type-decoder)
 MessagePack value kinds reported by `Decoder.peek`.
 
 ```zig
-pub const Kind = enum { ... };
+pub const Kind = enum {};
 ```
 
 <a id="type-encoder"></a>
@@ -180,22 +175,17 @@ pub const Kind = enum { ... };
 Low-level MessagePack encoder used by the generic serializer.
 
 ```zig
-pub const Encoder = struct { ... };
+pub const Encoder = struct {
+    /// Destination writer receiving encoded MessagePack bytes.
+    writer: *std.Io.Writer,
+    /// Container stack used to validate nested arrays and maps.
+    stack: [max_depth]Frame = undefined,
+    /// Number of active container frames in `stack`.
+    stack_len: usize = 0,
+    /// Number of root values emitted so far.
+    root_count: usize = 0,
+};
 ```
-
-### Fields
-
-```zig
-    writer: *std.Io.Writer
-    stack: [max_depth]Frame = undefined
-    stack_len: usize = 0
-    root_count: usize = 0
-```
-
-`writer`: Destination writer receiving encoded MessagePack bytes.
-`stack`: Container stack used to validate nested arrays and maps.
-`stack_len`: Number of active container frames in `stack`.
-`root_count`: Number of root values emitted so far.
 
 ### Nested Declarations
 
@@ -372,22 +362,17 @@ pub fn finish(self: *Self) !void
 Low-level MessagePack decoder used by the generic deserializer.
 
 ```zig
-pub const Decoder = struct { ... };
+pub const Decoder = struct {
+    /// Source reader providing encoded MessagePack bytes.
+    reader: *std.Io.Reader,
+    /// Allocator used for owned strings, byte slices, and field names.
+    allocator: std.mem.Allocator,
+    /// Container stack used to validate nested arrays and maps.
+    stack: [max_depth]Frame = undefined,
+    /// Number of active container frames in `stack`.
+    stack_len: usize = 0,
+};
 ```
-
-### Fields
-
-```zig
-    reader: *std.Io.Reader
-    allocator: std.mem.Allocator
-    stack: [max_depth]Frame = undefined
-    stack_len: usize = 0
-```
-
-`reader`: Source reader providing encoded MessagePack bytes.
-`allocator`: Allocator used for owned strings, byte slices, and field names.
-`stack`: Container stack used to validate nested arrays and maps.
-`stack_len`: Number of active container frames in `stack`.
 
 ### Nested Declarations
 

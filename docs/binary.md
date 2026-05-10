@@ -38,15 +38,10 @@ Compact binary format support.
 Binary format configuration.
 
 ```zig
-pub const Options = struct { ... };
+pub const Options = struct {
+    endian: std.builtin.Endian = .little,
+};
 ```
-
-### Fields
-
-```zig
-    endian: std.builtin.Endian = .little
-```
-
 
 <a id="fn-write"></a>
 
@@ -177,18 +172,13 @@ References: [`Options`](#type-options), [`Decoder`](#type-decoder)
 ## Encoder
 
 ```zig
-pub const Encoder = struct { ... };
+pub const Encoder = struct {
+    writer: *std.Io.Writer,
+    options: Options,
+    stack: [max_depth]Frame = undefined,
+    stack_len: usize = 0,
+};
 ```
-
-### Fields
-
-```zig
-    writer: *std.Io.Writer
-    options: Options
-    stack: [max_depth]Frame = undefined
-    stack_len: usize = 0
-```
-
 
 ### Nested Declarations
 
@@ -351,7 +341,7 @@ pub fn finish(self: *Self) !void
 ## Kind
 
 ```zig
-pub const Kind = enum { ... };
+pub const Kind = enum {};
 ```
 
 <a id="type-decoder"></a>
@@ -359,20 +349,15 @@ pub const Kind = enum { ... };
 ## Decoder
 
 ```zig
-pub const Decoder = struct { ... };
+pub const Decoder = struct {
+    reader: *std.Io.Reader,
+    allocator: std.mem.Allocator,
+    options: Options,
+    stack: [max_depth]Frame = undefined,
+    stack_len: usize = 0,
+    pending_string: ?[]const u8 = null,
+};
 ```
-
-### Fields
-
-```zig
-    reader: *std.Io.Reader
-    allocator: std.mem.Allocator
-    options: Options
-    stack: [max_depth]Frame = undefined
-    stack_len: usize = 0
-    pending_string: ?[]const u8 = null
-```
-
 
 ### Nested Declarations
 

@@ -40,7 +40,7 @@ TOML format support.
 TOML writer configuration.
 
 ```zig
-pub const WriteLayout = enum { ... };
+pub const WriteLayout = enum {};
 ```
 
 <a id="type-writeoptions"></a>
@@ -48,15 +48,10 @@ pub const WriteLayout = enum { ... };
 ## WriteOptions
 
 ```zig
-pub const WriteOptions = struct { ... };
+pub const WriteOptions = struct {
+    layout: WriteLayout = .inline_tables,
+};
 ```
-
-### Fields
-
-```zig
-    layout: WriteLayout = .inline_tables
-```
-
 
 <a id="fn-write"></a>
 
@@ -190,7 +185,7 @@ References: [`Decoder`](#type-decoder)
 TOML value kinds reported by `Decoder.peek`.
 
 ```zig
-pub const Kind = enum { ... };
+pub const Kind = enum {};
 ```
 
 <a id="type-encoder"></a>
@@ -200,18 +195,13 @@ pub const Kind = enum { ... };
 Low-level TOML encoder used by the generic serializer.
 
 ```zig
-pub const Encoder = struct { ... };
+pub const Encoder = struct {
+    writer: *std.Io.Writer,
+    stack: [max_depth]Frame = undefined,
+    stack_len: usize = 0,
+    root_count: usize = 0,
+};
 ```
-
-### Fields
-
-```zig
-    writer: *std.Io.Writer
-    stack: [max_depth]Frame = undefined
-    stack_len: usize = 0
-    root_count: usize = 0
-```
-
 
 ### Nested Declarations
 
@@ -363,16 +353,11 @@ The inline variant streams directly. The section variant buffers values until
 `finish`, then renders nested tables as `[table]` and `[[array]]` sections.
 
 ```zig
-pub const EventEncoder = union(enum) { ... };
+pub const EventEncoder = union(enum) {
+    inline_tables: Encoder,
+    sections: SectionEncoder,
+};
 ```
-
-### Fields
-
-```zig
-    inline_tables: Encoder
-    sections: SectionEncoder
-```
-
 
 ### Nested Declarations
 
@@ -528,16 +513,11 @@ pub fn finish(self: *Self) !void
 Allocator-backed low-level TOML encoder that emits section layout.
 
 ```zig
-pub const SectionEncoder = struct { ... };
+pub const SectionEncoder = struct {
+    writer: *std.Io.Writer,
+    tree: TreeEncoder,
+};
 ```
-
-### Fields
-
-```zig
-    writer: *std.Io.Writer
-    tree: TreeEncoder
-```
-
 
 ### Nested Declarations
 
@@ -693,21 +673,16 @@ pub fn finish(self: *Self) !void
 Low-level TOML decoder used by the generic deserializer.
 
 ```zig
-pub const Decoder = struct { ... };
+pub const Decoder = struct {
+    allocator: std.mem.Allocator,
+    input: []u8,
+    root: Value,
+    stack: [max_depth]Frame = undefined,
+    stack_len: usize = 0,
+    pending_value: ?*const Value = null,
+    root_used: bool = false,
+};
 ```
-
-### Fields
-
-```zig
-    allocator: std.mem.Allocator
-    input: []u8
-    root: Value
-    stack: [max_depth]Frame = undefined
-    stack_len: usize = 0
-    pending_value: ?*const Value = null
-    root_used: bool = false
-```
-
 
 ### Nested Declarations
 

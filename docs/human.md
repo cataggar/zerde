@@ -3,7 +3,7 @@
 ## Navigation
 
 - [API Index](README.md)
-- Previous: [csv](csv.md)
+- Previous: [events](events.md)
 - Next: [traits](traits.md)
 
 ## Overview
@@ -28,7 +28,7 @@ Human-readable serialization format.
 Human writer configuration. Reserved for future formatting options.
 
 ```zig
-pub const WriteOptions = struct { ... };
+pub const WriteOptions = struct {};
 ```
 
 <a id="fn-write"></a>
@@ -72,17 +72,12 @@ References: [`Encoder`](#type-encoder)
 Low-level human-readable encoder used by the generic serializer.
 
 ```zig
-pub const Encoder = struct { ... };
+pub const Encoder = struct {
+    writer: *std.Io.Writer,
+    stack: [max_depth]Frame = undefined,
+    stack_len: usize = 0,
+};
 ```
-
-### Fields
-
-```zig
-    writer: *std.Io.Writer
-    stack: [max_depth]Frame = undefined
-    stack_len: usize = 0
-```
-
 
 ### Nested Declarations
 

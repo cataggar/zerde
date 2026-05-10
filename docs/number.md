@@ -34,7 +34,7 @@ Shared numeric token parsing, normalization, and typed conversion helpers.
 Allowed leading sign forms for a numeric token.
 
 ```zig
-pub const SignPolicy = enum { ... };
+pub const SignPolicy = enum {};
 ```
 
 <a id="type-integerprefixes"></a>
@@ -44,20 +44,15 @@ pub const SignPolicy = enum { ... };
 [Integer](#type-integer) radix prefixes accepted by a syntax.
 
 ```zig
-pub const IntegerPrefixes = struct { ... };
+pub const IntegerPrefixes = struct {
+    /// Accept `0b` binary integers.
+    binary: bool = false,
+    /// Accept `0o` octal integers.
+    octal: bool = false,
+    /// Accept `0x` hexadecimal integers.
+    hex: bool = false,
+};
 ```
-
-### Fields
-
-```zig
-    binary: bool = false
-    octal: bool = false
-    hex: bool = false
-```
-
-`binary`: Accept `0b` binary integers.
-`octal`: Accept `0o` octal integers.
-`hex`: Accept `0x` hexadecimal integers.
 
 <a id="type-integerbounds"></a>
 
@@ -66,18 +61,13 @@ pub const IntegerPrefixes = struct { ... };
 Optional normalized integer bounds checked during token parsing.
 
 ```zig
-pub const IntegerBounds = struct { ... };
+pub const IntegerBounds = struct {
+    /// Minimum signed integer value accepted by the syntax.
+    min: ?i128 = null,
+    /// Maximum non-negative integer value accepted by the syntax.
+    max: ?u128 = null,
+};
 ```
-
-### Fields
-
-```zig
-    min: ?i128 = null
-    max: ?u128 = null
-```
-
-`min`: Minimum signed integer value accepted by the syntax.
-`max`: Maximum non-negative integer value accepted by the syntax.
 
 <a id="type-syntax"></a>
 
@@ -86,40 +76,35 @@ pub const IntegerBounds = struct { ... };
 Numeric grammar and conversion capabilities for a format.
 
 ```zig
-pub const Syntax = struct { ... };
+pub const Syntax = struct {
+    /// Accept integer tokens.
+    integer: bool = true,
+    /// Accept decimal float tokens with a fractional part or exponent.
+    decimal_float: bool = false,
+    /// Accept exponent notation on decimal floats.
+    exponent: bool = false,
+    /// Leading sign policy for integers, decimal floats, and special floats.
+    sign: SignPolicy = .negative,
+    /// Sign policy for exponent signs.
+    exponent_sign: SignPolicy = .positive_and_negative,
+    /// Optional digit separator that is allowed between digits and stripped.
+    digit_separator: ?u8 = null,
+    /// Accepted non-decimal integer prefixes.
+    prefixed_integers: IntegerPrefixes = .{},
+    /// Accept `inf` and `nan` special float tokens.
+    special_floats: bool = false,
+    /// Reject multi-digit decimal numbers whose integer part starts with zero.
+    reject_leading_zero_decimal: bool = true,
+    /// Remove a leading `+` from normalized decimal and special-float tokens.
+    strip_leading_positive_sign: bool = true,
+    /// Optional bounds for parsed integer tokens before type-directed reads.
+    integer_bounds: IntegerBounds = .{},
+    /// Permit reading integer tokens through `readFloat`.
+    integer_to_float: bool = false,
+    /// Reject non-finite values from `emitFloat`.
+    finite_float_emission: bool = false,
+};
 ```
-
-### Fields
-
-```zig
-    integer: bool = true
-    decimal_float: bool = false
-    exponent: bool = false
-    sign: SignPolicy = .negative
-    exponent_sign: SignPolicy = .positive_and_negative
-    digit_separator: ?u8 = null
-    prefixed_integers: IntegerPrefixes = .{}
-    special_floats: bool = false
-    reject_leading_zero_decimal: bool = true
-    strip_leading_positive_sign: bool = true
-    integer_bounds: IntegerBounds = .{}
-    integer_to_float: bool = false
-    finite_float_emission: bool = false
-```
-
-`integer`: Accept integer tokens.
-`decimal_float`: Accept decimal float tokens with a fractional part or exponent.
-`exponent`: Accept exponent notation on decimal floats.
-`sign`: Leading sign policy for integers, decimal floats, and special floats.
-`exponent_sign`: Sign policy for exponent signs.
-`digit_separator`: Optional digit separator that is allowed between digits and stripped.
-`prefixed_integers`: Accepted non-decimal integer prefixes.
-`special_floats`: Accept `inf` and `nan` special float tokens.
-`reject_leading_zero_decimal`: Reject multi-digit decimal numbers whose integer part starts with zero.
-`strip_leading_positive_sign`: Remove a leading `+` from normalized decimal and special-float tokens.
-`integer_bounds`: Optional bounds for parsed integer tokens before type-directed reads.
-`integer_to_float`: Permit reading integer tokens through `readFloat`.
-`finite_float_emission`: Reject non-finite values from `emitFloat`.
 
 <a id="type-integer"></a>
 
@@ -128,18 +113,13 @@ pub const Syntax = struct { ... };
 Normalized integer token bytes and their radix.
 
 ```zig
-pub const Integer = struct { ... };
+pub const Integer = struct {
+    /// Allocator-owned normalized digits, including `-` when negative.
+    bytes: []u8,
+    /// Integer radix used to parse `bytes`.
+    base: u8,
+};
 ```
-
-### Fields
-
-```zig
-    bytes: []u8
-    base: u8
-```
-
-`bytes`: Allocator-owned normalized digits, including `-` when negative.
-`base`: [Integer](#type-integer) radix used to parse `bytes`.
 
 <a id="type-token"></a>
 
@@ -148,18 +128,13 @@ pub const Integer = struct { ... };
 Allocator-owned normalized numeric token.
 
 ```zig
-pub const Token = union(enum) { ... };
+pub const Token = union(enum) {
+    /// Integer token with normalized digits and radix.
+    int: Integer,
+    /// Float token with normalized decimal or special-float bytes.
+    float: []u8,
+};
 ```
-
-### Fields
-
-```zig
-    int: Integer
-    float: []u8
-```
-
-`int`: [Integer](#type-integer) token with normalized digits and radix.
-`float`: Float token with normalized decimal or special-float bytes.
 
 ### Nested Declarations
 
