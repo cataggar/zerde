@@ -23,6 +23,16 @@ pub fn build(b: *std.Build) void {
     const docs_step = b.step("docs", "Generate project documentation");
     docs_step.dependOn(&install_docs.step);
 
+    const examples_step = b.step("examples", "Build runnable examples");
+    addExample(b, examples_step, mod, target, optimize, "basic-json", "examples/basic_json.zig");
+    addExample(b, examples_step, mod, target, optimize, "bytes", "examples/bytes.zig");
+    addExample(b, examples_step, mod, target, optimize, "codec-formats", "examples/codec_formats.zig");
+    addExample(b, examples_step, mod, target, optimize, "custom-field-hook", "examples/custom_field_hook.zig");
+    addExample(b, examples_step, mod, target, optimize, "events-api", "examples/events_api.zig");
+    addExample(b, examples_step, mod, target, optimize, "metadata", "examples/metadata.zig");
+    addExample(b, examples_step, mod, target, optimize, "tagged-unions", "examples/tagged_unions.zig");
+    addExample(b, examples_step, mod, target, optimize, "toml-config", "examples/toml_config.zig");
+
     const docs_md_exe = b.addExecutable(.{
         .name = "docs-md",
         .root_module = b.createModule(.{
@@ -33,12 +43,11 @@ pub fn build(b: *std.Build) void {
     });
     const run_docs_md = b.addRunArtifact(docs_md_exe);
     run_docs_md.addArgs(&.{
-        "--root", "src/zerde.zig",
-        "--out", "docs",
+        "--root",         "src/zerde.zig",
+        "--out",          "docs",
         "--project-root", ".",
-        "--name", "zerde",
-        "--emit-index",
-        "--follow-imports",
+        "--name",         "zerde",
+        "--emit-index",   "--follow-imports",
     });
 
     const docs_md_step = b.step("docs-md", "Generate Markdown API docs");
@@ -77,6 +86,31 @@ pub fn build(b: *std.Build) void {
     addCompileErrorTest(b, test_step, mod, target, optimize, "test/compile_errors/bad_custom_hook.zig", "error: zerde metadata for field 'id' custom hook bad_custom_hook.BadHook is missing 'read'");
     addCompileErrorTest(b, test_step, mod, target, optimize, "test/compile_errors/human_codec_read.zig", "error: human format is write-only");
     addCompileErrorTest(b, test_step, mod, target, optimize, "test/compile_errors/internal_union_tag_collision.zig", "error: zerde internal union_repr payload field 'kind' conflicts with tag field on internal_union_tag_collision.Event");
+}
+
+fn addExample(
+    b: *std.Build,
+    examples_step: *std.Build.Step,
+    zerde_mod: *std.Build.Module,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    name: []const u8,
+    path: []const u8,
+) void {
+    const exe = b.addExecutable(.{
+        .name = name,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path(path),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{
+                .name = "zerde",
+                .module = zerde_mod,
+            }},
+        }),
+    });
+    const install = b.addInstallArtifact(exe, .{});
+    examples_step.dependOn(&install.step);
 }
 
 fn addCompileErrorTest(

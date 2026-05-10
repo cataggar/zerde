@@ -72,6 +72,8 @@ pub fn main(init: std.process.Init) !void {
 }
 ```
 
+More `zerde` examples can be found in the [examples](examples/) folder.
+
 ## Format APIs
 
 Each format exposes direct helpers for writing to `std.Io.Writer`, reading from `std.Io.Reader`, and working with allocator-owned slices.
@@ -478,6 +480,20 @@ Run the test suite:
 ```sh
 zig build test
 ```
+
+Build all runnable examples into `zig-out/bin`:
+
+```sh
+zig build examples
+```
+
+For example, run the structural events demo with:
+
+```sh
+./zig-out/bin/events-api
+```
+
+See `examples/README.md` for an overview of the example programs.
 
 Generate Zig documentation:
 
