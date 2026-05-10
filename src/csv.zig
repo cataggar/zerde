@@ -106,6 +106,16 @@ pub fn encoderWithOptions(writer: *std.Io.Writer, options: Options) Encoder {
     return .{ .writer = writer, .options = options };
 }
 
+/// Returns an allocator-backed CSV encoder that can consume streaming dynamic events.
+pub fn eventEncoder(writer: *std.Io.Writer, allocator: std.mem.Allocator) Encoder {
+    return eventEncoderWithOptions(writer, allocator, .{});
+}
+
+/// Returns an allocator-backed CSV encoder with explicit options for streaming dynamic events.
+pub fn eventEncoderWithOptions(writer: *std.Io.Writer, allocator: std.mem.Allocator, options: Options) Encoder {
+    return .{ .writer = writer, .options = options, .allocator = allocator };
+}
+
 /// Returns a low-level CSV decoder for use with `zerde.deserialize`.
 /// Call `Decoder.deinit` when done.
 pub fn decoder(reader: *std.Io.Reader, allocator: std.mem.Allocator, options: Options) !Decoder {
@@ -141,10 +151,30 @@ pub const Encoder = struct {
         is_row: bool,
     };
 
+    const DynamicFrame = struct {
+        name: []u8 = "",
+        is_row: bool,
+    };
+
+    const DynamicColumn = struct {
+        path: []u8,
+    };
+
+    const DynamicCell = struct {
+        path: []u8,
+        value: []u8,
+    };
+
     writer: *std.Io.Writer,
     options: Options,
+    allocator: ?std.mem.Allocator = null,
     stack: [max_depth]Frame = undefined,
     stack_len: usize = 0,
+    dynamic_stack: [max_depth]DynamicFrame = undefined,
+    dynamic_stack_len: usize = 0,
+    dynamic_schema: std.ArrayList(DynamicColumn) = .empty,
+    dynamic_row: std.ArrayList(DynamicCell) = .empty,
+    dynamic_pending_field_name: ?[]u8 = null,
     root_started: bool = false,
     seq_done: bool = false,
     row_count: usize = 0,
@@ -157,18 +187,28 @@ pub const Encoder = struct {
 
     /// Emits an empty CSV cell for a null value.
     pub fn emitNull(self: *Self) !void {
+        if (self.inDynamicEvent()) return try self.emitDynamicNull();
+        if (self.inRowSequenceBetweenRows()) return error.InvalidCsvEventShape;
         const count = try self.beforeNullCell();
         try writeEmptyCells(count, self.writer, self.options, &self.row_field_index);
     }
 
     /// Emits a boolean cell as `true` or `false`.
     pub fn emitBool(self: *Self, value: bool) !void {
+        if (self.inDynamicEvent()) return try self.emitDynamicCell(if (value) "true" else "false");
+        if (self.inRowSequenceBetweenRows()) return error.InvalidCsvEventShape;
         try self.beforeCell();
         try self.writer.writeAll(if (value) "true" else "false");
     }
 
     /// Emits an integer cell.
     pub fn emitInt(self: *Self, value: anytype) !void {
+        if (self.inDynamicEvent()) {
+            const allocator = try self.dynamicAllocator();
+            const bytes = try std.fmt.allocPrint(allocator, "{d}", .{value});
+            return try self.emitOwnedDynamicCell(bytes);
+        }
+        if (self.inRowSequenceBetweenRows()) return error.InvalidCsvEventShape;
         try self.beforeCell();
         try self.writer.print("{d}", .{value});
     }
@@ -176,6 +216,12 @@ pub const Encoder = struct {
     /// Emits a floating-point cell.
     pub fn emitFloat(self: *Self, value: anytype) !void {
         try CsvNumber.emitFloat(value);
+        if (self.inDynamicEvent()) {
+            const allocator = try self.dynamicAllocator();
+            const bytes = try std.fmt.allocPrint(allocator, "{d}", .{value});
+            return try self.emitOwnedDynamicCell(bytes);
+        }
+        if (self.inRowSequenceBetweenRows()) return error.InvalidCsvEventShape;
         try self.beforeCell();
         try self.writer.print("{d}", .{value});
     }
@@ -183,12 +229,22 @@ pub const Encoder = struct {
     /// Emits a UTF-8 string cell with CSV escaping.
     pub fn emitString(self: *Self, value: []const u8) !void {
         if (!std.unicode.utf8ValidateSlice(value)) return error.InvalidUtf8;
+        if (self.inDynamicEvent()) return try self.emitDynamicCell(value);
+        if (self.inRowSequenceBetweenRows()) return error.InvalidCsvEventShape;
         try self.beforeCell();
         try writeEscapedCell(self.writer, value, self.options.delimiter.byte());
     }
 
     /// Emits raw bytes as base64 text.
     pub fn emitBytes(self: *Self, value: []const u8) !void {
+        if (self.inDynamicEvent()) {
+            const allocator = try self.dynamicAllocator();
+            var out = std.Io.Writer.Allocating.init(allocator);
+            errdefer out.deinit();
+            try base64.writeEncoded(&out.writer, value);
+            return try self.emitOwnedDynamicCell(try out.toOwnedSlice());
+        }
+        if (self.inRowSequenceBetweenRows()) return error.InvalidCsvEventShape;
         try self.beforeCell();
         try base64.writeEncoded(self.writer, value);
     }
@@ -265,6 +321,7 @@ pub const Encoder = struct {
     /// Begins writing a sequence of CSV rows.
     pub fn beginSeq(self: *Self, len: ?usize) !void {
         _ = len;
+        if (self.inDynamicEvent()) return error.InvalidCsvEventShape;
         if (self.root_started) return error.InvalidCsvEncoderState;
         self.root_started = true;
     }
@@ -277,6 +334,7 @@ pub const Encoder = struct {
 
     /// Ends the CSV row sequence.
     pub fn endSeq(self: *Self) !void {
+        if (self.inDynamicEvent()) return error.InvalidCsvEventShape;
         if (!self.root_started or self.in_row() or self.seq_done) return error.InvalidCsvEncoderState;
         if (self.options.final_record_terminator and (self.header_written or self.row_count != 0)) {
             try writeRecordTerminator(self.writer, self.options.record_terminator);
@@ -311,8 +369,37 @@ pub const Encoder = struct {
         self.expecting_cell = false;
     }
 
+    /// Begins a dynamic event row struct or nested struct.
+    pub fn beginStructEvent(self: *Self, field_count: ?usize) !void {
+        _ = field_count;
+        if (!self.root_started) return error.InvalidCsvEventShape;
+        _ = try self.dynamicAllocator();
+        if (self.seq_done or self.stack_len != 0) return error.InvalidCsvEncoderState;
+
+        if (self.dynamic_stack_len == 0) {
+            if (self.dynamic_pending_field_name != null) return error.InvalidCsvEncoderState;
+            try self.pushDynamic(.{ .is_row = true });
+            return;
+        }
+
+        const name = self.dynamic_pending_field_name orelse return error.InvalidCsvEncoderState;
+        self.dynamic_pending_field_name = null;
+        const allocator = try self.dynamicAllocator();
+        errdefer allocator.free(name);
+
+        const path = try self.dynamicPathWithName(name);
+        defer allocator.free(path);
+        if (self.row_count != 0 and !self.hasDynamicSchemaPrefix(path)) {
+            if (self.findDynamicSchema(path) != null) return error.InvalidCsvEventShape;
+            return error.UnknownField;
+        }
+
+        try self.pushDynamic(.{ .name = name, .is_row = false });
+    }
+
     /// Selects the next CSV column by struct field name.
     pub fn emitFieldName(self: *Self, name: []const u8) !void {
+        if (self.dynamic_stack_len != 0) return try self.emitDynamicFieldName(name);
         if (!self.in_row() or self.expecting_cell) return error.InvalidCsvEncoderState;
         const entry = findFieldEntry(self.currentFrame().entries, name) orelse return error.InvalidCsvEncoderState;
         self.pending_path = entry.path;
@@ -323,6 +410,7 @@ pub const Encoder = struct {
 
     /// Ends the current row struct or nested flat struct.
     pub fn endStruct(self: *Self) !void {
+        if (self.dynamic_stack_len != 0) return try self.endDynamicStruct();
         if (self.stack_len == 0 or self.expecting_cell) return error.InvalidCsvEncoderState;
         const frame = self.pop();
         if (frame.is_row) self.row_count += 1;
@@ -331,6 +419,21 @@ pub const Encoder = struct {
     /// Verifies that the CSV document was completely written.
     pub fn finish(self: *Self) !void {
         if (!self.root_started or !self.seq_done or self.stack_len != 0) return error.IncompleteCsvDocument;
+    }
+
+    /// Frees allocator-owned dynamic event state.
+    pub fn deinit(self: *Self) void {
+        const allocator = self.allocator orelse return;
+        self.clearDynamicRow(allocator);
+        self.dynamic_row.deinit(allocator);
+        for (self.dynamic_schema.items) |column| allocator.free(column.path);
+        self.dynamic_schema.deinit(allocator);
+        if (self.dynamic_pending_field_name) |name| allocator.free(name);
+        for (self.dynamic_stack[0..self.dynamic_stack_len]) |frame| {
+            if (!frame.is_row) allocator.free(frame.name);
+        }
+        self.dynamic_pending_field_name = null;
+        self.dynamic_stack_len = 0;
     }
 
     /// Emits an empty cell for absent optional values.
@@ -370,6 +473,208 @@ pub const Encoder = struct {
 
     fn in_row(self: Self) bool {
         return self.stack_len != 0;
+    }
+
+    fn inDynamicEvent(self: Self) bool {
+        return self.dynamic_stack_len != 0 or self.dynamic_pending_field_name != null;
+    }
+
+    fn inRowSequenceBetweenRows(self: Self) bool {
+        return self.root_started and !self.seq_done and self.stack_len == 0 and self.dynamic_stack_len == 0;
+    }
+
+    fn dynamicAllocator(self: *Self) !std.mem.Allocator {
+        return self.allocator orelse error.MissingCsvEventAllocator;
+    }
+
+    fn emitDynamicFieldName(self: *Self, name: []const u8) !void {
+        if (self.dynamic_stack_len == 0 or self.dynamic_pending_field_name != null) return error.InvalidCsvEncoderState;
+        if (!std.unicode.utf8ValidateSlice(name)) return error.InvalidUtf8;
+
+        const allocator = try self.dynamicAllocator();
+        self.dynamic_pending_field_name = try allocator.dupe(u8, name);
+    }
+
+    fn emitDynamicNull(self: *Self) !void {
+        const path = try self.takeDynamicPendingPath();
+        defer (self.dynamicAllocator() catch unreachable).free(path);
+
+        if (self.row_count != 0 and self.hasDynamicSchemaPrefix(path)) {
+            for (self.dynamic_schema.items) |column| {
+                if (isChildPath(column.path, path)) try self.appendDynamicCell(column.path, "");
+            }
+            return;
+        }
+
+        try self.appendDynamicCell(path, "");
+    }
+
+    fn emitDynamicCell(self: *Self, value: []const u8) !void {
+        const allocator = try self.dynamicAllocator();
+        const owned = try allocator.dupe(u8, value);
+        try self.emitOwnedDynamicCell(owned);
+    }
+
+    fn emitOwnedDynamicCell(self: *Self, value: []u8) !void {
+        const allocator = try self.dynamicAllocator();
+        const path = self.takeDynamicPendingPath() catch |err| {
+            allocator.free(value);
+            return err;
+        };
+        defer (self.dynamicAllocator() catch unreachable).free(path);
+        try self.appendOwnedDynamicCell(path, value);
+    }
+
+    fn appendDynamicCell(self: *Self, path: []const u8, value: []const u8) !void {
+        const allocator = try self.dynamicAllocator();
+        const owned_value = try allocator.dupe(u8, value);
+        try self.appendOwnedDynamicCell(path, owned_value);
+    }
+
+    fn appendOwnedDynamicCell(self: *Self, path: []const u8, value: []u8) !void {
+        const allocator = try self.dynamicAllocator();
+        errdefer allocator.free(value);
+
+        if (self.row_count != 0 and self.findDynamicSchema(path) == null) {
+            if (self.hasDynamicSchemaPrefix(path)) return error.InvalidCsvEventShape;
+            return error.UnknownField;
+        }
+        if (self.findDynamicCell(path) != null) return error.DuplicateField;
+
+        const owned_path = try allocator.dupe(u8, path);
+        errdefer allocator.free(owned_path);
+        try self.dynamic_row.append(allocator, .{ .path = owned_path, .value = value });
+    }
+
+    fn takeDynamicPendingPath(self: *Self) ![]u8 {
+        if (self.dynamic_stack_len == 0) return error.InvalidCsvEncoderState;
+        const name = self.dynamic_pending_field_name orelse return error.InvalidCsvEncoderState;
+        self.dynamic_pending_field_name = null;
+        defer (self.dynamicAllocator() catch unreachable).free(name);
+        return try self.dynamicPathWithName(name);
+    }
+
+    fn dynamicPathWithName(self: *Self, name: []const u8) ![]u8 {
+        const allocator = try self.dynamicAllocator();
+        var len = name.len;
+        for (self.dynamic_stack[0..self.dynamic_stack_len]) |frame| {
+            if (!frame.is_row) len += 1 + frame.name.len;
+        }
+
+        var path = try allocator.alloc(u8, len);
+        var index: usize = 0;
+        for (self.dynamic_stack[0..self.dynamic_stack_len]) |frame| {
+            if (!frame.is_row) {
+                if (index != 0) {
+                    path[index] = '.';
+                    index += 1;
+                }
+                @memcpy(path[index .. index + frame.name.len], frame.name);
+                index += frame.name.len;
+            }
+        }
+        if (index != 0) {
+            path[index] = '.';
+            index += 1;
+        }
+        @memcpy(path[index .. index + name.len], name);
+        return path;
+    }
+
+    fn endDynamicStruct(self: *Self) !void {
+        if (self.dynamic_pending_field_name) |name| {
+            (self.dynamicAllocator() catch unreachable).free(name);
+            self.dynamic_pending_field_name = null;
+            return error.InvalidCsvEncoderState;
+        }
+
+        const frame = self.popDynamic();
+        if (!frame.is_row) {
+            (self.dynamicAllocator() catch unreachable).free(frame.name);
+            return;
+        }
+
+        try self.flushDynamicRow();
+    }
+
+    fn flushDynamicRow(self: *Self) !void {
+        const allocator = try self.dynamicAllocator();
+        errdefer self.clearDynamicRow(allocator);
+
+        if (self.row_count == 0) {
+            for (self.dynamic_row.items) |cell| {
+                const path = try allocator.dupe(u8, cell.path);
+                errdefer allocator.free(path);
+                try self.dynamic_schema.append(allocator, .{ .path = path });
+            }
+
+            if (self.options.header) {
+                try self.writeDynamicHeader();
+                self.header_written = true;
+            }
+        }
+
+        if (self.header_written or self.row_count != 0) try writeRecordTerminator(self.writer, self.options.record_terminator);
+        try self.writeDynamicRow();
+        self.row_count += 1;
+        self.clearDynamicRow(allocator);
+    }
+
+    fn writeDynamicHeader(self: *Self) !void {
+        for (self.dynamic_schema.items, 0..) |column, i| {
+            if (i != 0) try self.writer.writeByte(self.options.delimiter.byte());
+            try writeEscapedCell(self.writer, column.path, self.options.delimiter.byte());
+        }
+    }
+
+    fn writeDynamicRow(self: *Self) !void {
+        for (self.dynamic_schema.items, 0..) |column, i| {
+            if (i != 0) try self.writer.writeByte(self.options.delimiter.byte());
+            if (self.findDynamicCell(column.path)) |cell| {
+                try writeEscapedCell(self.writer, cell.value, self.options.delimiter.byte());
+            }
+        }
+    }
+
+    fn findDynamicSchema(self: *Self, path: []const u8) ?DynamicColumn {
+        for (self.dynamic_schema.items) |column| {
+            if (std.mem.eql(u8, column.path, path)) return column;
+        }
+        return null;
+    }
+
+    fn hasDynamicSchemaPrefix(self: *Self, path: []const u8) bool {
+        for (self.dynamic_schema.items) |column| {
+            if (isChildPath(column.path, path)) return true;
+        }
+        return false;
+    }
+
+    fn findDynamicCell(self: *Self, path: []const u8) ?DynamicCell {
+        for (self.dynamic_row.items) |cell| {
+            if (std.mem.eql(u8, cell.path, path)) return cell;
+        }
+        return null;
+    }
+
+    fn clearDynamicRow(self: *Self, allocator: std.mem.Allocator) void {
+        for (self.dynamic_row.items) |cell| {
+            allocator.free(cell.path);
+            allocator.free(cell.value);
+        }
+        self.dynamic_row.clearRetainingCapacity();
+    }
+
+    fn pushDynamic(self: *Self, frame: DynamicFrame) !void {
+        if (self.dynamic_stack_len == self.dynamic_stack.len) return error.NestingTooDeep;
+        self.dynamic_stack[self.dynamic_stack_len] = frame;
+        self.dynamic_stack_len += 1;
+    }
+
+    fn popDynamic(self: *Self) DynamicFrame {
+        std.debug.assert(self.dynamic_stack_len != 0);
+        self.dynamic_stack_len -= 1;
+        return self.dynamic_stack[self.dynamic_stack_len];
     }
 
     fn push(self: *Self, frame: Frame) !void {
@@ -993,6 +1298,10 @@ fn findEventField(fields: []const events.ObjectField, name: []const u8) ?events.
         if (std.mem.eql(u8, field.name, name)) return field;
     }
     return null;
+}
+
+fn isChildPath(path: []const u8, prefix: []const u8) bool {
+    return path.len > prefix.len and std.mem.startsWith(u8, path, prefix) and path[prefix.len] == '.';
 }
 
 fn countEventLeaves(schema: []const events.ObjectField) usize {

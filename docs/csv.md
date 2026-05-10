@@ -22,6 +22,8 @@ CSV and delimiter-separated tabular text support.
 - [readSliceWithOptions](#fn-readslicewithoptions)
 - [encoder](#fn-encoder)
 - [encoderWithOptions](#fn-encoderwithoptions)
+- [eventEncoder](#fn-eventencoder)
+- [eventEncoderWithOptions](#fn-eventencoderwithoptions)
 - [decoder](#fn-decoder)
 
 ## Types
@@ -180,6 +182,30 @@ pub fn encoderWithOptions(writer: *std.Io.Writer, options: Options) Encoder
 
 References: [`Options`](#type-options), [`Encoder`](#type-encoder)
 
+<a id="fn-eventencoder"></a>
+
+## eventEncoder
+
+Returns an allocator-backed CSV encoder that can consume streaming dynamic events.
+
+```zig
+pub fn eventEncoder(writer: *std.Io.Writer, allocator: std.mem.Allocator) Encoder
+```
+
+References: [`Encoder`](#type-encoder)
+
+<a id="fn-eventencoderwithoptions"></a>
+
+## eventEncoderWithOptions
+
+Returns an allocator-backed CSV encoder with explicit options for streaming dynamic events.
+
+```zig
+pub fn eventEncoderWithOptions(writer: *std.Io.Writer, allocator: std.mem.Allocator, options: Options) Encoder
+```
+
+References: [`Options`](#type-options), [`Encoder`](#type-encoder)
+
 <a id="fn-decoder"></a>
 
 ## decoder
@@ -218,8 +244,14 @@ missing later fields become empty cells, and extra later fields are rejected.
 pub const Encoder = struct {
     writer: *std.Io.Writer,
     options: Options,
+    allocator: ?std.mem.Allocator = null,
     stack: [max_depth]Frame = undefined,
     stack_len: usize = 0,
+    dynamic_stack: [max_depth]DynamicFrame = undefined,
+    dynamic_stack_len: usize = 0,
+    dynamic_schema: std.ArrayList(DynamicColumn) = .empty,
+    dynamic_row: std.ArrayList(DynamicCell) = .empty,
+    dynamic_pending_field_name: ?[]u8 = null,
     root_started: bool = false,
     seq_done: bool = false,
     row_count: usize = 0,
@@ -248,9 +280,11 @@ pub const Encoder = struct {
 - [hasNextSeqElem](#fn-encoder-hasnextseqelem)
 - [endSeq](#fn-encoder-endseq)
 - [beginStruct](#fn-encoder-beginstruct)
+- [beginStructEvent](#fn-encoder-beginstructevent)
 - [emitFieldName](#fn-encoder-emitfieldname)
 - [endStruct](#fn-encoder-endstruct)
 - [finish](#fn-encoder-finish)
+- [deinit](#fn-encoder-deinit)
 - [beginOptional](#fn-encoder-beginoptional)
 
 <a id="fn-encoder-emitnull"></a>
@@ -398,6 +432,16 @@ Begins writing a row struct or nested flat struct.
 pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void
 ```
 
+<a id="fn-encoder-beginstructevent"></a>
+
+### Encoder.beginStructEvent
+
+Begins a dynamic event row struct or nested struct.
+
+```zig
+pub fn beginStructEvent(self: *Self, field_count: ?usize) !void
+```
+
 <a id="fn-encoder-emitfieldname"></a>
 
 ### Encoder.emitFieldName
@@ -426,6 +470,16 @@ Verifies that the CSV document was completely written.
 
 ```zig
 pub fn finish(self: *Self) !void
+```
+
+<a id="fn-encoder-deinit"></a>
+
+### Encoder.deinit
+
+Frees allocator-owned dynamic event state.
+
+```zig
+pub fn deinit(self: *Self) void
 ```
 
 <a id="fn-encoder-beginoptional"></a>
