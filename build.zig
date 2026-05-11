@@ -31,6 +31,7 @@ pub fn build(b: *std.Build) void {
     addExample(b, examples_step, mod, target, optimize, "events-api", "examples/events_api.zig");
     addExample(b, examples_step, mod, target, optimize, "events-csv-to-json", "examples/events_csv_to_json.zig");
     addExample(b, examples_step, mod, target, optimize, "metadata", "examples/metadata.zig");
+    addExample(b, examples_step, mod, target, optimize, "schema-debug", "examples/schema_debug.zig");
     addExample(b, examples_step, mod, target, optimize, "tagged-unions", "examples/tagged_unions.zig");
     addExample(b, examples_step, mod, target, optimize, "toml-config", "examples/toml_config.zig");
 

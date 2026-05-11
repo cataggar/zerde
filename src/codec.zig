@@ -15,15 +15,7 @@ const zon = @import("zon.zig");
 const deinitValue = @import("deinit.zig").deinit;
 
 /// Formats supported by the simple codec dispatch API.
-pub const Format = enum {
-    json,
-    toml,
-    msgpack,
-    zon,
-    binary,
-    csv,
-    human,
-};
+pub const Format = @import("format.zig").Format;
 
 /// Returns a type-specific namespace for serialization, deserialization,
 /// validation, schema generation, and cleanup.

@@ -152,6 +152,9 @@ defer UserCodec.deinit(allocator, user2);
 try UserCodec.validate(user);
 const schema = comptime UserCodec.schema();
 _ = schema;
+
+try zerde.schema.write(&writer, schema, .human);
+try zerde.schema.write(&writer, schema, .json);
 ```
 
 Supported `zerde.Format` values are `.json`, `.toml`, `.msgpack`, `.zon`, `.binary`, `.csv`, and `.human`. The human format is write-only, so codec reads from `.human` fail at compile time.

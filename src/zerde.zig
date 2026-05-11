@@ -22,6 +22,8 @@ pub const number = @import("number.zig");
 pub const traits = @import("traits.zig");
 /// Structural event APIs for custom representations and transcoding.
 pub const events = @import("events.zig");
+/// Schema inspection and debug output APIs.
+pub const schema = @import("schema.zig");
 
 const datetime = @import("datetime.zig");
 
@@ -42,8 +44,8 @@ pub const OffsetDateTime = datetime.OffsetDateTime;
 
 /// Type-specialized codec namespace factory.
 pub const Codec = @import("codec.zig").Codec;
-/// Formats supported by the simple codec dispatch API.
-pub const Format = @import("codec.zig").Format;
+/// Shared format selector for comptime dispatch APIs.
+pub const Format = @import("format.zig").Format;
 
 /// Generic type-directed serialization traversal.
 pub const serialize = @import("serialize.zig").serialize;
@@ -74,7 +76,8 @@ test {
     _ = deserialize;
     _ = deinit;
     _ = @import("meta.zig");
-    _ = @import("schema.zig");
+    _ = @import("format.zig");
+    _ = schema;
     _ = @import("rename.zig");
     _ = @import("testing.zig");
     _ = traits;

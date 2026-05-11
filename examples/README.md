@@ -23,6 +23,7 @@ The binaries are installed to `zig-out/bin` and can be run directly, for example
 - `events_api.zig` / `events-api`: full structural events example covering event tracing, `readAlloc`, and JSON-to-MessagePack transcoding.
 - `events_csv_to_json.zig` / `events-csv-to-json`: consumes CSV rows through `zerde.events.pipe` and writes JSON without an application struct.
 - `metadata.zig` / `metadata`: demonstrates `rename_all`, explicit field renames, skipped fields, defaulted fields, and unknown-field denial.
+- `schema_debug.zig` / `schema-debug`: prints schema output in human, JSON, TOML, and MessagePack for structs, arrays, slices, maps, enums, and tagged unions.
 - `tagged_unions.zig` / `tagged-unions`: compares external, adjacent, and internal tagged union representations.
 - `toml_config.zig` / `toml-config`: reads and writes a realistic TOML config with nested tables, arrays of tables, defaults, and date/time values.
 

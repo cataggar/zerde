@@ -23,5 +23,6 @@ Generated Markdown API documentation.
 - [events](events.md)
 - [human](human.md)
 - [traits](traits.md)
-- [codec](codec.md)
 - [schema](schema.md)
+- [format](format.md)
+- [codec](codec.md)

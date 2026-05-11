@@ -34,6 +34,48 @@ test "root exposes codec read deinit validate and schema API" {
     try std.testing.expectEqualStrings("Grant", user.name);
 }
 
+test "root exposes schema debug writer" {
+    const User = struct {
+        id: u8,
+    };
+
+    var buffer: [256]u8 = undefined;
+    var writer: std.Io.Writer = .fixed(&buffer);
+
+    try zerde.schema.write(&writer, zerde.Codec(User).schema(), .human);
+
+    var expected_buffer: [256]u8 = undefined;
+    var expected: std.Io.Writer = .fixed(&expected_buffer);
+    try expected.print(
+        \\{s} = struct {{
+        \\  id: u8 (required)
+        \\}}
+        \\
+    , .{@typeName(User)});
+
+    try std.testing.expectEqualStrings(expected.buffered(), writer.buffered());
+}
+
+test "root exposes schema format writer" {
+    const User = struct {
+        id: u8,
+    };
+
+    var buffer: [512]u8 = undefined;
+    var writer: std.Io.Writer = .fixed(&buffer);
+
+    try zerde.schema.write(&writer, zerde.Codec(User).schema(), .json);
+
+    var expected_buffer: [512]u8 = undefined;
+    var expected: std.Io.Writer = .fixed(&expected_buffer);
+    try expected.print(
+        "{{\"type_name\":\"{s}\",\"shape\":{{\"kind\":\"struct\",\"fields\":[{{\"zig_name\":\"id\",\"wire_name\":\"id\",\"required\":true,\"has_default\":false,\"serializes\":true,\"deserializes\":true,\"schema\":{{\"type_name\":\"u8\",\"shape\":{{\"kind\":\"int\",\"signed\":false,\"bits\":8}}}}}}]}}}}",
+        .{@typeName(User)},
+    );
+
+    try std.testing.expectEqualStrings(expected.buffered(), writer.buffered());
+}
+
 test "readme quick start json allocator helpers" {
     const User = struct {
         user_id: u64,

@@ -26,8 +26,9 @@
 - [events](events.md)
 - [human](human.md)
 - [traits](traits.md)
-- [codec](codec.md)
 - [schema](schema.md)
+- [format](format.md)
+- [codec](codec.md)
 
 </details>
 
@@ -57,8 +58,9 @@ Public root module for Zerde serialization APIs.
 - [number](#import-number) `@import("number.zig")`
 - [traits](#import-traits) `@import("traits.zig")`
 - [events](#import-events) `@import("events.zig")`
+- [schema](#import-schema) `@import("schema.zig")`
 - [Codec](#import-codec) `@import("codec.zig")`
-- [Format](#import-format) `@import("codec.zig")`
+- [Format](#import-format) `@import("format.zig")`
 - [serialize](#import-serialize) `@import("serialize.zig")`
 - [deserialize](#import-deserialize) `@import("deserialize.zig")`
 - [deinit](#import-deinit) `@import("deinit.zig")`
@@ -173,6 +175,16 @@ Structural event APIs for custom representations and transcoding.
 pub const events = @import("events.zig");
 ```
 
+<a id="import-schema"></a>
+
+## schema
+
+[Schema](schema.md#type-schema) inspection and debug output APIs.
+
+```zig
+pub const schema = @import("schema.zig");
+```
+
 <a id="alias-bytes"></a>
 
 ## Bytes
@@ -259,10 +271,10 @@ pub const Codec = @import("codec.zig").Codec;
 
 ## Format
 
-Formats supported by the simple codec dispatch API.
+Shared format selector for comptime dispatch APIs.
 
 ```zig
-pub const Format = @import("codec.zig").Format;
+pub const Format = @import("format.zig").Format;
 ```
 
 <a id="import-serialize"></a>

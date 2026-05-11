@@ -26,8 +26,9 @@
 - [events](events.md)
 - [human](human.md)
 - [traits](traits.md)
-- [codec](codec.md)
 - [schema](schema.md)
+- [format](format.md)
+- [codec](codec.md)
 
 </details>
 
@@ -39,26 +40,18 @@ Type-specialized codec API.
 
 - [Codec](#fn-codec)
 
-## Types
+## Imports
 
-- [Format](#type-format)
+- [Format](#import-format) `@import("format.zig")`
 
-<a id="type-format"></a>
+<a id="import-format"></a>
 
 ## Format
 
 Formats supported by the simple codec dispatch API.
 
 ```zig
-pub const Format = enum {
-    json,
-    toml,
-    msgpack,
-    zon,
-    binary,
-    csv,
-    human,
-};
+pub const Format = @import("format.zig").Format;
 ```
 
 <a id="fn-codec"></a>

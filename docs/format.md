@@ -1,4 +1,4 @@
-# traits
+# format
 
 ## Navigation
 
@@ -34,19 +34,27 @@
 
 ## Overview
 
-Type trait helpers.
+Shared format selector for dispatch APIs.
 
-## Functions
+## Types
 
-- [isString](#fn-isstring)
+- [Format](#type-format)
 
-<a id="fn-isstring"></a>
+<a id="type-format"></a>
 
-## isString
+## Format
 
-Returns whether `T` is one of Zerde's default string slice types.
+Formats recognized by Zerde's comptime dispatch APIs.
 
 ```zig
-pub fn isString(comptime T: type) bool
+pub const Format = enum {
+    json,
+    toml,
+    msgpack,
+    zon,
+    binary,
+    csv,
+    human,
+};
 ```
 

@@ -26,19 +26,21 @@
 - [events](events.md)
 - [human](human.md)
 - [traits](traits.md)
-- [codec](codec.md)
 - [schema](schema.md)
+- [format](format.md)
+- [codec](codec.md)
 
 </details>
 
 ## Overview
 
-Internal schema descriptors for reflected Zig types.
+[Schema](#type-schema) descriptors for reflected Zig types.
 
 ## Functions
 
 - [forType](#fn-fortype)
 - [validateType](#fn-validatetype)
+- [write](#fn-write)
 
 ## Types
 
@@ -230,4 +232,19 @@ Validates that `T` is representable by Zerde's current traversal.
 ```zig
 pub fn validateType(comptime T: type) void
 ```
+
+<a id="fn-write"></a>
+
+## write
+
+Writes `schema` in the selected comptime-known format.
+
+The `.human` format emits the compact, indented debug representation.
+Machine-readable formats use Zerde's normal format writers.
+
+```zig
+pub fn write(writer: *std.Io.Writer, schema: Schema, comptime format: Format) !void
+```
+
+References: [`Schema`](#type-schema)
 
