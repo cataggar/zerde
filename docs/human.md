@@ -37,6 +37,16 @@
 
 Human-readable serialization format.
 
+This module provides the `zerde.human` format API: compact write-only output
+intended for debugging and schema inspection. It exposes direct write helpers
+and a low-level encoder for use with `zerde.serialize`; it intentionally has
+no read, slice-read, decoder, or allocator-write API.
+
+Human output uses reflected type names for structs and prints values in a
+concise textual form. Byte fields represented with `zerde.Bytes` or
+`.bytes = true` are emitted as standard padded RFC 4648 base64 strings. The
+format is not designed as a stable interchange format.
+
 ## Functions
 
 - [write](#fn-write)

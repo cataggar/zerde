@@ -37,6 +37,28 @@
 
 CBOR format support.
 
+This module provides the `zerde.cbor` format API: direct read/write helpers,
+allocator-backed slice helpers, a streaming encoder, an allocator-backed
+event encoder, and a low-level decoder for use with `zerde.serialize`,
+`zerde.deserialize`, custom hooks, and structural events.
+
+Structs and tagged unions are encoded as maps with text string keys. Strings
+use CBOR text strings and must be valid UTF-8. Byte fields represented with
+`zerde.Bytes` or `.bytes = true` use CBOR byte strings instead of base64.
+Typed writes emit definite-length arrays, maps, text strings, and byte
+strings.
+
+`WriteOptions{ .deterministic = true }` buffers output and sorts map entries
+by the bytewise order of their encoded keys. The event encoder also buffers
+dynamic containers explicitly so it can emit definite-length CBOR.
+
+The decoder accepts definite and indefinite strings, arrays, and maps;
+validates UTF-8 text; rejects trailing data; and rejects unsupported tags or
+simple values as normal typed values. Low-level custom hooks can emit and read
+CBOR semantic tags and unmodeled simple values explicitly. Date/time helper
+types use their ordinary struct or string fallbacks; CBOR date/time tags are
+not emitted automatically.
+
 ## Functions
 
 - [write](#fn-write)

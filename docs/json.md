@@ -37,6 +37,23 @@
 
 JSON format support.
 
+This module provides the `zerde.json` format API: direct read/write helpers,
+allocator-backed slice helpers, and low-level encoder/decoder types for use
+with `zerde.serialize`, `zerde.deserialize`, custom hooks, and structural
+events.
+
+JSON strings must be valid UTF-8. Byte fields represented with `zerde.Bytes`
+or `.bytes = true` are emitted as standard padded RFC 4648 base64 strings.
+Non-finite floats are rejected because JSON has no representation for NaN or
+infinity.
+
+Output is compact by default. Pretty output is controlled with
+`WriteOptions{ .pretty = true, .indent = 2 }` through `writeWithOptions`,
+`writeAllocWithOptions`, or `encoderWithOptions`.
+
+The typed read APIs and decoder reject malformed syntax, invalid UTF-8, and
+trailing input after the single JSON root value.
+
 ## Functions
 
 - [write](#fn-write)

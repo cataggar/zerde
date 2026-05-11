@@ -305,7 +305,7 @@ JSON output:
 
 ## Raw Bytes
 
-Plain `[]const u8` is treated as a UTF-8 string in JSON, TOML, CBOR, ZON, and human output. Use `zerde.Bytes` or `.bytes = true` when the bytes are arbitrary binary data.
+Plain `[]const u8` is treated as a UTF-8 string by formats with a distinct string representation. Use `zerde.Bytes` or `.bytes = true` when the bytes are arbitrary binary data.
 
 ```zig
 const Blob = struct {
@@ -327,9 +327,7 @@ const Blob = struct {
 }
 ```
 
-JSON, TOML, ZON, and human encoders emit raw bytes as standard padded RFC 4648 base64 strings. The binary format writes raw bytes directly with its normal length-prefix rules for slices.
-MessagePack writes raw bytes with the native bin family.
-CBOR writes raw bytes with the native byte string major type.
+Raw byte wire representations are format-specific and documented in each format module.
 
 
 ## Custom Hooks
@@ -412,84 +410,6 @@ not as:
 The write hook emits the wire representation for `UserId` directly. The read hook must read the same representation and rebuild the type. In this example, `zerdeWrite` writes an integer, so `zerdeRead` reads an integer and wraps it back into `UserId`.
 
 Native hooks take precedence over field traversal for that type.
-
-## Format Notes
-
-JSON:
-
-- Strings must be valid UTF-8.
-- Non-finite floats are rejected.
-- Pretty output is controlled with `json.WriteOptions{ .pretty = true, .indent = 2 }`.
-- The decoder rejects trailing input and malformed syntax.
-
-Date/time:
-
-- Date/time helpers are exposed as `zerde.LocalDate`, `zerde.LocalTime`, `zerde.LocalDateTime`, `zerde.OffsetDateTime`, and `zerde.Timestamp`.
-- Temporal values use native format support when available, otherwise canonical string representations.
-
-TOML:
-
-- The root value must be a struct because TOML documents are tables.
-- TOML has no null value, so serializing null optionals returns `error.UnsupportedTomlNull`.
-- Integers are limited to TOML's signed 64-bit range.
-- Writer layout can be `.inline_tables` or `.sections`.
-- Section layout is also available to event/low-level writers through `toml.encoderWithOptions(...)`.
-- `zerde.LocalDate`, `zerde.LocalTime`, `zerde.LocalDateTime`, and `zerde.OffsetDateTime` use native TOML date/time literals.
-
-MessagePack:
-
-- Structs and tagged unions are encoded as maps with string keys.
-- Strings are encoded with the str family and must be valid UTF-8.
-- Raw byte fields use the bin family instead of base64.
-- `zerde.Timestamp` uses the MessagePack timestamp extension type.
-- Integer, string, binary, array, map, and extension headers use the smallest valid MessagePack format.
-- The decoder rejects trailing data, malformed syntax, invalid UTF-8 strings, and unsupported extension values unless handled through low-level custom hooks.
-
-CBOR:
-
-- Structs and tagged unions are encoded as maps with text string keys.
-- Strings are encoded as text strings and must be valid UTF-8.
-- Raw byte fields use CBOR byte strings instead of base64.
-- Typed writes emit definite-length arrays, maps, text strings, and byte strings.
-- `writeWithOptions(allocator, writer, value, .{ .deterministic = true })` buffers output and sorts map entries by the bytewise order of their encoded keys.
-- The event encoder buffers dynamic unknown-length containers explicitly and emits definite-length CBOR.
-- The decoder accepts definite and indefinite strings, arrays, and maps, rejects trailing data, rejects unsupported tags/simple values as actual values, and validates UTF-8 text.
-- Low-level custom hooks can emit/read CBOR semantic tags and unmodeled simple values explicitly.
-- Date/time helper types use their ordinary struct or string fallbacks; CBOR date/time tags are not emitted automatically.
-
-ZON:
-
-- Structs and sequences are emitted with Zig object notation syntax such as `.{ .id = 1 }` and `.{ 1, 2, 3 }`.
-- Enums are emitted as enum literals such as `.green`; renamed fields or tags that are not bare identifiers use escaped identifier syntax such as `.@"display-name"`.
-- Numeric input accepts Zig-style separators, `0b`/`0o`/`0x` integer prefixes, and `inf`/`nan` float tokens.
-- Line and block comments are accepted while reading, and trailing commas are accepted in structs and sequences.
-- Pretty output is controlled with `zon.WriteOptions{ .pretty = true, .indent = 4 }`.
-
-Binary:
-
-- Default endianness is little-endian.
-- Fixed arrays are encoded without a length prefix.
-- Slices and strings are length-prefixed with `u64`.
-- Optionals use a one-byte presence marker.
-- Struct fields are encoded in declaration order using the effective serializable field set.
-- The decoder rejects trailing data.
-
-CSV:
-
-- The root value must be an array, slice, or supported std list container of structs.
-- Fields must be scalar-ish values, nested structs, or optionals of those. Scalar-ish values are bools, integers, finite floats, enums, strings, or bytes.
-- Nested structs are flattened with dotted column paths, such as `created.seconds` and `created.nanoseconds`.
-- Headers are written and read by default using effective wire names from metadata.
-- Writer output defaults to RFC 4180-style comma-separated records with CRLF record terminators.
-- Set `csv.Options{ .delimiter = .tab }` to read or write TSV-style tab-delimited records.
-- Strings are quoted only when needed; embedded quotes are escaped by doubling them.
-- Raw byte fields are represented as standard padded base64.
-- Empty cells decode as null for optional fields.
-
-Human:
-
-- Write-only compact output intended for debugging.
-- Uses reflected type names for structs.
 
 ## Memory Ownership
 

@@ -1,4 +1,25 @@
 //! TOML format support.
+//!
+//! This module provides the `zerde.toml` format API: direct read/write helpers,
+//! allocator-backed slice helpers, and low-level encoder/decoder types for use
+//! with `zerde.serialize`, `zerde.deserialize`, custom hooks, and structural
+//! events.
+//!
+//! TOML documents are tables, so typed writes require a struct root value. TOML
+//! has no null value; serializing null optionals returns
+//! `error.UnsupportedTomlNull`. Integers are limited to TOML's signed 64-bit
+//! range. Byte fields represented with `zerde.Bytes` or `.bytes = true` are
+//! emitted as standard padded RFC 4648 base64 strings.
+//!
+//! Writer layout can be `.inline_tables` or `.sections`. Inline-table layout
+//! streams directly, while section layout builds an allocator-backed document
+//! tree to emit `[table]` and `[[array]]` sections. Section layout is available
+//! through `writeWithOptions`, `writeAllocWithOptions`, `encoderWithOptions`, and
+//! `sectionEncoder`.
+//!
+//! `zerde.LocalDate`, `zerde.LocalTime`, `zerde.LocalDateTime`, and
+//! `zerde.OffsetDateTime` use native TOML date/time literals. The decoder
+//! rejects malformed syntax and trailing input after the TOML document.
 
 const std = @import("std");
 

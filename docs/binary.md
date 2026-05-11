@@ -37,6 +37,22 @@
 
 Compact binary format support.
 
+This module provides the `zerde.binary` format API: direct read/write
+helpers, allocator-backed slice helpers, and low-level encoder/decoder types
+for use with `zerde.serialize`, `zerde.deserialize`, and custom hooks.
+Binary is type-directed rather than self-describing, so it is not a dynamic
+structural event source.
+
+The default endianness is little-endian and can be changed with
+`Options{ .endian = .big }` or another `std.builtin.Endian` value. Fixed
+arrays are encoded without a length prefix. Slices, strings, and byte fields
+represented with `zerde.Bytes` or `.bytes = true` are encoded as a `u64`
+length followed by raw bytes. Optionals use a one-byte presence marker.
+
+Struct fields are encoded in declaration order using the effective
+serializable field set after metadata is applied. The typed read APIs and
+decoder reject trailing data after the single root value.
+
 ## Functions
 
 - [write](#fn-write)

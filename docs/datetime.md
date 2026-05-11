@@ -37,6 +37,17 @@
 
 First-class date and time value types.
 
+This module defines Zerde's first-class temporal helper types:
+`Timestamp`, `LocalDate`, `LocalTime`, `LocalDateTime`, and
+`OffsetDateTime`.
+
+Temporal values use native format support when a format exposes it. TOML uses
+native date/time literals for local dates, local times, local date-times, and
+offset date-times. MessagePack encodes `Timestamp` with the timestamp
+extension type. Other formats use canonical string representations for the
+local and offset date/time types, while `Timestamp` falls back to its struct
+representation. CBOR date/time tags are not emitted automatically.
+
 ## Types
 
 - [Timestamp](#type-timestamp)

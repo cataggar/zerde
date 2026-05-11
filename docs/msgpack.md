@@ -37,6 +37,24 @@
 
 MessagePack format support.
 
+This module provides the `zerde.msgpack` format API: direct read/write
+helpers, allocator-backed slice helpers, and low-level encoder/decoder types
+for use with `zerde.serialize`, `zerde.deserialize`, custom hooks, and
+structural events.
+
+Structs and tagged unions are encoded as maps with string keys. Strings use
+the MessagePack str family and must be valid UTF-8. Byte fields represented
+with `zerde.Bytes` or `.bytes = true` use the native bin family instead of
+base64. `zerde.Timestamp` uses the MessagePack timestamp extension type.
+
+Numeric, string, binary, array, map, and extension headers use the smallest
+valid MessagePack encoding. Low-level custom hooks can emit or read extension
+values explicitly through `Extension` support.
+
+The typed read APIs and decoder reject malformed syntax, invalid UTF-8
+strings, trailing data after the single root value, and unsupported extension
+values unless a low-level custom hook handles them directly.
+
 ## Functions
 
 - [write](#fn-write)
