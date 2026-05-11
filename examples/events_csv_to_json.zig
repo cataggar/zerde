@@ -18,7 +18,7 @@ pub fn main(init: std.process.Init) !void {
     defer out.deinit();
     var json_encoder = zerde.json.encoderWithOptions(&out.writer, .{ .pretty = true, .indent = 2 });
 
-    try zerde.events.pipe(allocator, &csv_decoder, &json_encoder);
+    try zerde.pipe(allocator, &csv_decoder, &json_encoder);
     try csv_decoder.finish();
     try json_encoder.finish();
 

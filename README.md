@@ -4,16 +4,13 @@ Zerde is a small Zig 0.16 serialization framework built around comptime reflecti
 
 ## Features
 
-- JSON read/write with compact and pretty output.
-- TOML read/write with inline-table or section-oriented output.
-- MessagePack read/write with native string, binary, array, and map encodings.
-- CBOR read/write with native text, byte string, array, and map encodings.
-- ZON read/write with configurable pretty output.
-- Compact binary read/write with configurable endianness.
-- Type-specialized `Codec(T)` namespaces for format dispatch, schema inspection, validation, and cleanup.
-- Structural events for reading into custom representations or transcoding without an application Zig struct.
-- Field metadata for renaming, `rename_all`, skipping, unknown-field denial, byte fields, and custom hooks.
-- Tagged unions with external, adjacent, and internal representations.
+- Multi-format serialization: JSON, TOML, MessagePack, CBOR, ZON, CSV, compact binary, and human-readable debug output.
+- Reflection-driven typed APIs: serialize ordinary Zig structs, enums, unions, slices, arrays, optionals, and std containers without runtime schema registration.
+- Type-specialized `Codec(T)`: one generated namespace for format dispatch, validation, schema inspection, cleanup, and option-aware reads/writes.
+- Structural event pipeline: consume or transcode self-describing formats without defining an application Zig struct.
+- Metadata-driven wire control: rename fields, apply `rename_all`, skip fields, deny unknown fields, mark raw byte fields, and attach custom hooks.
+- Tagged union support: external, adjacent, and internal representations.
+- Explicit ownership: allocator-backed reads pair with `zerde.deinit` for predictable cleanup.
 - No external dependencies.
 
 ## Status
@@ -89,14 +86,14 @@ defer zerde.deinit(MyType, allocator, value2);
 
 Available format modules:
 
-- `zerde.json`
-- `zerde.toml`
-- `zerde.msgpack`
-- `zerde.cbor`
-- `zerde.zon`
-- `zerde.binary`
-- `zerde.csv`
-- `zerde.human` no read/readSlice API
+- `zerde.json` - [Docs](docs/json.md)
+- `zerde.toml` - [Docs](docs/toml.md)
+- `zerde.msgpack` - [Docs](docs/msgpack.md)
+- `zerde.cbor` - [Docs](docs/cbor.md)
+- `zerde.zon` - [Docs](docs/zon.md)
+- `zerde.binary` - [Docs](docs/binary.md)
+- `zerde.csv` - [Docs](docs/csv.md)
+- `zerde.human` - [Docs](docs/human.md), no read/readSlice API
 
 Common helpers:
 
@@ -118,7 +115,18 @@ The option type is format-specific, usually named `WriteOptions` or `Options`. L
 
 ## Structural Events
 
-Use `zerde.events` when you want to read Zerde-supported formats into your own representation instead of into a reflected Zig struct.
+Zerde has one structural protocol with two roles. A decoder is a structural source: it exposes methods like `peek`, `readBool`, `beginSeq`, `nextField`, and `skipValue`. A sink receives structural callbacks like `emitNull`, `emitBool`, `emitInt`, `emitString`, `beginSeq`, `endSeq`, `beginStruct`, `emitFieldName`, and `endStruct`; format encoders are sinks that write bytes.
+
+The typed APIs and event APIs are different traversals over that same protocol:
+
+```zig
+try zerde.serialize(value, &encoder);                    // typed value -> sink
+const value2 = try zerde.deserialize(T, allocator, &decoder); // source -> typed value
+try zerde.consume(allocator, &decoder, &sink);           // source -> sink
+try zerde.pipe(allocator, &decoder, &encoder);           // source -> encoder sink
+```
+
+Use structural events when you want to read Zerde-supported formats into your own representation instead of into a reflected Zig struct. Custom sinks can build an application value tree, validate a stream, count events, or transform data. String and field-name slices passed to the sink are temporary; copy them if your representation retains them.
 
 ```zig
 var reader: std.Io.Reader = .fixed("{\"id\":42,\"name\":\"Ada\"}");
@@ -127,13 +135,11 @@ var decoder = zerde.json.decoder(&reader, allocator);
 var builder = MyValueBuilder.init(allocator);
 defer builder.deinit();
 
-try zerde.events.consume(allocator, &decoder, &builder);
+try zerde.consume(allocator, &decoder, &builder);
 try decoder.finish();
 
 const my_value = try builder.finish();
 ```
-
-A sink implements structural callbacks like `emitNull`, `emitBool`, `emitInt`, `emitString`, `beginSeq`, `endSeq`, `beginStruct`, `emitFieldName`, and `endStruct`. String and field-name slices passed to the sink are temporary; copy them if your representation retains them.
 
 For simple transcoding or tests, `zerde.events.Value` provides an allocator-owned tree:
 
@@ -141,12 +147,12 @@ For simple transcoding or tests, `zerde.events.Value` provides an allocator-owne
 var in = zerde.json.decoder(&reader, allocator);
 var out = zerde.msgpack.encoder(&writer);
 
-try zerde.events.pipe(allocator, &in, &out);
+try zerde.pipe(allocator, &in, &out);
 try in.finish();
 try out.finish();
 ```
 
-The event APIs are intended for self-describing data streams such as JSON, TOML, MessagePack, and ZON. CSV can participate as a table stream: reads produce a sequence of row structs, and writes accept a sequence of row structs whose first row defines the CSV schema. Later rows may omit first-row fields, which become empty cells, but extra fields are rejected. Binary remains type-directed because its low-level representation depends on the Zig type shape.
+The event APIs are intended for self-describing data streams such as JSON, TOML, MessagePack, CBOR, and ZON. CSV participates as a row stream; binary remains type-directed. See the feature matrix for format-specific source and target constraints.
 
 ## Type Codecs
 
@@ -167,7 +173,7 @@ try zerde.schema.write(&writer, schema, .human);
 try zerde.schema.write(&writer, schema, .json);
 ```
 
-Supported `zerde.Format` values are `.json`, `.toml`, `.msgpack`, `.cbor`, `.zon`, `.binary`, `.csv`, and `.human`. The human format is write-only, so codec reads from `.human` fail at compile time.
+Codecs dispatch through `zerde.Format`. The human format is write-only, so codec reads from `.human` fail at compile time.
 
 Use `writeWithOptions` when a format has write options. Binary and CSV also support `readWithOptions`.
 
@@ -186,27 +192,6 @@ try UsersCodec.writeWithOptions(allocator, &writer, users, .csv, .{
     .delimiter = .tab,
 });
 ```
-
-## Supported Types
-
-Zerde currently supports:
-
-- `bool`
-- integers
-- floats
-- `null` and optionals
-- enums
-- arrays and slices
-- `std.ArrayList`, `std.MultiArrayList`, `std.HashMap`, and `std.ArrayHashMap` families
-- `[]u8`, `[]const u8`, and string literals as strings by default
-- plain non-tuple structs
-- tagged unions
-- `zerde.Bytes` and fields marked `.bytes = true` for raw byte payloads
-- custom types that implement native Zerde hooks
-
-Unsupported types fail at compile time when used through the generic traversal or `Codec(T)` schema validation.
-
-Std list containers serialize as sequences. Std map containers serialize as sequences of `{ key, value }` entries so the same representation works for string and non-string keys across JSON, TOML, MessagePack, ZON, and binary formats. Deserialization rebuilds allocator-backed std containers with the allocator passed to the read API.
 
 ## Metadata
 
@@ -411,57 +396,26 @@ The write hook emits the wire representation for `UserId` directly. The read hoo
 
 Native hooks take precedence over field traversal for that type.
 
-## Memory Ownership
+## Supported Types
 
-Values returned by deserialization own their strings and slices. Always deinitialize them when done.
+Zerde supports the usual Zig data shapes you can describe with comptime reflection:
 
-```zig
-const parsed = try zerde.toml.readSlice(Config, allocator, input);
-defer zerde.deinit(Config, allocator, parsed);
-```
+| Shape | Zig types |
+| --- | --- |
+| Scalars | `bool`, integers, floats, `null`, optionals, enums |
+| Text | `[]u8`, `[]const u8`, and string literals as UTF-8 strings by default |
+| Raw bytes | `zerde.Bytes`, `[N]u8`, `[]u8`, or `[]const u8` with `.bytes = true` |
+| Sequences | arrays, slices, `std.ArrayList`, and `std.MultiArrayList` families |
+| Maps | `std.HashMap` and `std.ArrayHashMap` families |
+| Records | plain non-tuple structs |
+| Variants | tagged unions |
+| Custom wire shapes | types with native `zerdeWrite` or `zerdeRead` hooks |
 
-## Development
+Std list containers serialize as sequences. Std map containers serialize as sequences of `{ key, value }` entries, so the same representation works for string and non-string keys across JSON, TOML, MessagePack, CBOR, ZON, and binary formats.
 
-Run the test suite:
-
-```sh
-zig build test
-```
-
-Build all runnable examples into `zig-out/bin`:
-
-```sh
-zig build examples
-```
-
-For example, run the structural events demo with:
-
-```sh
-./zig-out/bin/events-api
-```
-
-See `examples/README.md` for an overview of the example programs.
-
-Generate Zig documentation:
-
-```sh
-zig build docs
-```
-
-Generate and serve the documentation locally:
-
-```sh
-zig build docs-serve
-```
-
-The server listens on `127.0.0.1:8000` by default and serves `zig-out/docs`. You can override the host and port after `--`:
-
-```sh
-zig build docs-serve -- 0.0.0.0 9000
-```
+Values returned by read APIs own allocator-backed strings, slices, lists, maps, and hook-owned data; release them with `zerde.deinit` when done. Unsupported types fail at compile time when used through the generic traversal or `Codec(T)` schema validation.
 
 ## Feature Support Matrix
-
 
 | Format | Direct write | Direct read | Alloc write | Slice read | Options | Low-level API | `Codec(T)` | Events source |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -474,14 +428,49 @@ zig build docs-serve -- 0.0.0.0 9000
 | CSV | yes | yes | yes | yes | read, write | encoder, decoder | yes | yes, as rows |
 | Human | yes | no | no | no | write | encoder only | write only | no |
 
-
-- Direct write: `write` and `writeWithOptions` when options exist.
-- Direct read: `read` and `readWithOptions` when options exist.
-- Alloc write: `writeAlloc` and `writeAllocWithOptions` when options exist.
-- Slice read: `readSlice` and `readSliceWithOptions` when options exist.
-- Low-level API: `encoder`, `encoderWithOptions`, and/or `decoder` for integration with `zerde.serialize`, `zerde.deserialize`, custom hooks, and structural events.
+Direct, alloc, and slice columns refer to the standard `write`, `read`, `writeAlloc`, and `readSlice` helper families, including `*WithOptions` variants when a format supports options. Low-level API lists encoder/decoder entry points for integration with `zerde.serialize`, `zerde.deserialize`, custom hooks, and structural events.
 
 Structural event targets are more format dependent than sources. JSON, MessagePack, CBOR, ZON, and Human can generally receive `events.Value.write` output. TOML can receive object-shaped values that satisfy TOML's root-table and no-null constraints. CSV can receive a sequence of row structs, using the first row as the fixed schema. Binary should be treated as a type-directed target rather than a dynamic event target.
+
+## Development
+
+Run the full test suite:
+
+```sh
+zig build test
+```
+
+Build all example binaries:
+
+```sh
+zig build examples
+```
+
+Run an example:
+
+```sh
+./zig-out/bin/events-api
+```
+
+See `examples/README.md` for the full example list.
+
+Generate docs:
+
+```sh
+zig build docs
+```
+
+Serve docs locally:
+
+```sh
+zig build docs-serve
+```
+
+By default, docs are served from `zig-out/docs` at `127.0.0.1:8000`. Override the host and port after `--`:
+
+```sh
+zig build docs-serve -- 0.0.0.0 9000
+```
 
 ## License
 

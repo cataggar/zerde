@@ -53,6 +53,10 @@ pub const Format = @import("format.zig").Format;
 pub const serialize = @import("serialize.zig").serialize;
 /// Generic type-directed deserialization traversal.
 pub const deserialize = @import("deserialize.zig").deserialize;
+/// Generic structural event traversal from a decoder into a sink.
+pub const consume = events.consume;
+/// Generic structural event traversal from a decoder into an encoder sink.
+pub const pipe = events.pipe;
 /// Type-directed cleanup for values produced by Zerde deserialization.
 pub const deinit = @import("deinit.zig").deinit;
 
@@ -77,6 +81,8 @@ test {
     _ = Format;
     _ = serialize;
     _ = deserialize;
+    _ = consume;
+    _ = pipe;
     _ = deinit;
     _ = @import("meta.zig");
     _ = @import("format.zig");

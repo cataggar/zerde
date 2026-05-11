@@ -84,7 +84,7 @@ pub fn main(init: std.process.Init) !void {
     var trace = TraceSink{ .allocator = allocator };
     defer trace.deinit();
 
-    try zerde.events.consume(allocator, &trace_decoder, &trace);
+    try zerde.consume(allocator, &trace_decoder, &trace);
     try trace_decoder.finish();
     std.debug.print("event trace:\n{s}\n", .{trace.out.items});
 
@@ -101,7 +101,7 @@ pub fn main(init: std.process.Init) !void {
     defer msgpack_out.deinit();
     var msgpack_encoder = zerde.msgpack.encoder(&msgpack_out.writer);
 
-    try zerde.events.pipe(allocator, &json_decoder, &msgpack_encoder);
+    try zerde.pipe(allocator, &json_decoder, &msgpack_encoder);
     try json_decoder.finish();
     try msgpack_encoder.finish();
 

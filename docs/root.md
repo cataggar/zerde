@@ -45,6 +45,8 @@ Public root module for Zerde serialization APIs.
 - [LocalTime](#alias-localtime)
 - [LocalDateTime](#alias-localdatetime)
 - [OffsetDateTime](#alias-offsetdatetime)
+- [consume](#alias-consume)
+- [pipe](#alias-pipe)
 
 ## Imports
 
@@ -308,6 +310,30 @@ Generic type-directed deserialization traversal.
 ```zig
 pub const deserialize = @import("deserialize.zig").deserialize;
 ```
+
+<a id="alias-consume"></a>
+
+## consume
+
+Generic structural event traversal from a decoder into a sink.
+
+```zig
+pub const consume = events.consume;
+```
+
+References: [`events.consume`](events.md#fn-consume)
+
+<a id="alias-pipe"></a>
+
+## pipe
+
+Generic structural event traversal from a decoder into an encoder sink.
+
+```zig
+pub const pipe = events.pipe;
+```
+
+References: [`events.pipe`](events.md#fn-pipe)
 
 <a id="import-deinit"></a>
 

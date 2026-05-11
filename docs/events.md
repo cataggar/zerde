@@ -38,6 +38,29 @@
 Structural event APIs for consuming and producing Zerde-compatible values
 without deserializing into an application Zig struct.
 
+Zerde's low-level format encoders and decoders already implement the same
+structural protocol used by these event helpers. A decoder acts as a
+structural source: it exposes methods such as `peek`, `readBool`,
+`beginSeq`, `nextField`, and `skipValue`. An encoder acts as a structural
+sink: it exposes methods such as `emitBool`, `emitString`, `beginSeq`,
+`emitFieldName`, and `endStruct`.
+
+The generic typed APIs and event APIs are different traversals over that
+shared protocol:
+
+```zig
+try zerde.serialize(value, &encoder);        // typed value -> sink
+const value2 = try zerde.deserialize(T, allocator, &decoder); // source -> typed value
+try zerde.consume(allocator, &decoder, &sink);        // source -> sink
+try zerde.pipe(allocator, &decoder, &encoder);        // source -> encoder sink
+```
+
+Custom event sinks can build an application value tree, validate a stream,
+count events, or transform data. Format encoders are just one kind of sink,
+namely a sink that writes bytes. Format decoders are structural sources when
+the format is self-describing enough to drive `peek`; binary remains
+type-directed and is not a dynamic event source.
+
 ## Functions
 
 - [consume](#fn-consume)
@@ -253,8 +276,8 @@ References: [`Value`](#type-value)
 
 ## consume
 
-Consumes one complete value from `decoder` and forwards structural events to
-`sink`.
+Consumes one complete value from structural source `decoder` and forwards
+structural events to `sink`.
 
 A sink implements methods such as `emitNull`, `emitBool`, `beginSeq`,
 `emitFieldName`, and `endStruct`. String, byte, field-name, enum-tag, and
