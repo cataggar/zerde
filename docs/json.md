@@ -20,10 +20,11 @@
 - [toml](toml.md)
 - [datetime](datetime.md)
 - [msgpack](msgpack.md)
+- [events](events.md)
+- [cbor](cbor.md)
 - [zon](zon.md)
 - [binary](binary.md)
 - [csv](csv.md)
-- [events](events.md)
 - [human](human.md)
 - [traits](traits.md)
 - [schema](schema.md)
@@ -35,6 +36,23 @@
 ## Overview
 
 JSON format support.
+
+This module provides the `zerde.json` format API: direct read/write helpers,
+allocator-backed slice helpers, and low-level encoder/decoder types for use
+with `zerde.serialize`, `zerde.deserialize`, custom hooks, and structural
+events.
+
+JSON strings must be valid UTF-8. Byte fields represented with `zerde.Bytes`
+or `.bytes = true` are emitted as standard padded RFC 4648 base64 strings.
+Non-finite floats are rejected because JSON has no representation for NaN or
+infinity.
+
+Output is compact by default. Pretty output is controlled with
+`WriteOptions{ .pretty = true, .indent = 2 }` through `writeWithOptions`,
+`writeAllocWithOptions`, or `encoderWithOptions`.
+
+The typed read APIs and decoder reject malformed syntax, invalid UTF-8, and
+trailing input after the single JSON root value.
 
 ## Functions
 
@@ -88,7 +106,7 @@ pub fn write(writer: *std.Io.Writer, value: anytype) !void
 Serializes `value` as JSON to `writer` with explicit writer options.
 
 ```zig
-pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void
+pub fn writeWithOptions(allocator: std.mem.Allocator, writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void
 ```
 
 References: [`WriteOptions`](#type-writeoptions)

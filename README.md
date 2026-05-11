@@ -7,6 +7,7 @@ Zerde is a small Zig 0.16 serialization framework built around comptime reflecti
 - JSON read/write with compact and pretty output.
 - TOML read/write with inline-table or section-oriented output.
 - MessagePack read/write with native string, binary, array, and map encodings.
+- CBOR read/write with native text, byte string, array, and map encodings.
 - ZON read/write with configurable pretty output.
 - Compact binary read/write with configurable endianness.
 - Type-specialized `Codec(T)` namespaces for format dispatch, schema inspection, validation, and cleanup.
@@ -17,14 +18,14 @@ Zerde is a small Zig 0.16 serialization framework built around comptime reflecti
 
 ## Status
 
-The current version is `0.2.5` and targets Zig `0.16.0` or newer. The API is usable, but still early.
+The current version is `0.3.0` and targets Zig `0.16.0` or newer. The API is usable, but still early.
 
 ## Quick Start
 
 1. Add `zerde` to your Zig package dependencies:
 
 ```sh
-zig fetch --save git+https://codeberg.org/gron/zerde#v0.2.5
+zig fetch --save git+https://codeberg.org/gron/zerde#v0.3.0
 ```
 
 2. Wire the dependency into your executable in `build.zig`:
@@ -91,6 +92,7 @@ Available format modules:
 - `zerde.json`
 - `zerde.toml`
 - `zerde.msgpack`
+- `zerde.cbor`
 - `zerde.zon`
 - `zerde.binary`
 - `zerde.csv`
@@ -98,13 +100,21 @@ Available format modules:
 
 Common helpers:
 
-- `write(writer, value)`
-- `writeWithOptions(...)`
-- `writeAlloc(allocator, value)`
-- `writeAllocWithOptions(...)`
-- `read(T, allocator, reader)`
-- `readSlice(T, allocator, input)`
-- `encoder(...)`, `encoderWithOptions(...)`, and `decoder(...)` for low-level integration with `zerde.serialize` and `zerde.deserialize`
+```zig
+pub fn write(writer: *std.Io.Writer, value: anytype) !void;
+pub fn writeWithOptions(allocator: std.mem.Allocator, writer: *std.Io.Writer, value: anytype, options: Options) !void;
+pub fn writeAlloc(allocator: std.mem.Allocator, value: anytype) ![]u8;
+pub fn writeAllocWithOptions(allocator: std.mem.Allocator, value: anytype, options: Options) ![]u8;
+
+pub fn read(comptime T: type, allocator: std.mem.Allocator, reader: *std.Io.Reader) !T;
+pub fn readSlice(comptime T: type, allocator: std.mem.Allocator, input: []const u8) !T;
+
+pub fn encoder(writer: *std.Io.Writer) Encoder;
+pub fn encoderWithOptions(writer: *std.Io.Writer, options: Options) Encoder;
+pub fn decoder(reader: *std.Io.Reader, allocator: std.mem.Allocator) Decoder;
+```
+
+The option type is format-specific, usually named `WriteOptions` or `Options`. Low-level encoder and decoder helpers integrate with `zerde.serialize` and `zerde.deserialize`; some formats expose format-specific variants such as `eventEncoder`, allocator-backed encoders, or option-bearing decoders.
 
 ## Structural Events
 
@@ -157,7 +167,7 @@ try zerde.schema.write(&writer, schema, .human);
 try zerde.schema.write(&writer, schema, .json);
 ```
 
-Supported `zerde.Format` values are `.json`, `.toml`, `.msgpack`, `.zon`, `.binary`, `.csv`, and `.human`. The human format is write-only, so codec reads from `.human` fail at compile time.
+Supported `zerde.Format` values are `.json`, `.toml`, `.msgpack`, `.cbor`, `.zon`, `.binary`, `.csv`, and `.human`. The human format is write-only, so codec reads from `.human` fail at compile time.
 
 Use `writeWithOptions` when a format has write options. Binary and CSV also support `readWithOptions`.
 
@@ -295,7 +305,7 @@ JSON output:
 
 ## Raw Bytes
 
-Plain `[]const u8` is treated as a UTF-8 string in JSON, TOML, ZON, and human output. Use `zerde.Bytes` or `.bytes = true` when the bytes are arbitrary binary data.
+Plain `[]const u8` is treated as a UTF-8 string by formats with a distinct string representation. Use `zerde.Bytes` or `.bytes = true` when the bytes are arbitrary binary data.
 
 ```zig
 const Blob = struct {
@@ -317,8 +327,7 @@ const Blob = struct {
 }
 ```
 
-JSON, TOML, ZON, and human encoders emit raw bytes as standard padded RFC 4648 base64 strings. The binary format writes raw bytes directly with its normal length-prefix rules for slices.
-MessagePack writes raw bytes with the native bin family.
+Raw byte wire representations are format-specific and documented in each format module.
 
 
 ## Custom Hooks
@@ -402,72 +411,6 @@ The write hook emits the wire representation for `UserId` directly. The read hoo
 
 Native hooks take precedence over field traversal for that type.
 
-## Format Notes
-
-JSON:
-
-- Strings must be valid UTF-8.
-- Non-finite floats are rejected.
-- Pretty output is controlled with `json.WriteOptions{ .pretty = true, .indent = 2 }`.
-- The decoder rejects trailing input and malformed syntax.
-
-Date/time:
-
-- Date/time helpers are exposed as `zerde.LocalDate`, `zerde.LocalTime`, `zerde.LocalDateTime`, `zerde.OffsetDateTime`, and `zerde.Timestamp`.
-- Temporal values use native format support when available, otherwise canonical string representations.
-
-TOML:
-
-- The root value must be a struct because TOML documents are tables.
-- TOML has no null value, so serializing null optionals returns `error.UnsupportedTomlNull`.
-- Integers are limited to TOML's signed 64-bit range.
-- Writer layout can be `.inline_tables` or `.sections`.
-- Section layout is also available to event/low-level writers through `toml.encoderWithOptions(...)`.
-- `zerde.LocalDate`, `zerde.LocalTime`, `zerde.LocalDateTime`, and `zerde.OffsetDateTime` use native TOML date/time literals.
-
-MessagePack:
-
-- Structs and tagged unions are encoded as maps with string keys.
-- Strings are encoded with the str family and must be valid UTF-8.
-- Raw byte fields use the bin family instead of base64.
-- `zerde.Timestamp` uses the MessagePack timestamp extension type.
-- Integer, string, binary, array, map, and extension headers use the smallest valid MessagePack format.
-- The decoder rejects trailing data, malformed syntax, invalid UTF-8 strings, and unsupported extension values unless handled through low-level custom hooks.
-
-ZON:
-
-- Structs and sequences are emitted with Zig object notation syntax such as `.{ .id = 1 }` and `.{ 1, 2, 3 }`.
-- Enums are emitted as enum literals such as `.green`; renamed fields or tags that are not bare identifiers use escaped identifier syntax such as `.@"display-name"`.
-- Numeric input accepts Zig-style separators, `0b`/`0o`/`0x` integer prefixes, and `inf`/`nan` float tokens.
-- Line and block comments are accepted while reading, and trailing commas are accepted in structs and sequences.
-- Pretty output is controlled with `zon.WriteOptions{ .pretty = true, .indent = 4 }`.
-
-Binary:
-
-- Default endianness is little-endian.
-- Fixed arrays are encoded without a length prefix.
-- Slices and strings are length-prefixed with `u64`.
-- Optionals use a one-byte presence marker.
-- Struct fields are encoded in declaration order using the effective serializable field set.
-- The decoder rejects trailing data.
-
-CSV:
-
-- The root value must be an array, slice, or supported std list container of structs.
-- Fields must be scalar-ish values, nested structs, or optionals of those. Scalar-ish values are bools, integers, finite floats, enums, strings, or bytes.
-- Nested structs are flattened with dotted column paths, such as `created.seconds` and `created.nanoseconds`.
-- Headers are written and read by default using effective wire names from metadata.
-- Writer output defaults to RFC 4180-style comma-separated records with CRLF record terminators.
-- Set `csv.Options{ .delimiter = .tab }` to read or write TSV-style tab-delimited records.
-- Strings are quoted only when needed; embedded quotes are escaped by doubling them.
-- Raw byte fields are represented as standard padded base64.
-- Empty cells decode as null for optional fields.
-
-Human:
-
-- Write-only compact output intended for debugging.
-- Uses reflected type names for structs.
-
 ## Memory Ownership
 
 Values returned by deserialization own their strings and slices. Always deinitialize them when done.
@@ -525,6 +468,7 @@ zig build docs-serve -- 0.0.0.0 9000
 | JSON | yes | yes | yes | yes | write | encoder, decoder | yes | yes |
 | TOML | yes | yes | yes | yes | write | encoder, decoder | yes | yes |
 | MessagePack | yes | yes | yes | yes | write | encoder, decoder | yes | yes |
+| CBOR | yes | yes | yes | yes | write | encoder, eventEncoder, decoder | yes | yes |
 | ZON | yes | yes | yes | yes | write | encoder, decoder | yes | yes |
 | Binary | yes | yes | yes | yes | read, write | encoder, decoder | yes | no |
 | CSV | yes | yes | yes | yes | read, write | encoder, decoder | yes | yes, as rows |
@@ -537,7 +481,7 @@ zig build docs-serve -- 0.0.0.0 9000
 - Slice read: `readSlice` and `readSliceWithOptions` when options exist.
 - Low-level API: `encoder`, `encoderWithOptions`, and/or `decoder` for integration with `zerde.serialize`, `zerde.deserialize`, custom hooks, and structural events.
 
-Structural event targets are more format dependent than sources. JSON, MessagePack, ZON, and Human can generally receive `events.Value.write` output. TOML can receive object-shaped values that satisfy TOML's root-table and no-null constraints. CSV can receive a sequence of row structs, using the first row as the fixed schema. Binary should be treated as a type-directed target rather than a dynamic event target.
+Structural event targets are more format dependent than sources. JSON, MessagePack, CBOR, ZON, and Human can generally receive `events.Value.write` output. TOML can receive object-shaped values that satisfy TOML's root-table and no-null constraints. CSV can receive a sequence of row structs, using the first row as the fixed schema. Binary should be treated as a type-directed target rather than a dynamic event target.
 
 ## License
 

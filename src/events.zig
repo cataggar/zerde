@@ -3,10 +3,64 @@
 
 const std = @import("std");
 
-/// Opaque extension payload used by formats that support extension values.
-pub const Extension = struct {
-    type_id: i8,
-    data: []u8,
+/// Format-specific extension value used by self-describing formats.
+pub const Extension = union(enum) {
+    /// Opaque extension payload, such as MessagePack ext data.
+    opaque_: Opaque,
+    /// Tag wrapping another event value, such as CBOR semantic tags.
+    tagged: Tagged,
+    /// Tagless simple extension value, such as CBOR simple values.
+    simple: Simple,
+
+    pub const Namespace = enum {
+        msgpack,
+        cbor,
+    };
+
+    pub const Id = union(enum) {
+        signed: i64,
+        unsigned: u64,
+    };
+
+    pub const Opaque = struct {
+        namespace: Namespace,
+        id: Id,
+        data: []u8,
+    };
+
+    pub const Tagged = struct {
+        namespace: Namespace,
+        id: Id,
+        value: *Value,
+    };
+
+    pub const Simple = struct {
+        namespace: Namespace,
+        id: Id,
+    };
+
+    pub fn msgpack(type_id: i8, data: []u8) Extension {
+        return .{ .opaque_ = .{ .namespace = .msgpack, .id = .{ .signed = type_id }, .data = data } };
+    }
+
+    pub fn cborTag(tag: u64, value: *Value) Extension {
+        return .{ .tagged = .{ .namespace = .cbor, .id = .{ .unsigned = tag }, .value = value } };
+    }
+
+    pub fn cborSimple(code: u8) Extension {
+        return .{ .simple = .{ .namespace = .cbor, .id = .{ .unsigned = code } } };
+    }
+
+    pub fn deinit(self: Extension, allocator: std.mem.Allocator) void {
+        switch (self) {
+            .opaque_ => |raw| allocator.free(raw.data),
+            .tagged => |tagged| {
+                tagged.value.deinit(allocator);
+                allocator.destroy(tagged.value);
+            },
+            .simple => {},
+        }
+    }
 };
 
 /// Allocator-owned field in a structural object value.
@@ -38,7 +92,7 @@ pub const Value = union(enum) {
         switch (self.*) {
             .null, .bool, .int, .float => {},
             .string, .bytes, .enum_tag, .datetime => |bytes| allocator.free(bytes),
-            .extension => |extension| allocator.free(extension.data),
+            .extension => |extension| extension.deinit(allocator),
             .seq => |items| {
                 for (items) |*item| item.deinit(allocator);
                 allocator.free(items);
@@ -171,10 +225,9 @@ fn consumeValue(allocator: std.mem.Allocator, decoder: anytype, sink: anytype) !
         defer allocator.free(value);
         try emitDateTimeRaw(sink, value);
     } else if (std.mem.eql(u8, kind, "extension")) {
-        if (comptime !hasMethod(@TypeOf(decoder), "readExtension")) return error.UnsupportedEventKind;
-        const extension = try decoder.readExtension(allocator);
-        defer allocator.free(extension.data);
-        try emitExtension(sink, .{ .type_id = extension.type_id, .data = extension.data });
+        const extension = try readExtension(allocator, decoder);
+        defer extension.deinit(allocator);
+        try emitExtension(sink, extension);
     } else if (std.mem.eql(u8, kind, "seq")) {
         const len = try decoder.beginSeq();
         try sink.beginSeq(len);
@@ -217,9 +270,7 @@ fn readValueAlloc(allocator: std.mem.Allocator, decoder: anytype) !Value {
     } else if (std.mem.eql(u8, kind, "datetime")) {
         return .{ .datetime = try readDateTimeRaw(allocator, decoder) };
     } else if (std.mem.eql(u8, kind, "extension")) {
-        if (comptime !hasMethod(@TypeOf(decoder), "readExtension")) return error.UnsupportedEventKind;
-        const extension = try decoder.readExtension(allocator);
-        return .{ .extension = .{ .type_id = extension.type_id, .data = extension.data } };
+        return .{ .extension = try readExtension(allocator, decoder) };
     } else if (std.mem.eql(u8, kind, "seq")) {
         _ = try decoder.beginSeq();
         var items: std.ArrayList(Value) = .empty;
@@ -291,6 +342,15 @@ fn readDateTimeRaw(allocator: std.mem.Allocator, decoder: anytype) ![]u8 {
     return error.UnsupportedEventKind;
 }
 
+fn readExtension(allocator: std.mem.Allocator, decoder: anytype) !Extension {
+    if (comptime hasMethod(@TypeOf(decoder), "readEventExtension")) return try decoder.readEventExtension(allocator);
+    if (comptime hasMethod(@TypeOf(decoder), "readExtension")) {
+        const extension = try decoder.readExtension(allocator);
+        return Extension.msgpack(extension.type_id, extension.data);
+    }
+    return error.UnsupportedEventKind;
+}
+
 fn emitEnumTag(target: anytype, tag: []const u8) !void {
     if (comptime hasMethod(@TypeOf(target), "emitEnumTag")) {
         try target.emitEnumTag(tag);
@@ -308,11 +368,27 @@ fn emitDateTimeRaw(target: anytype, bytes: []const u8) !void {
 }
 
 fn emitExtension(target: anytype, extension: Extension) !void {
-    if (comptime hasMethod(@TypeOf(target), "emitExtension")) {
-        try target.emitExtension(extension.type_id, extension.data);
-    } else {
-        return error.UnsupportedEventKind;
+    if (comptime hasMethod(@TypeOf(target), "emitEventExtension")) {
+        try target.emitEventExtension(extension);
+        return;
     }
+
+    if (comptime hasMethod(@TypeOf(target), "emitExtension")) {
+        switch (extension) {
+            .opaque_ => |raw| {
+                if (raw.namespace != .msgpack) return error.UnsupportedEventKind;
+                const type_id = switch (raw.id) {
+                    .signed => |value| std.math.cast(i8, value) orelse return error.IntegerOverflow,
+                    .unsigned => |value| std.math.cast(i8, value) orelse return error.IntegerOverflow,
+                };
+                try target.emitExtension(type_id, raw.data);
+                return;
+            },
+            else => {},
+        }
+    }
+
+    return error.UnsupportedEventKind;
 }
 
 fn hasMethod(comptime T: type, comptime name: []const u8) bool {

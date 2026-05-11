@@ -1,4 +1,26 @@
 //! CSV and delimiter-separated tabular text support.
+//!
+//! This module provides the `zerde.csv` format API: direct read/write helpers,
+//! allocator-backed slice helpers, and low-level row-oriented encoder/decoder
+//! types for use with `zerde.serialize`, `zerde.deserialize`, custom hooks, and
+//! structural events.
+//!
+//! The root value must be an array, slice, or supported std list container of
+//! structs. Fields must be scalar-ish values, nested structs, or optionals of
+//! those. Scalar-ish values are bools, integers, finite floats, enums, strings,
+//! and byte fields represented with `zerde.Bytes` or `.bytes = true`. Raw bytes
+//! are represented as standard padded RFC 4648 base64 strings.
+//!
+//! Nested structs are flattened into dotted column paths such as
+//! `created.seconds` and `created.nanoseconds`. Headers are written and read by
+//! default using effective wire names from metadata. During event writes, the
+//! first row defines the fixed CSV schema; later rows may omit first-row fields,
+//! which become empty cells, but extra fields are rejected.
+//!
+//! Output defaults to RFC 4180-style comma-separated records with CRLF record
+//! terminators. Use `Options{ .delimiter = .tab }` for TSV-style tab-delimited
+//! records. Strings are quoted only when needed, and embedded quotes are escaped
+//! by doubling them. Empty cells decode as null for optional fields.
 
 const std = @import("std");
 
@@ -48,11 +70,12 @@ pub const Options = struct {
 
 /// Serializes a sequence of flat structs as CSV.
 pub fn write(writer: *std.Io.Writer, value: anytype) !void {
-    try writeWithOptions(writer, value, .{});
+    try writeRows(@TypeOf(value), writer, value, .{});
 }
 
 /// Serializes a sequence of flat structs as CSV with explicit options.
-pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: Options) !void {
+pub fn writeWithOptions(allocator: std.mem.Allocator, writer: *std.Io.Writer, value: anytype, options: Options) !void {
+    _ = allocator;
     try writeRows(@TypeOf(value), writer, value, options);
 }
 
@@ -81,7 +104,7 @@ pub fn writeAllocWithOptions(allocator: std.mem.Allocator, value: anytype, optio
     var allocating = std.Io.Writer.Allocating.init(allocator);
     errdefer allocating.deinit();
 
-    try writeWithOptions(&allocating.writer, value, options);
+    try writeWithOptions(allocator, &allocating.writer, value, options);
     return try allocating.toOwnedSlice();
 }
 

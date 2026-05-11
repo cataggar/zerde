@@ -20,10 +20,11 @@
 - [toml](toml.md)
 - [datetime](datetime.md)
 - [msgpack](msgpack.md)
+- [events](events.md)
+- [cbor](cbor.md)
 - [zon](zon.md)
 - [binary](binary.md)
 - [csv](csv.md)
-- [events](events.md)
 - [human](human.md)
 - [traits](traits.md)
 - [schema](schema.md)
@@ -50,6 +51,7 @@ Public root module for Zerde serialization APIs.
 - [json](#import-json) `@import("json.zig")`
 - [toml](#import-toml) `@import("toml.zig")`
 - [msgpack](#import-msgpack) `@import("msgpack.zig")`
+- [cbor](#import-cbor) `@import("cbor.zig")`
 - [zon](#import-zon) `@import("zon.zig")`
 - [binary](#import-binary) `@import("binary.zig")`
 - [csv](#import-csv) `@import("csv.zig")`
@@ -93,6 +95,16 @@ MessagePack format API.
 
 ```zig
 pub const msgpack = @import("msgpack.zig");
+```
+
+<a id="import-cbor"></a>
+
+## cbor
+
+CBOR format API.
+
+```zig
+pub const cbor = @import("cbor.zig");
 ```
 
 <a id="import-zon"></a>

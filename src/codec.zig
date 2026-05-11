@@ -10,6 +10,7 @@ const csv = @import("csv.zig");
 const human = @import("human.zig");
 const json = @import("json.zig");
 const msgpack = @import("msgpack.zig");
+const cbor = @import("cbor.zig");
 const toml = @import("toml.zig");
 const zon = @import("zon.zig");
 const deinitValue = @import("deinit.zig").deinit;
@@ -37,6 +38,7 @@ pub fn Codec(comptime T: type) type {
                 .json => try json.write(writer, value),
                 .toml => try toml.write(writer, value),
                 .msgpack => try msgpack.write(writer, value),
+                .cbor => try cbor.write(writer, value),
                 .zon => try zon.write(writer, value),
                 .binary => try binary.write(writer, value),
                 .csv => try csv.write(writer, value),
@@ -50,6 +52,7 @@ pub fn Codec(comptime T: type) type {
                 .json => try json.read(T, allocator, reader),
                 .toml => try toml.read(T, allocator, reader),
                 .msgpack => try msgpack.read(T, allocator, reader),
+                .cbor => try cbor.read(T, allocator, reader),
                 .zon => try zon.read(T, allocator, reader),
                 .binary => try binary.read(T, allocator, reader),
                 .csv => try csv.read(T, allocator, reader),
@@ -66,13 +69,14 @@ pub fn Codec(comptime T: type) type {
             format_options: anytype,
         ) !void {
             switch (format) {
-                .json => try json.writeWithOptions(writer, value, coerceOptions(json.WriteOptions, format_options)),
+                .json => try json.writeWithOptions(allocator, writer, value, coerceOptions(json.WriteOptions, format_options)),
                 .toml => try toml.writeWithOptions(allocator, writer, value, coerceOptions(toml.WriteOptions, format_options)),
-                .msgpack => try msgpack.writeWithOptions(writer, value, coerceOptions(msgpack.WriteOptions, format_options)),
-                .zon => try zon.writeWithOptions(writer, value, coerceOptions(zon.WriteOptions, format_options)),
-                .binary => try binary.writeWithOptions(writer, value, coerceOptions(binary.Options, format_options)),
-                .csv => try csv.writeWithOptions(writer, value, coerceOptions(csv.Options, format_options)),
-                .human => try human.writeWithOptions(writer, value, coerceOptions(human.WriteOptions, format_options)),
+                .msgpack => try msgpack.writeWithOptions(allocator, writer, value, coerceOptions(msgpack.WriteOptions, format_options)),
+                .cbor => try cbor.writeWithOptions(allocator, writer, value, coerceOptions(cbor.WriteOptions, format_options)),
+                .zon => try zon.writeWithOptions(allocator, writer, value, coerceOptions(zon.WriteOptions, format_options)),
+                .binary => try binary.writeWithOptions(allocator, writer, value, coerceOptions(binary.Options, format_options)),
+                .csv => try csv.writeWithOptions(allocator, writer, value, coerceOptions(csv.Options, format_options)),
+                .human => try human.writeWithOptions(allocator, writer, value, coerceOptions(human.WriteOptions, format_options)),
             }
         }
 
@@ -89,6 +93,7 @@ pub fn Codec(comptime T: type) type {
                 .json => @compileError("json read has no format options"),
                 .toml => @compileError("toml read has no format options"),
                 .msgpack => @compileError("msgpack read has no format options"),
+                .cbor => @compileError("cbor read has no format options"),
                 .zon => @compileError("zon read has no format options"),
                 .human => @compileError("human format is write-only"),
             };
@@ -282,6 +287,58 @@ test "codec writes and reads msgpack equivalent to format api" {
 
     var reader: std.Io.Reader = .fixed(codec_writer.buffered());
     const parsed = try Codec(User).read(std.testing.allocator, &reader, .msgpack);
+    defer Codec(User).deinit(std.testing.allocator, parsed);
+
+    try std.testing.expectEqual(user.id, parsed.id);
+    try std.testing.expectEqualStrings(user.name, parsed.name);
+    try std.testing.expectEqual(user.active, parsed.active);
+}
+
+test "codec writes and reads cbor equivalent to format api" {
+    const User = struct {
+        id: u8,
+        name: []const u8,
+        active: bool,
+    };
+
+    const user = User{ .id = 1, .name = "Ada", .active = true };
+
+    var format_buffer: [128]u8 = undefined;
+    var format_writer: std.Io.Writer = .fixed(&format_buffer);
+    try cbor.write(&format_writer, user);
+
+    var codec_buffer: [128]u8 = undefined;
+    var codec_writer: std.Io.Writer = .fixed(&codec_buffer);
+    try Codec(User).write(&codec_writer, user, .cbor);
+
+    try std.testing.expectEqualSlices(u8, format_writer.buffered(), codec_writer.buffered());
+    try std.testing.expectEqualSlices(u8, &.{
+        0xa3,
+        0x62,
+        'i',
+        'd',
+        0x01,
+        0x64,
+        'n',
+        'a',
+        'm',
+        'e',
+        0x63,
+        'A',
+        'd',
+        'a',
+        0x66,
+        'a',
+        'c',
+        't',
+        'i',
+        'v',
+        'e',
+        0xf5,
+    }, codec_writer.buffered());
+
+    var reader: std.Io.Reader = .fixed(codec_writer.buffered());
+    const parsed = try Codec(User).read(std.testing.allocator, &reader, .cbor);
     defer Codec(User).deinit(std.testing.allocator, parsed);
 
     try std.testing.expectEqual(user.id, parsed.id);
@@ -705,6 +762,31 @@ test "codec writes and reads csv with delimiter options" {
     try std.testing.expectEqual(@as(usize, 2), parsed.len);
     try std.testing.expectEqual(@as(u8, 2), parsed[1].id);
     try std.testing.expectEqualStrings("has\ttab", parsed[1].name);
+}
+
+test "codec writeWithOptions supports cbor deterministic output" {
+    const Value = struct {
+        z: u8,
+        aa: u8,
+        a: u8,
+    };
+
+    var buffer: [128]u8 = undefined;
+    var writer: std.Io.Writer = .fixed(&buffer);
+    try Codec(Value).writeWithOptions(
+        std.testing.allocator,
+        &writer,
+        .{ .z = 1, .aa = 2, .a = 3 },
+        .cbor,
+        .{ .deterministic = true },
+    );
+
+    try std.testing.expectEqualSlices(u8, &.{
+        0xa3,
+        0x61, 'a', 0x03,
+        0x61, 'z', 0x01,
+        0x62, 'a', 'a', 0x02,
+    }, writer.buffered());
 }
 
 test "codec writeWithOptions supports toml sections" {

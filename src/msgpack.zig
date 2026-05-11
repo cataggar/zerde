@@ -1,10 +1,29 @@
 //! MessagePack format support.
+//!
+//! This module provides the `zerde.msgpack` format API: direct read/write
+//! helpers, allocator-backed slice helpers, and low-level encoder/decoder types
+//! for use with `zerde.serialize`, `zerde.deserialize`, custom hooks, and
+//! structural events.
+//!
+//! Structs and tagged unions are encoded as maps with string keys. Strings use
+//! the MessagePack str family and must be valid UTF-8. Byte fields represented
+//! with `zerde.Bytes` or `.bytes = true` use the native bin family instead of
+//! base64. `zerde.Timestamp` uses the MessagePack timestamp extension type.
+//!
+//! Numeric, string, binary, array, map, and extension headers use the smallest
+//! valid MessagePack encoding. Low-level custom hooks can emit or read extension
+//! values explicitly through `Extension` support.
+//!
+//! The typed read APIs and decoder reject malformed syntax, invalid UTF-8
+//! strings, trailing data after the single root value, and unsupported extension
+//! values unless a low-level custom hook handles them directly.
 
 const std = @import("std");
 
 const serialize = @import("serialize.zig").serialize;
 const deserialize = @import("deserialize.zig").deserialize;
 const deinitValue = @import("deinit.zig").deinit;
+const events = @import("events.zig");
 const Timestamp = @import("datetime.zig").Timestamp;
 
 /// MessagePack writer configuration. Reserved for future profile options.
@@ -25,11 +44,14 @@ pub const Extension = struct {
 
 /// Serializes `value` as MessagePack to `writer`.
 pub fn write(writer: *std.Io.Writer, value: anytype) !void {
-    try writeWithOptions(writer, value, .{});
+    var enc = encoder(writer);
+    try serialize(value, &enc);
+    try enc.finish();
 }
 
 /// Serializes `value` as MessagePack to `writer` with explicit options.
-pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void {
+pub fn writeWithOptions(allocator: std.mem.Allocator, writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void {
+    _ = allocator;
     _ = options;
     var enc = encoder(writer);
     try serialize(value, &enc);
@@ -46,7 +68,7 @@ pub fn writeAllocWithOptions(allocator: std.mem.Allocator, value: anytype, optio
     var allocating = std.Io.Writer.Allocating.init(allocator);
     errdefer allocating.deinit();
 
-    try writeWithOptions(&allocating.writer, value, options);
+    try writeWithOptions(allocator, &allocating.writer, value, options);
     return try allocating.toOwnedSlice();
 }
 
@@ -229,6 +251,21 @@ pub const Encoder = struct {
         try self.beforeValue();
         try self.writeExtHeader(type_id, data.len);
         try self.writer.writeAll(data);
+    }
+
+    /// Emits a MessagePack-compatible event extension value.
+    pub fn emitEventExtension(self: *Self, extension: events.Extension) !void {
+        switch (extension) {
+            .opaque_ => |raw| {
+                if (raw.namespace != .msgpack) return error.UnsupportedEventKind;
+                const type_id = switch (raw.id) {
+                    .signed => |value| std.math.cast(i8, value) orelse return error.IntegerOverflow,
+                    .unsigned => |value| std.math.cast(i8, value) orelse return error.IntegerOverflow,
+                };
+                try self.emitExtension(type_id, raw.data);
+            },
+            else => return error.UnsupportedEventKind,
+        }
     }
 
     /// Emits the predefined MessagePack timestamp extension type (-1).
@@ -632,6 +669,12 @@ pub const Decoder = struct {
         errdefer allocator.free(data);
         try self.readExact(data);
         return .{ .type_id = header.type_id, .data = data };
+    }
+
+    /// Reads a MessagePack extension value as an event extension.
+    pub fn readEventExtension(self: *Self, allocator: std.mem.Allocator) !events.Extension {
+        const extension = try self.readExtension(allocator);
+        return events.Extension.msgpack(extension.type_id, extension.data);
     }
 
     /// Reads the predefined MessagePack timestamp extension type (-1).
@@ -1248,6 +1291,36 @@ test "msgpack supports low-level extension values" {
 
     try std.testing.expectEqual(@as(i8, 7), ext.type_id);
     try std.testing.expectEqualSlices(u8, &.{ 1, 2, 3 }, ext.data);
+}
+
+test "msgpack events preserve extension values" {
+    var buffer: [64]u8 = undefined;
+    var writer: std.Io.Writer = .fixed(&buffer);
+    var enc = encoder(&writer);
+    try enc.emitExtension(7, &.{ 1, 2, 3 });
+    try enc.finish();
+
+    var reader: std.Io.Reader = .fixed(writer.buffered());
+    var dec = decoder(&reader, std.testing.allocator);
+    var value = try events.readAlloc(std.testing.allocator, &dec);
+    defer value.deinit(std.testing.allocator);
+    try dec.finish();
+
+    switch (value.extension) {
+        .opaque_ => |raw| {
+            try std.testing.expectEqual(events.Extension.Namespace.msgpack, raw.namespace);
+            try std.testing.expectEqual(@as(i64, 7), raw.id.signed);
+            try std.testing.expectEqualSlices(u8, &.{ 1, 2, 3 }, raw.data);
+        },
+        else => return error.InvalidValue,
+    }
+
+    var out_buffer: [64]u8 = undefined;
+    var out_writer: std.Io.Writer = .fixed(&out_buffer);
+    var out_enc = encoder(&out_writer);
+    try value.write(&out_enc);
+    try out_enc.finish();
+    try std.testing.expectEqualSlices(u8, writer.buffered(), out_writer.buffered());
 }
 
 test "msgpack writes fixed extension headers" {

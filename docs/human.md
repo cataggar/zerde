@@ -20,10 +20,11 @@
 - [toml](toml.md)
 - [datetime](datetime.md)
 - [msgpack](msgpack.md)
+- [events](events.md)
+- [cbor](cbor.md)
 - [zon](zon.md)
 - [binary](binary.md)
 - [csv](csv.md)
-- [events](events.md)
 - [human](human.md)
 - [traits](traits.md)
 - [schema](schema.md)
@@ -35,6 +36,16 @@
 ## Overview
 
 Human-readable serialization format.
+
+This module provides the `zerde.human` format API: compact write-only output
+intended for debugging and schema inspection. It exposes direct write helpers
+and a low-level encoder for use with `zerde.serialize`; it intentionally has
+no read, slice-read, decoder, or allocator-write API.
+
+Human output uses reflected type names for structs and prints values in a
+concise textual form. Byte fields represented with `zerde.Bytes` or
+`.bytes = true` are emitted as standard padded RFC 4648 base64 strings. The
+format is not designed as a stable interchange format.
 
 ## Functions
 
@@ -74,7 +85,7 @@ pub fn write(writer: *std.Io.Writer, value: anytype) !void
 Serializes `value` to a compact human-readable representation with options.
 
 ```zig
-pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void
+pub fn writeWithOptions(allocator: std.mem.Allocator, writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void
 ```
 
 References: [`WriteOptions`](#type-writeoptions)

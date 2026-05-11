@@ -20,10 +20,11 @@
 - [toml](toml.md)
 - [datetime](datetime.md)
 - [msgpack](msgpack.md)
+- [events](events.md)
+- [cbor](cbor.md)
 - [zon](zon.md)
 - [binary](binary.md)
 - [csv](csv.md)
-- [events](events.md)
 - [human](human.md)
 - [traits](traits.md)
 - [schema](schema.md)
@@ -35,6 +36,24 @@
 ## Overview
 
 MessagePack format support.
+
+This module provides the `zerde.msgpack` format API: direct read/write
+helpers, allocator-backed slice helpers, and low-level encoder/decoder types
+for use with `zerde.serialize`, `zerde.deserialize`, custom hooks, and
+structural events.
+
+Structs and tagged unions are encoded as maps with string keys. Strings use
+the MessagePack str family and must be valid UTF-8. Byte fields represented
+with `zerde.Bytes` or `.bytes = true` use the native bin family instead of
+base64. `zerde.Timestamp` uses the MessagePack timestamp extension type.
+
+Numeric, string, binary, array, map, and extension headers use the smallest
+valid MessagePack encoding. Low-level custom hooks can emit or read extension
+values explicitly through `Extension` support.
+
+The typed read APIs and decoder reject malformed syntax, invalid UTF-8
+strings, trailing data after the single root value, and unsupported extension
+values unless a low-level custom hook handles them directly.
 
 ## Functions
 
@@ -69,7 +88,7 @@ pub const WriteOptions = struct {};
 
 ## Extension
 
-Opaque MessagePack extension value for low-level custom hooks.
+[Opaque](events.md#type-extension-opaque) MessagePack extension value for low-level custom hooks.
 
 ```zig
 pub const Extension = struct {
@@ -115,7 +134,7 @@ pub fn write(writer: *std.Io.Writer, value: anytype) !void
 Serializes `value` as MessagePack to `writer` with explicit options.
 
 ```zig
-pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void
+pub fn writeWithOptions(allocator: std.mem.Allocator, writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void
 ```
 
 References: [`WriteOptions`](#type-writeoptions)
@@ -251,6 +270,7 @@ pub const Encoder = struct {
 | [emitFieldName](#fn-encoder-emitfieldname) | `self: *Self, name: []const u8` | `!void` | Emits the next MessagePack map key for a struct field. |
 | [endStruct](#fn-encoder-endstruct) | `self: *Self` | `!void` | Ends the current MessagePack map for a struct value. |
 | [emitExtension](#fn-encoder-emitextension) | `self: *Self, type_id: i8, data: []const u8` | `!void` | Emits a low-level MessagePack extension value for custom hooks. |
+| [emitEventExtension](#fn-encoder-emiteventextension) | `self: *Self, extension: events.Extension` | `!void` | Emits a MessagePack-compatible event extension value. |
 | [emitTimestamp](#fn-encoder-emittimestamp) | `self: *Self, value: Timestamp` | `!void` | Emits the predefined MessagePack timestamp extension type (-1). |
 | [finish](#fn-encoder-finish) | `self: *Self` | `!void` | Verifies that exactly one complete MessagePack root value was emitted. |
 
@@ -384,6 +404,18 @@ Emits a low-level MessagePack extension value for custom hooks.
 pub fn emitExtension(self: *Self, type_id: i8, data: []const u8) !void
 ```
 
+<a id="fn-encoder-emiteventextension"></a>
+
+### Encoder.emitEventExtension
+
+Emits a MessagePack-compatible event extension value.
+
+```zig
+pub fn emitEventExtension(self: *Self, extension: events.Extension) !void
+```
+
+References: [`events.Extension`](events.md#type-extension)
+
 <a id="fn-encoder-emittimestamp"></a>
 
 ### Encoder.emitTimestamp
@@ -443,6 +475,7 @@ pub const Decoder = struct {
 | [endStruct](#fn-decoder-endstruct) | `self: *Self` | `!void` | Ends the current MessagePack map for a struct value. |
 | [skipValue](#fn-decoder-skipvalue) | `self: *Self` | `!void` | Skips the next complete MessagePack value, including nested containers. |
 | [readExtension](#fn-decoder-readextension) | `self: *Self, allocator: std.mem.Allocator` | `!Extension` | Reads a low-level MessagePack extension value. Caller owns &#96;data&#96;. |
+| [readEventExtension](#fn-decoder-readeventextension) | `self: *Self, allocator: std.mem.Allocator` | `!events.Extension` | Reads a MessagePack extension value as an event extension. |
 | [readTimestamp](#fn-decoder-readtimestamp) | `self: *Self` | `!Timestamp` | Reads the predefined MessagePack timestamp extension type (-1). |
 | [finish](#fn-decoder-finish) | `self: *Self` | `!void` | Verifies that the reader is at the end of a complete MessagePack document. |
 
@@ -610,6 +643,18 @@ pub fn readExtension(self: *Self, allocator: std.mem.Allocator) !Extension
 ```
 
 References: [`Extension`](#type-extension)
+
+<a id="fn-decoder-readeventextension"></a>
+
+### Decoder.readEventExtension
+
+Reads a MessagePack extension value as an event extension.
+
+```zig
+pub fn readEventExtension(self: *Self, allocator: std.mem.Allocator) !events.Extension
+```
+
+References: [`events.Extension`](events.md#type-extension)
 
 <a id="fn-decoder-readtimestamp"></a>
 

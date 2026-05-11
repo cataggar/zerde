@@ -1,4 +1,24 @@
 //! Zig Object Notation format support.
+//!
+//! This module provides the `zerde.zon` format API: direct read/write helpers,
+//! allocator-backed slice helpers, and low-level encoder/decoder types for use
+//! with `zerde.serialize`, `zerde.deserialize`, custom hooks, and structural
+//! events.
+//!
+//! Structs and sequences are emitted with Zig object notation syntax such as
+//! `.{ .id = 1 }` and `.{ 1, 2, 3 }`. Enums are emitted as enum literals such as
+//! `.green`; renamed fields or tags that are not bare identifiers use escaped
+//! identifier syntax such as `.@"display-name"`. Byte fields represented with
+//! `zerde.Bytes` or `.bytes = true` are emitted as standard padded RFC 4648
+//! base64 strings.
+//!
+//! Output is compact by default. Pretty output is controlled with
+//! `WriteOptions{ .pretty = true, .indent = 4 }` through `writeWithOptions`,
+//! `writeAllocWithOptions`, or `encoderWithOptions`.
+//!
+//! Numeric input accepts Zig-style separators, `0b`/`0o`/`0x` integer prefixes,
+//! and `inf`/`nan` float tokens. Line and block comments are accepted while
+//! reading, and trailing commas are accepted in structs and sequences.
 
 const std = @import("std");
 
@@ -26,11 +46,14 @@ pub const WriteOptions = struct {
 
 /// Serializes `value` as compact ZON to `writer`.
 pub fn write(writer: *std.Io.Writer, value: anytype) !void {
-    try writeWithOptions(writer, value, .{});
+    var enc = encoder(writer);
+    try serialize(value, &enc);
+    try enc.finish();
 }
 
 /// Serializes `value` as ZON to `writer` with explicit writer options.
-pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void {
+pub fn writeWithOptions(allocator: std.mem.Allocator, writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void {
+    _ = allocator;
     var enc = encoderWithOptions(writer, options);
     try serialize(value, &enc);
     try enc.finish();
@@ -46,7 +69,7 @@ pub fn writeAllocWithOptions(allocator: std.mem.Allocator, value: anytype, optio
     var allocating = std.Io.Writer.Allocating.init(allocator);
     errdefer allocating.deinit();
 
-    try writeWithOptions(&allocating.writer, value, options);
+    try writeWithOptions(allocator, &allocating.writer, value, options);
     return try allocating.toOwnedSlice();
 }
 

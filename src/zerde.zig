@@ -6,6 +6,8 @@ pub const json = @import("json.zig");
 pub const toml = @import("toml.zig");
 /// MessagePack format API.
 pub const msgpack = @import("msgpack.zig");
+/// CBOR format API.
+pub const cbor = @import("cbor.zig");
 /// Zig Object Notation format API.
 pub const zon = @import("zon.zig");
 /// Binary format API.
@@ -58,6 +60,7 @@ test {
     _ = json;
     _ = toml;
     _ = msgpack;
+    _ = cbor;
     _ = zon;
     _ = binary;
     _ = csv;
