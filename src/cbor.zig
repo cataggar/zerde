@@ -1489,3 +1489,241 @@ test "cbor event encoder buffers unknown dynamic lengths" {
     try std.testing.expectEqualStrings("a", parsed.tags[0]);
     try std.testing.expectEqualStrings("b", parsed.tags[1]);
 }
+
+test "cbor events pipe to json msgpack zon and toml targets" {
+    const json = @import("json.zig");
+    const msgpack = @import("msgpack.zig");
+    const zon = @import("zon.zig");
+    const toml = @import("toml.zig");
+
+    const binary_input = &.{
+        0xa3,
+        0x64,
+        'n',
+        'a',
+        'm',
+        'e',
+        0x63,
+        'A',
+        'd',
+        'a',
+        0x64,
+        'd',
+        'a',
+        't',
+        'a',
+        0x42,
+        0x00,
+        0x01,
+        0x66,
+        'a',
+        'c',
+        't',
+        'i',
+        'v',
+        'e',
+        0xf5,
+    };
+
+    var json_reader: std.Io.Reader = .fixed(binary_input);
+    var json_dec = decoder(&json_reader, std.testing.allocator);
+    var json_out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer json_out.deinit();
+    var json_enc = json.encoder(&json_out.writer);
+    try events.pipe(std.testing.allocator, &json_dec, &json_enc);
+    try json_dec.finish();
+    try json_enc.finish();
+    try std.testing.expectEqualStrings("{\"name\":\"Ada\",\"data\":\"AAE=\",\"active\":true}", json_out.writer.buffered());
+
+    var msgpack_reader: std.Io.Reader = .fixed(binary_input);
+    var msgpack_dec = decoder(&msgpack_reader, std.testing.allocator);
+    var msgpack_out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer msgpack_out.deinit();
+    var msgpack_enc = msgpack.encoder(&msgpack_out.writer);
+    try events.pipe(std.testing.allocator, &msgpack_dec, &msgpack_enc);
+    try msgpack_dec.finish();
+    try msgpack_enc.finish();
+
+    var msgpack_value_reader: std.Io.Reader = .fixed(msgpack_out.writer.buffered());
+    var msgpack_value_dec = msgpack.decoder(&msgpack_value_reader, std.testing.allocator);
+    var msgpack_value = try events.readAlloc(std.testing.allocator, &msgpack_value_dec);
+    defer msgpack_value.deinit(std.testing.allocator);
+    try msgpack_value_dec.finish();
+    try std.testing.expectEqualStrings("name", msgpack_value.struct_[0].name);
+    try std.testing.expectEqualStrings("Ada", msgpack_value.struct_[0].value.string);
+    try std.testing.expectEqualStrings("data", msgpack_value.struct_[1].name);
+    try std.testing.expectEqualSlices(u8, &.{ 0x00, 0x01 }, msgpack_value.struct_[1].value.bytes);
+
+    var zon_reader: std.Io.Reader = .fixed(binary_input);
+    var zon_dec = decoder(&zon_reader, std.testing.allocator);
+    var zon_out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer zon_out.deinit();
+    var zon_enc = zon.encoder(&zon_out.writer);
+    try events.pipe(std.testing.allocator, &zon_dec, &zon_enc);
+    try zon_dec.finish();
+    try zon_enc.finish();
+    try std.testing.expectEqualStrings(".{ .name = \"Ada\", .data = \"AAE=\", .active = true }", zon_out.writer.buffered());
+
+    const toml_input = &.{
+        0xa2,
+        0x64,
+        'n',
+        'a',
+        'm',
+        'e',
+        0x63,
+        'A',
+        'd',
+        'a',
+        0x64,
+        't',
+        'a',
+        'g',
+        's',
+        0x82,
+        0x65,
+        'a',
+        'd',
+        'm',
+        'i',
+        'n',
+        0x63,
+        'o',
+        'p',
+        's',
+    };
+    var toml_reader: std.Io.Reader = .fixed(toml_input);
+    var toml_dec = decoder(&toml_reader, std.testing.allocator);
+    var toml_out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer toml_out.deinit();
+    var toml_enc = toml.encoder(&toml_out.writer);
+    try events.pipe(std.testing.allocator, &toml_dec, &toml_enc);
+    try toml_dec.finish();
+    try toml_enc.finish();
+    try std.testing.expectEqualStrings("name = \"Ada\"\ntags = [\"admin\", \"ops\"]", toml_out.writer.buffered());
+}
+
+test "cbor events pipe row streams to csv" {
+    const input = &.{
+        0x82,
+        0xa2,
+        0x62,
+        'i',
+        'd',
+        0x01,
+        0x64,
+        'n',
+        'a',
+        'm',
+        'e',
+        0x63,
+        'A',
+        'd',
+        'a',
+        0xa2,
+        0x62,
+        'i',
+        'd',
+        0x02,
+        0x64,
+        'n',
+        'a',
+        'm',
+        'e',
+        0x63,
+        'B',
+        'o',
+        'b',
+    };
+    var reader: std.Io.Reader = .fixed(input);
+    var dec = decoder(&reader, std.testing.allocator);
+
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer out.deinit();
+    var enc = @import("csv.zig").encoder(&out.writer);
+
+    try events.pipe(std.testing.allocator, &dec, &enc);
+    try dec.finish();
+    try enc.finish();
+
+    try std.testing.expectEqualStrings("id,name\r\n1,Ada\r\n2,Bob", out.writer.buffered());
+}
+
+test "json and toml event streams encode to cbor" {
+    const Document = struct {
+        name: []const u8,
+        tags: []const []const u8,
+    };
+
+    var json_reader: std.Io.Reader = .fixed("{\"name\":\"Ada\",\"tags\":[\"admin\",\"ops\"]}");
+    var json_dec = @import("json.zig").decoder(&json_reader, std.testing.allocator);
+    var json_out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer json_out.deinit();
+    var json_enc = eventEncoder(&json_out.writer, std.testing.allocator);
+    defer json_enc.deinit();
+    try events.consume(std.testing.allocator, &json_dec, &json_enc);
+    try json_dec.finish();
+    try json_enc.finish();
+
+    const from_json = try readSlice(Document, std.testing.allocator, json_out.writer.buffered());
+    defer deinitValue(Document, std.testing.allocator, from_json);
+    try std.testing.expectEqualStrings("Ada", from_json.name);
+    try std.testing.expectEqual(@as(usize, 2), from_json.tags.len);
+    try std.testing.expectEqualStrings("admin", from_json.tags[0]);
+    try std.testing.expectEqualStrings("ops", from_json.tags[1]);
+
+    var toml_reader: std.Io.Reader = .fixed("name = \"Grace\"\ntags = [\"compiler\", \"navy\"]");
+    var toml_dec = try @import("toml.zig").decoder(&toml_reader, std.testing.allocator);
+    defer toml_dec.deinit();
+    var toml_out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer toml_out.deinit();
+    var toml_enc = eventEncoder(&toml_out.writer, std.testing.allocator);
+    defer toml_enc.deinit();
+    try events.consume(std.testing.allocator, &toml_dec, &toml_enc);
+    try toml_dec.finish();
+    try toml_enc.finish();
+
+    const from_toml = try readSlice(Document, std.testing.allocator, toml_out.writer.buffered());
+    defer deinitValue(Document, std.testing.allocator, from_toml);
+    try std.testing.expectEqualStrings("Grace", from_toml.name);
+    try std.testing.expectEqual(@as(usize, 2), from_toml.tags.len);
+    try std.testing.expectEqualStrings("compiler", from_toml.tags[0]);
+    try std.testing.expectEqualStrings("navy", from_toml.tags[1]);
+}
+
+test "msgpack event bytes encode to cbor byte strings" {
+    const msgpack = @import("msgpack.zig");
+
+    var msgpack_out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer msgpack_out.deinit();
+    var msgpack_enc = msgpack.encoder(&msgpack_out.writer);
+    try msgpack_enc.beginStruct(void, 2);
+    try msgpack_enc.emitFieldName("name");
+    try msgpack_enc.emitString("Ada");
+    try msgpack_enc.emitFieldName("data");
+    try msgpack_enc.emitBytes(&.{ 0xde, 0xad, 0xbe, 0xef });
+    try msgpack_enc.endStruct();
+    try msgpack_enc.finish();
+
+    var msgpack_reader: std.Io.Reader = .fixed(msgpack_out.writer.buffered());
+    var msgpack_dec = msgpack.decoder(&msgpack_reader, std.testing.allocator);
+    var cbor_out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer cbor_out.deinit();
+    var cbor_enc = eventEncoder(&cbor_out.writer, std.testing.allocator);
+    defer cbor_enc.deinit();
+
+    try events.consume(std.testing.allocator, &msgpack_dec, &cbor_enc);
+    try msgpack_dec.finish();
+    try cbor_enc.finish();
+
+    var cbor_reader: std.Io.Reader = .fixed(cbor_out.writer.buffered());
+    var cbor_dec = decoder(&cbor_reader, std.testing.allocator);
+    var value = try events.readAlloc(std.testing.allocator, &cbor_dec);
+    defer value.deinit(std.testing.allocator);
+    try cbor_dec.finish();
+
+    try std.testing.expectEqualStrings("name", value.struct_[0].name);
+    try std.testing.expectEqualStrings("Ada", value.struct_[0].value.string);
+    try std.testing.expectEqualStrings("data", value.struct_[1].name);
+    try std.testing.expectEqualSlices(u8, &.{ 0xde, 0xad, 0xbe, 0xef }, value.struct_[1].value.bytes);
+}
