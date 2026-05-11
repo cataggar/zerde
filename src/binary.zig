@@ -15,11 +15,14 @@ pub const Options = struct {
 
 /// Serializes `value` as compact binary to `writer`.
 pub fn write(writer: *std.Io.Writer, value: anytype) !void {
-    try writeWithOptions(writer, value, .{});
+    var enc = encoder(writer);
+    try serialize(value, &enc);
+    try enc.finish();
 }
 
 /// Serializes `value` as compact binary to `writer` with explicit options.
-pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: Options) !void {
+pub fn writeWithOptions(allocator: std.mem.Allocator, writer: *std.Io.Writer, value: anytype, options: Options) !void {
+    _ = allocator;
     var enc = encoderWithOptions(writer, options);
     try serialize(value, &enc);
     try enc.finish();
@@ -49,7 +52,7 @@ pub fn writeAllocWithOptions(allocator: std.mem.Allocator, value: anytype, optio
     var allocating = std.Io.Writer.Allocating.init(allocator);
     errdefer allocating.deinit();
 
-    try writeWithOptions(&allocating.writer, value, options);
+    try writeWithOptions(allocator, &allocating.writer, value, options);
     return try allocating.toOwnedSlice();
 }
 

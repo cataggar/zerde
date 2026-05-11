@@ -69,14 +69,14 @@ pub fn Codec(comptime T: type) type {
             format_options: anytype,
         ) !void {
             switch (format) {
-                .json => try json.writeWithOptions(writer, value, coerceOptions(json.WriteOptions, format_options)),
+                .json => try json.writeWithOptions(allocator, writer, value, coerceOptions(json.WriteOptions, format_options)),
                 .toml => try toml.writeWithOptions(allocator, writer, value, coerceOptions(toml.WriteOptions, format_options)),
-                .msgpack => try msgpack.writeWithOptions(writer, value, coerceOptions(msgpack.WriteOptions, format_options)),
-                .cbor => try cbor.writeWithOptions(writer, value, coerceOptions(cbor.WriteOptions, format_options)),
-                .zon => try zon.writeWithOptions(writer, value, coerceOptions(zon.WriteOptions, format_options)),
-                .binary => try binary.writeWithOptions(writer, value, coerceOptions(binary.Options, format_options)),
-                .csv => try csv.writeWithOptions(writer, value, coerceOptions(csv.Options, format_options)),
-                .human => try human.writeWithOptions(writer, value, coerceOptions(human.WriteOptions, format_options)),
+                .msgpack => try msgpack.writeWithOptions(allocator, writer, value, coerceOptions(msgpack.WriteOptions, format_options)),
+                .cbor => try cbor.writeWithOptions(allocator, writer, value, coerceOptions(cbor.WriteOptions, format_options)),
+                .zon => try zon.writeWithOptions(allocator, writer, value, coerceOptions(zon.WriteOptions, format_options)),
+                .binary => try binary.writeWithOptions(allocator, writer, value, coerceOptions(binary.Options, format_options)),
+                .csv => try csv.writeWithOptions(allocator, writer, value, coerceOptions(csv.Options, format_options)),
+                .human => try human.writeWithOptions(allocator, writer, value, coerceOptions(human.WriteOptions, format_options)),
             }
         }
 
@@ -762,6 +762,31 @@ test "codec writes and reads csv with delimiter options" {
     try std.testing.expectEqual(@as(usize, 2), parsed.len);
     try std.testing.expectEqual(@as(u8, 2), parsed[1].id);
     try std.testing.expectEqualStrings("has\ttab", parsed[1].name);
+}
+
+test "codec writeWithOptions supports cbor deterministic output" {
+    const Value = struct {
+        z: u8,
+        aa: u8,
+        a: u8,
+    };
+
+    var buffer: [128]u8 = undefined;
+    var writer: std.Io.Writer = .fixed(&buffer);
+    try Codec(Value).writeWithOptions(
+        std.testing.allocator,
+        &writer,
+        .{ .z = 1, .aa = 2, .a = 3 },
+        .cbor,
+        .{ .deterministic = true },
+    );
+
+    try std.testing.expectEqualSlices(u8, &.{
+        0xa3,
+        0x61, 'a', 0x03,
+        0x61, 'z', 0x01,
+        0x62, 'a', 'a', 0x02,
+    }, writer.buffered());
 }
 
 test "codec writeWithOptions supports toml sections" {

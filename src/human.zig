@@ -10,11 +10,13 @@ pub const WriteOptions = struct {};
 
 /// Serializes `value` to a compact human-readable representation.
 pub fn write(writer: *std.Io.Writer, value: anytype) !void {
-    try writeWithOptions(writer, value, .{});
+    var enc = encoder(writer);
+    try serialize(value, &enc);
 }
 
 /// Serializes `value` to a compact human-readable representation with options.
-pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void {
+pub fn writeWithOptions(allocator: std.mem.Allocator, writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void {
+    _ = allocator;
     _ = options;
     var enc = encoder(writer);
     try serialize(value, &enc);

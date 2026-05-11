@@ -100,13 +100,21 @@ Available format modules:
 
 Common helpers:
 
-- `write(writer, value)`
-- `writeWithOptions(...)`
-- `writeAlloc(allocator, value)`
-- `writeAllocWithOptions(...)`
-- `read(T, allocator, reader)`
-- `readSlice(T, allocator, input)`
-- `encoder(...)`, `encoderWithOptions(...)`, and `decoder(...)` for low-level integration with `zerde.serialize` and `zerde.deserialize`
+```zig
+pub fn write(writer: *std.Io.Writer, value: anytype) !void;
+pub fn writeWithOptions(allocator: std.mem.Allocator, writer: *std.Io.Writer, value: anytype, options: Options) !void;
+pub fn writeAlloc(allocator: std.mem.Allocator, value: anytype) ![]u8;
+pub fn writeAllocWithOptions(allocator: std.mem.Allocator, value: anytype, options: Options) ![]u8;
+
+pub fn read(comptime T: type, allocator: std.mem.Allocator, reader: *std.Io.Reader) !T;
+pub fn readSlice(comptime T: type, allocator: std.mem.Allocator, input: []const u8) !T;
+
+pub fn encoder(writer: *std.Io.Writer) Encoder;
+pub fn encoderWithOptions(writer: *std.Io.Writer, options: Options) Encoder;
+pub fn decoder(reader: *std.Io.Reader, allocator: std.mem.Allocator) Decoder;
+```
+
+The option type is format-specific, usually named `WriteOptions` or `Options`. Low-level encoder and decoder helpers integrate with `zerde.serialize` and `zerde.deserialize`; some formats expose format-specific variants such as `eventEncoder`, allocator-backed encoders, or option-bearing decoders.
 
 ## Structural Events
 
@@ -443,6 +451,7 @@ CBOR:
 - Strings are encoded as text strings and must be valid UTF-8.
 - Raw byte fields use CBOR byte strings instead of base64.
 - Typed writes emit definite-length arrays, maps, text strings, and byte strings.
+- `writeWithOptions(allocator, writer, value, .{ .deterministic = true })` buffers output and sorts map entries by the bytewise order of their encoded keys.
 - The event encoder buffers dynamic unknown-length containers explicitly and emits definite-length CBOR.
 - The decoder accepts definite and indefinite strings, arrays, and maps, rejects trailing data, rejects unsupported tags/simple values as actual values, and validates UTF-8 text.
 - Low-level custom hooks can emit/read CBOR semantic tags and unmodeled simple values explicitly.

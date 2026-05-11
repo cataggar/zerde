@@ -63,10 +63,13 @@ CBOR format support.
 
 ## WriteOptions
 
-CBOR writer configuration. Reserved for future profile options.
+CBOR writer configuration.
 
 ```zig
-pub const WriteOptions = struct {};
+pub const WriteOptions = struct {
+    /// Buffer output and sort map entries by the bytewise order of their encoded keys.
+    deterministic: bool = false,
+};
 ```
 
 <a id="type-tag"></a>
@@ -99,7 +102,7 @@ pub fn write(writer: *std.Io.Writer, value: anytype) !void
 Serializes `value` as CBOR to `writer` with explicit options.
 
 ```zig
-pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void
+pub fn writeWithOptions(allocator: std.mem.Allocator, writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void
 ```
 
 References: [`WriteOptions`](#type-writeoptions)
@@ -450,9 +453,11 @@ Allocator-backed event encoder for dynamic CBOR output.
 pub const EventEncoder = struct {
     writer: *std.Io.Writer,
     allocator: std.mem.Allocator,
+    options: WriteOptions = .{},
     stack: [max_depth]Frame = undefined,
     stack_len: usize = 0,
     root: ?events.Value = null,
+    pending_tags: std.ArrayList(u64) = .empty,
 };
 ```
 
@@ -469,6 +474,8 @@ pub const EventEncoder = struct {
 | [emitBytes](#fn-eventencoder-emitbytes) | `self: *Self, value: []const u8` | `!void` |  |
 | [emitEnumTag](#fn-eventencoder-emitenumtag) | `self: *Self, tag: []const u8` | `!void` |  |
 | [emitEventExtension](#fn-eventencoder-emiteventextension) | `self: *Self, extension: events.Extension` | `!void` |  |
+| [emitTag](#fn-eventencoder-emittag) | `self: *Self, tag: u64` | `!void` |  |
+| [emitSimple](#fn-eventencoder-emitsimple) | `self: *Self, value: u8` | `!void` |  |
 | [beginSeq](#fn-eventencoder-beginseq) | `self: *Self, len: ?usize` | `!void` |  |
 | [beginArray](#fn-eventencoder-beginarray) | `self: *Self, comptime T: type, len: usize` | `!void` |  |
 | [beginSlice](#fn-eventencoder-beginslice) | `self: *Self, comptime Child: type, len: usize` | `!void` |  |
@@ -554,6 +561,22 @@ pub fn emitEventExtension(self: *Self, extension: events.Extension) !void
 ```
 
 References: [`events.Extension`](events.md#type-extension)
+
+<a id="fn-eventencoder-emittag"></a>
+
+### EventEncoder.emitTag
+
+```zig
+pub fn emitTag(self: *Self, tag: u64) !void
+```
+
+<a id="fn-eventencoder-emitsimple"></a>
+
+### EventEncoder.emitSimple
+
+```zig
+pub fn emitSimple(self: *Self, value: u8) !void
+```
 
 <a id="fn-eventencoder-beginseq"></a>
 

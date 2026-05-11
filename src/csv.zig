@@ -48,11 +48,12 @@ pub const Options = struct {
 
 /// Serializes a sequence of flat structs as CSV.
 pub fn write(writer: *std.Io.Writer, value: anytype) !void {
-    try writeWithOptions(writer, value, .{});
+    try writeRows(@TypeOf(value), writer, value, .{});
 }
 
 /// Serializes a sequence of flat structs as CSV with explicit options.
-pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: Options) !void {
+pub fn writeWithOptions(allocator: std.mem.Allocator, writer: *std.Io.Writer, value: anytype, options: Options) !void {
+    _ = allocator;
     try writeRows(@TypeOf(value), writer, value, options);
 }
 
@@ -81,7 +82,7 @@ pub fn writeAllocWithOptions(allocator: std.mem.Allocator, value: anytype, optio
     var allocating = std.Io.Writer.Allocating.init(allocator);
     errdefer allocating.deinit();
 
-    try writeWithOptions(&allocating.writer, value, options);
+    try writeWithOptions(allocator, &allocating.writer, value, options);
     return try allocating.toOwnedSlice();
 }
 

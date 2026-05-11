@@ -27,11 +27,14 @@ pub const WriteOptions = struct {
 /// Strings must be valid UTF-8. Non-finite floats are rejected because JSON has
 /// no representation for NaN or infinity.
 pub fn write(writer: *std.Io.Writer, value: anytype) !void {
-    try writeWithOptions(writer, value, .{});
+    var enc = encoder(writer);
+    try serialize(value, &enc);
+    try enc.finish();
 }
 
 /// Serializes `value` as JSON to `writer` with explicit writer options.
-pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void {
+pub fn writeWithOptions(allocator: std.mem.Allocator, writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void {
+    _ = allocator;
     var enc = encoderWithOptions(writer, options);
     try serialize(value, &enc);
     try enc.finish();
@@ -73,7 +76,7 @@ pub fn writeAllocWithOptions(allocator: std.mem.Allocator, value: anytype, optio
     var allocating = std.Io.Writer.Allocating.init(allocator);
     errdefer allocating.deinit();
 
-    try writeWithOptions(&allocating.writer, value, options);
+    try writeWithOptions(allocator, &allocating.writer, value, options);
     return try allocating.toOwnedSlice();
 }
 
@@ -744,7 +747,7 @@ fn expectJsonWithOptions(value: anytype, options: WriteOptions, expected: []cons
     var buffer: [1024]u8 = undefined;
     var writer: std.Io.Writer = .fixed(&buffer);
 
-    try writeWithOptions(&writer, value, options);
+    try writeWithOptions(std.testing.allocator, &writer, value, options);
 
     try std.testing.expectEqualStrings(expected, writer.buffered());
 }

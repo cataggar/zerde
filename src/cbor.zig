@@ -7,8 +7,11 @@ const deserialize = @import("deserialize.zig").deserialize;
 const deinitValue = @import("deinit.zig").deinit;
 const events = @import("events.zig");
 
-/// CBOR writer configuration. Reserved for future profile options.
-pub const WriteOptions = struct {};
+/// CBOR writer configuration.
+pub const WriteOptions = struct {
+    /// Buffer output and sort map entries by the bytewise order of their encoded keys.
+    deterministic: bool = false,
+};
 
 /// CBOR semantic tag value for low-level/custom event use.
 pub const Tag = struct {
@@ -18,12 +21,21 @@ pub const Tag = struct {
 
 /// Serializes `value` as CBOR to `writer`.
 pub fn write(writer: *std.Io.Writer, value: anytype) !void {
-    try writeWithOptions(writer, value, .{});
+    var enc = encoder(writer);
+    try serialize(value, &enc);
+    try enc.finish();
 }
 
 /// Serializes `value` as CBOR to `writer` with explicit options.
-pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void {
-    _ = options;
+pub fn writeWithOptions(allocator: std.mem.Allocator, writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void {
+    if (options.deterministic) {
+        var enc = DeterministicEncoder.init(allocator, writer);
+        defer enc.deinit();
+        try serialize(value, &enc);
+        try enc.finish();
+        return;
+    }
+
     var enc = encoder(writer);
     try serialize(value, &enc);
     try enc.finish();
@@ -39,7 +51,7 @@ pub fn writeAllocWithOptions(allocator: std.mem.Allocator, value: anytype, optio
     var allocating = std.Io.Writer.Allocating.init(allocator);
     errdefer allocating.deinit();
 
-    try writeWithOptions(&allocating.writer, value, options);
+    try writeWithOptions(allocator, &allocating.writer, value, options);
     return try allocating.toOwnedSlice();
 }
 
@@ -70,8 +82,7 @@ pub fn eventEncoder(writer: *std.Io.Writer, allocator: std.mem.Allocator) EventE
 
 /// Returns an allocator-backed event encoder with explicit options.
 pub fn eventEncoderWithOptions(writer: *std.Io.Writer, allocator: std.mem.Allocator, options: WriteOptions) EventEncoder {
-    _ = options;
-    return .{ .writer = writer, .allocator = allocator };
+    return .{ .writer = writer, .allocator = allocator, .options = options };
 }
 
 /// Returns a low-level CBOR decoder for use with `zerde.deserialize`.
@@ -403,6 +414,256 @@ pub const Encoder = struct {
     }
 };
 
+const DeterministicEncoder = struct {
+    const Self = @This();
+    const max_depth = 64;
+
+    const Container = enum { seq, map };
+
+    const EncodedField = struct {
+        key: []u8,
+        value: []u8,
+    };
+
+    const Frame = struct {
+        container: Container,
+        len: usize,
+        count: usize = 0,
+        expecting_field_value: bool = false,
+        prefix: []u8,
+        items: std.ArrayList([]u8) = .empty,
+        fields: std.ArrayList(EncodedField) = .empty,
+        pending_key: ?[]u8 = null,
+    };
+
+    allocator: std.mem.Allocator,
+    writer: *std.Io.Writer,
+    stack: [max_depth]Frame = undefined,
+    stack_len: usize = 0,
+    root: ?[]u8 = null,
+    pending_prefix: std.ArrayList(u8) = .empty,
+
+    fn init(allocator: std.mem.Allocator, writer: *std.Io.Writer) Self {
+        return .{ .allocator = allocator, .writer = writer };
+    }
+
+    fn deinit(self: *Self) void {
+        if (self.root) |bytes| self.allocator.free(bytes);
+        self.root = null;
+        self.pending_prefix.deinit(self.allocator);
+        while (self.stack_len != 0) {
+            self.stack_len -= 1;
+            self.deinitFrame(&self.stack[self.stack_len]);
+        }
+    }
+
+    pub fn emitNull(self: *Self) !void {
+        try self.appendEncodedValue(try encodeNullAlloc(self.allocator));
+    }
+
+    pub fn emitBool(self: *Self, value: bool) !void {
+        try self.appendEncodedValue(try encodeBoolAlloc(self.allocator, value));
+    }
+
+    pub fn emitInt(self: *Self, value: anytype) !void {
+        try self.appendEncodedValue(try encodeIntegerAlloc(self.allocator, value));
+    }
+
+    pub fn emitFloat(self: *Self, value: anytype) !void {
+        try self.appendEncodedValue(try encodeFloatAlloc(self.allocator, value));
+    }
+
+    pub fn emitString(self: *Self, value: []const u8) !void {
+        try self.appendEncodedValue(try encodeStringAlloc(self.allocator, value));
+    }
+
+    pub fn emitBytes(self: *Self, value: []const u8) !void {
+        try self.appendEncodedValue(try encodeBytesAlloc(self.allocator, value));
+    }
+
+    pub fn emitEnumTag(self: *Self, tag: []const u8) !void {
+        try self.emitString(tag);
+    }
+
+    pub fn emitTag(self: *Self, tag: u64) !void {
+        try self.ensureValueSlotAvailable();
+        var allocating = std.Io.Writer.Allocating.init(self.allocator);
+        defer allocating.deinit();
+        try writeHead(&allocating.writer, 6, tag);
+        try self.pending_prefix.appendSlice(self.allocator, allocating.writer.buffered());
+    }
+
+    pub fn emitSimple(self: *Self, value: u8) !void {
+        try self.appendEncodedValue(try encodeSimpleAlloc(self.allocator, value));
+    }
+
+    pub fn emitEventExtension(self: *Self, extension: events.Extension) !void {
+        try self.appendEncodedValue(try encodeDeterministicExtensionAlloc(self.allocator, extension));
+    }
+
+    pub fn beginSeq(self: *Self, len: ?usize) !void {
+        const actual_len = len orelse return error.MissingCborLength;
+        try self.push(.{ .container = .seq, .len = actual_len, .prefix = try self.takePendingPrefix() });
+    }
+
+    pub fn beginArray(self: *Self, comptime T: type, len: usize) !void {
+        _ = T;
+        try self.beginSeq(len);
+    }
+
+    pub fn beginSlice(self: *Self, comptime Child: type, len: usize) !void {
+        _ = Child;
+        try self.beginSeq(len);
+    }
+
+    pub fn endSeq(self: *Self) !void {
+        var frame = self.pop(.seq);
+        defer self.deinitFrame(&frame);
+        if (frame.count != frame.len) return error.InvalidCborEncoderState;
+
+        var allocating = std.Io.Writer.Allocating.init(self.allocator);
+        errdefer allocating.deinit();
+        try allocating.writer.writeAll(frame.prefix);
+        try writeHead(&allocating.writer, 4, frame.len);
+        for (frame.items.items) |item| try allocating.writer.writeAll(item);
+        try self.appendEncodedValue(try allocating.toOwnedSlice());
+    }
+
+    pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void {
+        _ = T;
+        try self.push(.{ .container = .map, .len = field_count, .prefix = try self.takePendingPrefix() });
+    }
+
+    pub fn emitFieldName(self: *Self, name: []const u8) !void {
+        const frame = self.current(.map);
+        if (frame.expecting_field_value) return error.InvalidCborEncoderState;
+        if (frame.count == frame.len) return error.InvalidCborEncoderState;
+        frame.pending_key = try encodeStringAlloc(self.allocator, name);
+        frame.expecting_field_value = true;
+    }
+
+    pub fn endStruct(self: *Self) !void {
+        var frame = self.pop(.map);
+        defer self.deinitFrame(&frame);
+        if (frame.expecting_field_value or frame.count != frame.len) return error.InvalidCborEncoderState;
+
+        sortEncodedFields(frame.fields.items);
+
+        var allocating = std.Io.Writer.Allocating.init(self.allocator);
+        errdefer allocating.deinit();
+        try allocating.writer.writeAll(frame.prefix);
+        try writeHead(&allocating.writer, 5, frame.len);
+        for (frame.fields.items) |field| {
+            try allocating.writer.writeAll(field.key);
+            try allocating.writer.writeAll(field.value);
+        }
+        try self.appendEncodedValue(try allocating.toOwnedSlice());
+    }
+
+    pub fn finish(self: *Self) !void {
+        if (self.pending_prefix.items.len != 0) return error.IncompleteCborDocument;
+        if (self.stack_len != 0) return error.IncompleteCborDocument;
+        const bytes = self.root orelse return error.IncompleteCborDocument;
+        try self.writer.writeAll(bytes);
+    }
+
+    fn appendEncodedValue(self: *Self, encoded: []u8) !void {
+        var owned = encoded;
+        errdefer self.allocator.free(owned);
+        try self.ensureValueSlotAvailable();
+
+        if (self.pending_prefix.items.len != 0) {
+            var allocating = std.Io.Writer.Allocating.init(self.allocator);
+            errdefer allocating.deinit();
+            try allocating.writer.writeAll(self.pending_prefix.items);
+            try allocating.writer.writeAll(owned);
+            const combined = try allocating.toOwnedSlice();
+            self.allocator.free(owned);
+            owned = combined;
+            self.pending_prefix.clearRetainingCapacity();
+        }
+
+        if (self.stack_len == 0) {
+            if (self.root != null) return error.InvalidCborEncoderState;
+            self.root = owned;
+            return;
+        }
+
+        const frame = &self.stack[self.stack_len - 1];
+        switch (frame.container) {
+            .seq => {
+                if (frame.count == frame.len) return error.InvalidCborEncoderState;
+                try frame.items.append(self.allocator, owned);
+                frame.count += 1;
+            },
+            .map => {
+                if (!frame.expecting_field_value) return error.InvalidCborEncoderState;
+                const key = frame.pending_key orelse return error.InvalidCborEncoderState;
+                errdefer self.allocator.free(key);
+                try frame.fields.append(self.allocator, .{ .key = key, .value = owned });
+                frame.pending_key = null;
+                frame.expecting_field_value = false;
+                frame.count += 1;
+            },
+        }
+    }
+
+    fn ensureValueSlotAvailable(self: *Self) !void {
+        if (self.stack_len == 0) {
+            if (self.root != null) return error.InvalidCborEncoderState;
+            return;
+        }
+
+        const frame = &self.stack[self.stack_len - 1];
+        switch (frame.container) {
+            .seq => if (frame.count == frame.len) return error.InvalidCborEncoderState,
+            .map => if (!frame.expecting_field_value) return error.InvalidCborEncoderState,
+        }
+    }
+
+    fn takePendingPrefix(self: *Self) ![]u8 {
+        const prefix = try self.pending_prefix.toOwnedSlice(self.allocator);
+        self.pending_prefix = .empty;
+        return prefix;
+    }
+
+    fn push(self: *Self, frame: Frame) !void {
+        errdefer if (frame.prefix.len != 0) self.allocator.free(frame.prefix);
+        if (self.stack_len == self.stack.len) return error.NestingTooDeep;
+        try self.ensureValueSlotAvailable();
+        self.stack[self.stack_len] = frame;
+        self.stack_len += 1;
+    }
+
+    fn pop(self: *Self, expected: Container) Frame {
+        std.debug.assert(self.stack_len != 0);
+        self.stack_len -= 1;
+        const frame = self.stack[self.stack_len];
+        std.debug.assert(frame.container == expected);
+        return frame;
+    }
+
+    fn current(self: *Self, expected: Container) *Frame {
+        std.debug.assert(self.stack_len != 0);
+        const frame = &self.stack[self.stack_len - 1];
+        std.debug.assert(frame.container == expected);
+        return frame;
+    }
+
+    fn deinitFrame(self: *Self, frame: *Frame) void {
+        if (frame.prefix.len != 0) self.allocator.free(frame.prefix);
+        for (frame.items.items) |item| self.allocator.free(item);
+        frame.items.deinit(self.allocator);
+        for (frame.fields.items) |field| {
+            self.allocator.free(field.key);
+            self.allocator.free(field.value);
+        }
+        frame.fields.deinit(self.allocator);
+        if (frame.pending_key) |key| self.allocator.free(key);
+        frame.* = undefined;
+    }
+};
+
 /// Allocator-backed event encoder for dynamic CBOR output.
 pub const EventEncoder = struct {
     const Self = @This();
@@ -417,18 +678,22 @@ pub const EventEncoder = struct {
         values: std.ArrayList(events.Value) = .empty,
         fields: std.ArrayList(events.ObjectField) = .empty,
         pending_field_name: ?[]u8 = null,
+        tags: []u64 = &.{},
     };
 
     writer: *std.Io.Writer,
     allocator: std.mem.Allocator,
+    options: WriteOptions = .{},
     stack: [max_depth]Frame = undefined,
     stack_len: usize = 0,
     root: ?events.Value = null,
+    pending_tags: std.ArrayList(u64) = .empty,
 
     /// Frees any buffered event state not consumed by `finish`.
     pub fn deinit(self: *Self) void {
         if (self.root) |*value| value.deinit(self.allocator);
         self.root = null;
+        self.pending_tags.deinit(self.allocator);
         while (self.stack_len != 0) {
             self.stack_len -= 1;
             self.deinitFrame(&self.stack[self.stack_len]);
@@ -454,13 +719,11 @@ pub const EventEncoder = struct {
     pub fn emitString(self: *Self, value: []const u8) !void {
         if (!std.unicode.utf8ValidateSlice(value)) return error.InvalidUtf8;
         const owned = try self.allocator.dupe(u8, value);
-        errdefer self.allocator.free(owned);
         try self.appendValue(.{ .string = owned });
     }
 
     pub fn emitBytes(self: *Self, value: []const u8) !void {
         const owned = try self.allocator.dupe(u8, value);
-        errdefer self.allocator.free(owned);
         try self.appendValue(.{ .bytes = owned });
     }
 
@@ -470,8 +733,20 @@ pub const EventEncoder = struct {
 
     pub fn emitEventExtension(self: *Self, extension: events.Extension) !void {
         const owned = try self.cloneExtension(extension);
-        errdefer owned.deinit(self.allocator);
         try self.appendValue(.{ .extension = owned });
+    }
+
+    pub fn emitTag(self: *Self, tag: u64) !void {
+        try self.ensureValueSlotAvailable();
+        try self.pending_tags.append(self.allocator, tag);
+    }
+
+    pub fn emitSimple(self: *Self, value: u8) !void {
+        switch (value) {
+            0...19, 23, 32...255 => {},
+            20...22, 24...31 => return error.InvalidType,
+        }
+        try self.appendValue(.{ .extension = events.Extension.cborSimple(value) });
     }
 
     pub fn beginSeq(self: *Self, len: ?usize) !void {
@@ -496,7 +771,11 @@ pub const EventEncoder = struct {
 
         const values = try frame.values.toOwnedSlice(self.allocator);
         frame.values = .empty;
-        try self.appendValue(.{ .seq = values });
+        var value: events.Value = .{ .seq = values };
+        value = try self.wrapTags(value, frame.tags);
+        if (frame.tags.len != 0) self.allocator.free(frame.tags);
+        frame.tags = &.{};
+        try self.appendValue(value);
     }
 
     pub fn beginStruct(self: *Self, comptime T: type, field_count: usize) !void {
@@ -526,28 +805,43 @@ pub const EventEncoder = struct {
 
         const fields = try frame.fields.toOwnedSlice(self.allocator);
         frame.fields = .empty;
-        try self.appendValue(.{ .struct_ = fields });
+        var value: events.Value = .{ .struct_ = fields };
+        value = try self.wrapTags(value, frame.tags);
+        if (frame.tags.len != 0) self.allocator.free(frame.tags);
+        frame.tags = &.{};
+        try self.appendValue(value);
     }
 
     /// Writes the buffered root value as definite-length CBOR.
     pub fn finish(self: *Self) !void {
+        if (self.pending_tags.items.len != 0) return error.IncompleteCborDocument;
         if (self.stack_len != 0) return error.IncompleteCborDocument;
         var value = self.root orelse return error.IncompleteCborDocument;
         self.root = null;
         defer value.deinit(self.allocator);
 
-        var enc = encoder(self.writer);
-        try value.write(&enc);
-        try enc.finish();
+        if (self.options.deterministic) {
+            try writeDeterministicValue(self.allocator, self.writer, value);
+        } else {
+            var enc = encoder(self.writer);
+            try value.write(&enc);
+            try enc.finish();
+        }
     }
 
     fn appendValue(self: *Self, value: events.Value) !void {
         var owned = value;
+        self.ensureValueSlotAvailable() catch |err| {
+            owned.deinit(self.allocator);
+            return err;
+        };
+        owned = self.wrapPendingTags(owned) catch |err| return err;
         errdefer owned.deinit(self.allocator);
 
         if (self.stack_len == 0) {
             if (self.root != null) return error.InvalidCborEncoderState;
             self.root = owned;
+            self.pending_tags.clearRetainingCapacity();
             return;
         }
 
@@ -557,6 +851,7 @@ pub const EventEncoder = struct {
                 if (frame.expected_len) |len| if (frame.count == len) return error.InvalidCborEncoderState;
                 try frame.values.append(self.allocator, owned);
                 frame.count += 1;
+                self.pending_tags.clearRetainingCapacity();
             },
             .struct_ => {
                 const name = frame.pending_field_name orelse return error.InvalidCborEncoderState;
@@ -564,7 +859,41 @@ pub const EventEncoder = struct {
                 errdefer self.allocator.free(name);
                 try frame.fields.append(self.allocator, .{ .name = name, .value = owned });
                 frame.count += 1;
+                self.pending_tags.clearRetainingCapacity();
             },
+        }
+    }
+
+    fn wrapPendingTags(self: *Self, value: events.Value) !events.Value {
+        return try self.wrapTags(value, self.pending_tags.items);
+    }
+
+    fn wrapTags(self: *Self, value: events.Value, tags: []const u64) !events.Value {
+        var owned = value;
+        errdefer owned.deinit(self.allocator);
+
+        var index = tags.len;
+        while (index != 0) {
+            index -= 1;
+            const child = try self.allocator.create(events.Value);
+            errdefer self.allocator.destroy(child);
+            child.* = owned;
+            owned = .{ .extension = events.Extension.cborTag(tags[index], child) };
+        }
+
+        return owned;
+    }
+
+    fn ensureValueSlotAvailable(self: *Self) !void {
+        if (self.stack_len == 0) {
+            if (self.root != null) return error.InvalidCborEncoderState;
+            return;
+        }
+
+        const frame = &self.stack[self.stack_len - 1];
+        switch (frame.container) {
+            .seq => if (frame.expected_len) |len| if (frame.count == len) return error.InvalidCborEncoderState,
+            .struct_ => if (frame.pending_field_name == null) return error.InvalidCborEncoderState,
         }
     }
 
@@ -636,8 +965,12 @@ pub const EventEncoder = struct {
 
     fn push(self: *Self, frame: Frame) !void {
         if (self.stack_len == self.stack.len) return error.NestingTooDeep;
-        if (self.stack_len == 0 and self.root != null) return error.InvalidCborEncoderState;
-        self.stack[self.stack_len] = frame;
+        try self.ensureValueSlotAvailable();
+        var actual = frame;
+        actual.tags = try self.pending_tags.toOwnedSlice(self.allocator);
+        self.pending_tags = .empty;
+        errdefer self.allocator.free(actual.tags);
+        self.stack[self.stack_len] = actual;
         self.stack_len += 1;
     }
 
@@ -651,6 +984,7 @@ pub const EventEncoder = struct {
 
     fn deinitFrame(self: *Self, frame: *Frame) void {
         if (frame.pending_field_name) |name| self.allocator.free(name);
+        if (frame.tags.len != 0) self.allocator.free(frame.tags);
         for (frame.values.items) |*value| value.deinit(self.allocator);
         frame.values.deinit(self.allocator);
         for (frame.fields.items) |*field| {
@@ -1153,8 +1487,204 @@ fn writeCborSimple(writer: *std.Io.Writer, code: u8) !void {
     }
 }
 
+fn encodeNullAlloc(allocator: std.mem.Allocator) ![]u8 {
+    const out = try allocator.alloc(u8, 1);
+    out[0] = 0xf6;
+    return out;
+}
+
+fn encodeBoolAlloc(allocator: std.mem.Allocator, value: bool) ![]u8 {
+    const out = try allocator.alloc(u8, 1);
+    out[0] = if (value) 0xf5 else 0xf4;
+    return out;
+}
+
+fn encodeIntegerAlloc(allocator: std.mem.Allocator, value: anytype) ![]u8 {
+    var allocating = std.Io.Writer.Allocating.init(allocator);
+    errdefer allocating.deinit();
+
+    const T = @TypeOf(value);
+    switch (@typeInfo(T)) {
+        .comptime_int => {
+            if (value >= 0) {
+                try writeHead(&allocating.writer, 0, std.math.cast(u64, value) orelse return error.IntegerOverflow);
+            } else {
+                try writeHead(&allocating.writer, 1, std.math.cast(u64, -1 - value) orelse return error.IntegerOverflow);
+            }
+        },
+        .int => |int_info| switch (int_info.signedness) {
+            .unsigned => try writeHead(&allocating.writer, 0, std.math.cast(u64, value) orelse return error.IntegerOverflow),
+            .signed => {
+                const signed = std.math.cast(i128, value) orelse return error.IntegerOverflow;
+                if (signed >= 0) {
+                    try writeHead(&allocating.writer, 0, @intCast(signed));
+                } else {
+                    try writeHead(&allocating.writer, 1, std.math.cast(u64, -1 - signed) orelse return error.IntegerOverflow);
+                }
+            },
+        },
+        else => @compileError("CBOR integers require an integer value"),
+    }
+
+    return try allocating.toOwnedSlice();
+}
+
+fn encodeFloatAlloc(allocator: std.mem.Allocator, value: anytype) ![]u8 {
+    var allocating = std.Io.Writer.Allocating.init(allocator);
+    errdefer allocating.deinit();
+
+    const T = @TypeOf(value);
+    const Float = switch (@typeInfo(T)) {
+        .comptime_float => f64,
+        .float => if (@bitSizeOf(T) <= 16) f16 else if (@bitSizeOf(T) <= 32) f32 else f64,
+        else => @compileError("CBOR floats require a float value"),
+    };
+    const float_value: Float = value;
+    const Int = std.meta.Int(.unsigned, @bitSizeOf(Float));
+    const raw: Int = @bitCast(float_value);
+
+    try allocating.writer.writeByte(switch (Float) {
+        f16 => 0xf9,
+        f32 => 0xfa,
+        f64 => 0xfb,
+        else => unreachable,
+    });
+    try writeBig(&allocating.writer, Int, raw);
+    return try allocating.toOwnedSlice();
+}
+
+fn encodeStringAlloc(allocator: std.mem.Allocator, value: []const u8) ![]u8 {
+    if (!std.unicode.utf8ValidateSlice(value)) return error.InvalidUtf8;
+    var allocating = std.Io.Writer.Allocating.init(allocator);
+    errdefer allocating.deinit();
+    try writeHead(&allocating.writer, 3, value.len);
+    try allocating.writer.writeAll(value);
+    return try allocating.toOwnedSlice();
+}
+
+fn encodeBytesAlloc(allocator: std.mem.Allocator, value: []const u8) ![]u8 {
+    var allocating = std.Io.Writer.Allocating.init(allocator);
+    errdefer allocating.deinit();
+    try writeHead(&allocating.writer, 2, value.len);
+    try allocating.writer.writeAll(value);
+    return try allocating.toOwnedSlice();
+}
+
+fn encodeSimpleAlloc(allocator: std.mem.Allocator, value: u8) ![]u8 {
+    var allocating = std.Io.Writer.Allocating.init(allocator);
+    errdefer allocating.deinit();
+    try writeCborSimple(&allocating.writer, value);
+    return try allocating.toOwnedSlice();
+}
+
+fn encodeDeterministicExtensionAlloc(allocator: std.mem.Allocator, extension: events.Extension) ![]u8 {
+    var allocating = std.Io.Writer.Allocating.init(allocator);
+    errdefer allocating.deinit();
+    try writeDeterministicExtension(allocator, &allocating.writer, extension);
+    return try allocating.toOwnedSlice();
+}
+
+fn writeDeterministicValue(allocator: std.mem.Allocator, writer: *std.Io.Writer, value: events.Value) anyerror!void {
+    switch (value) {
+        .null => try writer.writeByte(0xf6),
+        .bool => |actual| try writer.writeByte(if (actual) 0xf5 else 0xf4),
+        .int => |actual| {
+            const encoded = try encodeIntegerAlloc(allocator, actual);
+            defer allocator.free(encoded);
+            try writer.writeAll(encoded);
+        },
+        .float => |actual| {
+            const encoded = try encodeFloatAlloc(allocator, actual);
+            defer allocator.free(encoded);
+            try writer.writeAll(encoded);
+        },
+        .string, .enum_tag, .datetime => |actual| {
+            const encoded = try encodeStringAlloc(allocator, actual);
+            defer allocator.free(encoded);
+            try writer.writeAll(encoded);
+        },
+        .bytes => |actual| {
+            const encoded = try encodeBytesAlloc(allocator, actual);
+            defer allocator.free(encoded);
+            try writer.writeAll(encoded);
+        },
+        .extension => |actual| try writeDeterministicExtension(allocator, writer, actual),
+        .seq => |items| {
+            try writeHead(writer, 4, items.len);
+            for (items) |item| try writeDeterministicValue(allocator, writer, item);
+        },
+        .struct_ => |fields| {
+            var sorted = try allocator.alloc(DeterministicValueField, fields.len);
+            defer allocator.free(sorted);
+
+            var initialized: usize = 0;
+            errdefer for (sorted[0..initialized]) |field| allocator.free(field.key);
+
+            for (fields, 0..) |*field, i| {
+                sorted[i] = .{ .key = try encodeStringAlloc(allocator, field.name), .field = field };
+                initialized += 1;
+            }
+
+            sortDeterministicValueFields(sorted);
+            defer for (sorted) |field| allocator.free(field.key);
+
+            try writeHead(writer, 5, fields.len);
+            for (sorted) |entry| {
+                try writer.writeAll(entry.key);
+                try writeDeterministicValue(allocator, writer, entry.field.value);
+            }
+        },
+    }
+}
+
+const DeterministicValueField = struct {
+    key: []u8,
+    field: *const events.ObjectField,
+};
+
+fn writeDeterministicExtension(allocator: std.mem.Allocator, writer: *std.Io.Writer, extension: events.Extension) anyerror!void {
+    switch (extension) {
+        .tagged => |tagged| {
+            if (tagged.namespace != .cbor) return error.UnsupportedEventKind;
+            try writeHead(writer, 6, try extensionIdUnsigned(tagged.id));
+            try writeDeterministicValue(allocator, writer, tagged.value.*);
+        },
+        .simple => |simple| {
+            if (simple.namespace != .cbor) return error.UnsupportedEventKind;
+            try writeCborSimple(writer, try extensionIdU8(simple.id));
+        },
+        .opaque_ => return error.UnsupportedEventKind,
+    }
+}
+
+fn sortEncodedFields(fields: []DeterministicEncoder.EncodedField) void {
+    var index: usize = 1;
+    while (index < fields.len) : (index += 1) {
+        var inner = index;
+        while (inner != 0 and std.mem.lessThan(u8, fields[inner].key, fields[inner - 1].key)) : (inner -= 1) {
+            std.mem.swap(DeterministicEncoder.EncodedField, &fields[inner], &fields[inner - 1]);
+        }
+    }
+}
+
+fn sortDeterministicValueFields(fields: []DeterministicValueField) void {
+    var index: usize = 1;
+    while (index < fields.len) : (index += 1) {
+        var inner = index;
+        while (inner != 0 and std.mem.lessThan(u8, fields[inner].key, fields[inner - 1].key)) : (inner -= 1) {
+            std.mem.swap(DeterministicValueField, &fields[inner], &fields[inner - 1]);
+        }
+    }
+}
+
 fn expectCbor(value: anytype, expected: []const u8) !void {
     const bytes = try writeAlloc(std.testing.allocator, value);
+    defer std.testing.allocator.free(bytes);
+    try std.testing.expectEqualSlices(u8, expected, bytes);
+}
+
+fn expectCborWithOptions(value: anytype, options: WriteOptions, expected: []const u8) !void {
+    const bytes = try writeAllocWithOptions(std.testing.allocator, value, options);
     defer std.testing.allocator.free(bytes);
     try std.testing.expectEqualSlices(u8, expected, bytes);
 }
@@ -1226,6 +1756,168 @@ test "cbor writes strings bytes arrays and maps" {
         pub const zerde = .{ .fields = .{ .data = .{ .bytes = true } } };
     };
     try expectCbor(Blob{ .data = &.{ 0, 1, 2 } }, &.{ 0xa1, 0x64, 'd', 'a', 't', 'a', 0x43, 0x00, 0x01, 0x02 });
+}
+
+test "cbor deterministic write sorts map keys by encoded bytes" {
+    const Value = struct {
+        z: u8,
+        aa: u8,
+        a: u8,
+    };
+
+    const value = Value{ .z = 1, .aa = 2, .a = 3 };
+
+    try expectCbor(value, &.{
+        0xa3,
+        0x61, 'z', 0x01,
+        0x62, 'a', 'a', 0x02,
+        0x61, 'a', 0x03,
+    });
+    try expectCborWithOptions(value, .{ .deterministic = true }, &.{
+        0xa3,
+        0x61, 'a', 0x03,
+        0x61, 'z', 0x01,
+        0x62, 'a', 'a', 0x02,
+    });
+}
+
+test "cbor deterministic write sorts by encoded key not text order" {
+    const Value = struct {
+        @"aaaaaaaaaaaaaaaaaaaaaaaa": u8,
+        b: u8,
+    };
+
+    try expectCborWithOptions(Value{ .@"aaaaaaaaaaaaaaaaaaaaaaaa" = 1, .b = 2 }, .{ .deterministic = true }, &.{
+        0xa2,
+        0x61, 'b', 0x02,
+        0x78, 0x18,
+        'a',  'a',  'a',  'a',  'a',  'a',  'a',  'a',
+        'a',  'a',  'a',  'a',  'a',  'a',  'a',  'a',
+        'a',  'a',  'a',  'a',  'a',  'a',  'a',  'a',
+        0x01,
+    });
+}
+
+test "cbor deterministic write sorts nested maps and preserves scalar encodings" {
+    const Inner = struct {
+        b: f32,
+        a: i8,
+    };
+    const Outer = struct {
+        z: Inner,
+        a: u8,
+    };
+
+    try expectCborWithOptions(Outer{ .z = .{ .b = 1.5, .a = -1 }, .a = 7 }, .{ .deterministic = true }, &.{
+        0xa2,
+        0x61, 'a', 0x07,
+        0x61, 'z', 0xa2,
+        0x61, 'a', 0x20,
+        0x61, 'b', 0xfa, 0x3f, 0xc0, 0x00, 0x00,
+    });
+}
+
+test "cbor deterministic write preserves low-level tags around sorted maps" {
+    const Tagged = struct {
+        z: u8,
+        a: u8,
+
+        pub fn zerdeWrite(value: @This(), enc: anytype) !void {
+            try enc.emitTag(42);
+            try enc.beginStruct(@This(), 2);
+            try enc.emitFieldName("z");
+            try enc.emitInt(value.z);
+            try enc.emitFieldName("a");
+            try enc.emitInt(value.a);
+            try enc.endStruct();
+        }
+    };
+
+    try expectCborWithOptions(Tagged{ .z = 1, .a = 2 }, .{ .deterministic = true }, &.{
+        0xd8, 0x2a,
+        0xa2,
+        0x61, 'a', 0x02,
+        0x61, 'z', 0x01,
+    });
+}
+
+test "cbor deterministic event encoder sorts maps and preserves tags" {
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer out.deinit();
+
+    var enc = eventEncoderWithOptions(&out.writer, std.testing.allocator, .{ .deterministic = true });
+    defer enc.deinit();
+    try enc.emitTag(1);
+    try enc.beginStructEvent(3);
+    try enc.emitFieldName("z");
+    try enc.emitInt(1);
+    try enc.emitFieldName("aa");
+    try enc.emitInt(2);
+    try enc.emitFieldName("a");
+    try enc.emitInt(3);
+    try enc.endStruct();
+    try enc.finish();
+
+    try std.testing.expectEqualSlices(u8, &.{
+        0xc1,
+        0xa3,
+        0x61, 'a', 0x03,
+        0x61, 'z', 0x01,
+        0x62, 'a', 'a', 0x02,
+    }, out.writer.buffered());
+}
+
+test "cbor deterministic event encoder sorts maps containing extensions" {
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer out.deinit();
+
+    var enc = eventEncoderWithOptions(&out.writer, std.testing.allocator, .{ .deterministic = true });
+    defer enc.deinit();
+    try enc.beginStructEvent(2);
+    try enc.emitFieldName("z");
+    try enc.emitSimple(23);
+    try enc.emitFieldName("a");
+    try enc.emitTag(24);
+    try enc.emitBytes(&.{0});
+    try enc.endStruct();
+    try enc.finish();
+
+    try std.testing.expectEqualSlices(u8, &.{
+        0xa2,
+        0x61, 'a', 0xd8, 0x18, 0x41, 0x00,
+        0x61, 'z', 0xf7,
+    }, out.writer.buffered());
+}
+
+test "cbor deterministic event value write sorts buffered object fields" {
+    const allocator = std.testing.allocator;
+
+    var fields = try allocator.alloc(events.ObjectField, 3);
+    errdefer allocator.free(fields);
+    fields[0] = .{ .name = try allocator.dupe(u8, "z"), .value = .{ .int = 1 } };
+    errdefer allocator.free(fields[0].name);
+    fields[1] = .{ .name = try allocator.dupe(u8, "aa"), .value = .{ .int = 2 } };
+    errdefer allocator.free(fields[1].name);
+    fields[2] = .{ .name = try allocator.dupe(u8, "a"), .value = .{ .int = 3 } };
+    errdefer allocator.free(fields[2].name);
+
+    var value: events.Value = .{ .struct_ = fields };
+    defer value.deinit(allocator);
+
+    var out = std.Io.Writer.Allocating.init(allocator);
+    defer out.deinit();
+
+    var enc = eventEncoderWithOptions(&out.writer, allocator, .{ .deterministic = true });
+    defer enc.deinit();
+    try value.write(&enc);
+    try enc.finish();
+
+    try std.testing.expectEqualSlices(u8, &.{
+        0xa3,
+        0x61, 'a', 0x03,
+        0x61, 'z', 0x01,
+        0x62, 'a', 'a', 0x02,
+    }, out.writer.buffered());
 }
 
 test "cbor roundtrips supported reflected shapes" {

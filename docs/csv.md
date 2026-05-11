@@ -120,7 +120,7 @@ pub fn write(writer: *std.Io.Writer, value: anytype) !void
 Serializes a sequence of flat structs as CSV with explicit options.
 
 ```zig
-pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: Options) !void
+pub fn writeWithOptions(allocator: std.mem.Allocator, writer: *std.Io.Writer, value: anytype, options: Options) !void
 ```
 
 References: [`Options`](#type-options)

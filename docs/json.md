@@ -89,7 +89,7 @@ pub fn write(writer: *std.Io.Writer, value: anytype) !void
 Serializes `value` as JSON to `writer` with explicit writer options.
 
 ```zig
-pub fn writeWithOptions(writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void
+pub fn writeWithOptions(allocator: std.mem.Allocator, writer: *std.Io.Writer, value: anytype, options: WriteOptions) !void
 ```
 
 References: [`WriteOptions`](#type-writeoptions)
