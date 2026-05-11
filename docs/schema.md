@@ -20,8 +20,8 @@
 - [toml](toml.md)
 - [datetime](datetime.md)
 - [msgpack](msgpack.md)
-- [cbor](cbor.md)
 - [events](events.md)
+- [cbor](cbor.md)
 - [zon](zon.md)
 - [binary](binary.md)
 - [csv](csv.md)
@@ -190,7 +190,7 @@ pub const EnumInfo = struct {
 
 ## UnionVariantInfo
 
-Tagged union variant schema details.
+[Tagged](events.md#type-extension-tagged) union variant schema details.
 
 ```zig
 pub const UnionVariantInfo = struct {
@@ -203,7 +203,7 @@ pub const UnionVariantInfo = struct {
 
 ## UnionInfo
 
-Tagged union schema details.
+[Tagged](events.md#type-extension-tagged) union schema details.
 
 ```zig
 pub const UnionInfo = struct {

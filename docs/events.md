@@ -20,8 +20,8 @@
 - [toml](toml.md)
 - [datetime](datetime.md)
 - [msgpack](msgpack.md)
-- [cbor](cbor.md)
 - [events](events.md)
+- [cbor](cbor.md)
 - [zon](zon.md)
 - [binary](binary.md)
 - [csv](csv.md)
@@ -55,14 +55,129 @@ without deserializing into an application Zig struct.
 
 ## Extension
 
-Opaque extension payload used by formats that support extension values.
+Format-specific extension value used by self-describing formats.
 
 ```zig
-pub const Extension = struct {
-    type_id: i8,
+pub const Extension = union(enum) {
+    /// Opaque extension payload, such as MessagePack ext data.
+    opaque_: Opaque,
+    /// Tag wrapping another event value, such as CBOR semantic tags.
+    tagged: Tagged,
+    /// Tagless simple extension value, such as CBOR simple values.
+    simple: Simple,
+};
+```
+
+### Nested Declarations
+
+| Name | Parameters | Return Type | Description |
+| --- | --- | --- | --- |
+| [Namespace](#type-extension-namespace) |  |  |  |
+| [Id](#type-extension-id) |  |  |  |
+| [Opaque](#type-extension-opaque) |  |  |  |
+| [Tagged](#type-extension-tagged) |  |  |  |
+| [Simple](#type-extension-simple) |  |  |  |
+| [msgpack](#fn-extension-msgpack) | `type_id: i8, data: []u8` | `Extension` |  |
+| [cborTag](#fn-extension-cbortag) | `tag: u64, value: *Value` | `Extension` |  |
+| [cborSimple](#fn-extension-cborsimple) | `code: u8` | `Extension` |  |
+| [deinit](#fn-extension-deinit) | `self: Extension, allocator: std.mem.Allocator` | `void` |  |
+
+<a id="type-extension-namespace"></a>
+
+### Extension.Namespace
+
+```zig
+pub const Namespace = enum {
+    msgpack,
+    cbor,
+};
+```
+
+<a id="type-extension-id"></a>
+
+### Extension.Id
+
+```zig
+pub const Id = union(enum) {
+    signed: i64,
+    unsigned: u64,
+};
+```
+
+<a id="type-extension-opaque"></a>
+
+### Extension.Opaque
+
+```zig
+pub const Opaque = struct {
+    namespace: Namespace,
+    id: Id,
     data: []u8,
 };
 ```
+
+<a id="type-extension-tagged"></a>
+
+### Extension.Tagged
+
+```zig
+pub const Tagged = struct {
+    namespace: Namespace,
+    id: Id,
+    value: *Value,
+};
+```
+
+<a id="type-extension-simple"></a>
+
+### Extension.Simple
+
+```zig
+pub const Simple = struct {
+    namespace: Namespace,
+    id: Id,
+};
+```
+
+<a id="fn-extension-msgpack"></a>
+
+### Extension.msgpack
+
+```zig
+pub fn msgpack(type_id: i8, data: []u8) Extension
+```
+
+References: [`Extension`](#type-extension)
+
+<a id="fn-extension-cbortag"></a>
+
+### Extension.cborTag
+
+```zig
+pub fn cborTag(tag: u64, value: *Value) Extension
+```
+
+References: [`Value`](#type-value), [`Extension`](#type-extension)
+
+<a id="fn-extension-cborsimple"></a>
+
+### Extension.cborSimple
+
+```zig
+pub fn cborSimple(code: u8) Extension
+```
+
+References: [`Extension`](#type-extension)
+
+<a id="fn-extension-deinit"></a>
+
+### Extension.deinit
+
+```zig
+pub fn deinit(self: Extension, allocator: std.mem.Allocator) void
+```
+
+References: [`Extension`](#type-extension)
 
 <a id="type-objectfield"></a>
 

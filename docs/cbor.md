@@ -20,8 +20,8 @@
 - [toml](toml.md)
 - [datetime](datetime.md)
 - [msgpack](msgpack.md)
-- [cbor](cbor.md)
 - [events](events.md)
+- [cbor](cbor.md)
 - [zon](zon.md)
 - [binary](binary.md)
 - [csv](csv.md)
@@ -194,6 +194,7 @@ pub const Kind = enum {
     float,
     string,
     binary,
+    extension,
     seq,
     struct_,
 };
@@ -229,6 +230,7 @@ pub const Encoder = struct {
 | [emitString](#fn-encoder-emitstring) | `self: *Self, value: []const u8` | `!void` | Emits a UTF-8 text string. |
 | [emitBytes](#fn-encoder-emitbytes) | `self: *Self, value: []const u8` | `!void` | Emits raw bytes as a CBOR byte string. |
 | [emitEnumTag](#fn-encoder-emitenumtag) | `self: *Self, tag: []const u8` | `!void` | Emits an enum tag as a CBOR text string. |
+| [emitEventExtension](#fn-encoder-emiteventextension) | `self: *Self, extension: events.Extension` | `!void` | Emits a CBOR-compatible event extension value. |
 | [beginSeq](#fn-encoder-beginseq) | `self: *Self, len: ?usize` | `!void` | Begins a definite-length CBOR array. |
 | [beginArray](#fn-encoder-beginarray) | `self: *Self, comptime T: type, len: usize` | `!void` | Begins a definite-length CBOR array for a fixed Zig array. |
 | [beginSlice](#fn-encoder-beginslice) | `self: *Self, comptime Child: type, len: usize` | `!void` | Begins a definite-length CBOR array for a Zig slice. |
@@ -307,6 +309,18 @@ Emits an enum tag as a CBOR text string.
 ```zig
 pub fn emitEnumTag(self: *Self, tag: []const u8) !void
 ```
+
+<a id="fn-encoder-emiteventextension"></a>
+
+### Encoder.emitEventExtension
+
+Emits a CBOR-compatible event extension value.
+
+```zig
+pub fn emitEventExtension(self: *Self, extension: events.Extension) !void
+```
+
+References: [`events.Extension`](events.md#type-extension)
 
 <a id="fn-encoder-beginseq"></a>
 
@@ -416,6 +430,7 @@ pub const EventEncoder = struct {
 | [emitString](#fn-eventencoder-emitstring) | `self: *Self, value: []const u8` | `!void` |  |
 | [emitBytes](#fn-eventencoder-emitbytes) | `self: *Self, value: []const u8` | `!void` |  |
 | [emitEnumTag](#fn-eventencoder-emitenumtag) | `self: *Self, tag: []const u8` | `!void` |  |
+| [emitEventExtension](#fn-eventencoder-emiteventextension) | `self: *Self, extension: events.Extension` | `!void` |  |
 | [beginSeq](#fn-eventencoder-beginseq) | `self: *Self, len: ?usize` | `!void` |  |
 | [beginArray](#fn-eventencoder-beginarray) | `self: *Self, comptime T: type, len: usize` | `!void` |  |
 | [beginSlice](#fn-eventencoder-beginslice) | `self: *Self, comptime Child: type, len: usize` | `!void` |  |
@@ -491,6 +506,16 @@ pub fn emitBytes(self: *Self, value: []const u8) !void
 ```zig
 pub fn emitEnumTag(self: *Self, tag: []const u8) !void
 ```
+
+<a id="fn-eventencoder-emiteventextension"></a>
+
+### EventEncoder.emitEventExtension
+
+```zig
+pub fn emitEventExtension(self: *Self, extension: events.Extension) !void
+```
+
+References: [`events.Extension`](events.md#type-extension)
 
 <a id="fn-eventencoder-beginseq"></a>
 
@@ -592,6 +617,7 @@ pub const Decoder = struct {
 | [readFloat](#fn-decoder-readfloat) | `self: *Self, comptime T: type` | `!T` | Reads a CBOR float, or an integer coerced to &#96;T&#96;. |
 | [readString](#fn-decoder-readstring) | `self: *Self, allocator: std.mem.Allocator` | `![]u8` | Reads a CBOR text string as allocator-owned UTF-8 bytes. |
 | [readBytes](#fn-decoder-readbytes) | `self: *Self, allocator: std.mem.Allocator` | `![]u8` | Reads a CBOR byte string as allocator-owned bytes. |
+| [readEventExtension](#fn-decoder-readeventextension) | `self: *Self, allocator: std.mem.Allocator` | `anyerror!events.Extension` | Reads a CBOR tag or simple value as an event extension. |
 | [beginSeq](#fn-decoder-beginseq) | `self: *Self` | `!?usize` | Begins reading a CBOR array and returns its element count when definite. |
 | [hasNextSeqElem](#fn-decoder-hasnextseqelem) | `self: *Self` | `!bool` | Returns whether the current CBOR array has another element. |
 | [endSeq](#fn-decoder-endseq) | `self: *Self` | `!void` | Ends the current CBOR array. |
@@ -673,6 +699,18 @@ Reads a CBOR byte string as allocator-owned bytes.
 ```zig
 pub fn readBytes(self: *Self, allocator: std.mem.Allocator) ![]u8
 ```
+
+<a id="fn-decoder-readeventextension"></a>
+
+### Decoder.readEventExtension
+
+Reads a CBOR tag or simple value as an event extension.
+
+```zig
+pub fn readEventExtension(self: *Self, allocator: std.mem.Allocator) anyerror!events.Extension
+```
+
+References: [`events.Extension`](events.md#type-extension)
 
 <a id="fn-decoder-beginseq"></a>
 

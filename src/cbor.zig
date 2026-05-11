@@ -81,6 +81,7 @@ pub const Kind = enum {
     float,
     string,
     binary,
+    extension,
     seq,
     struct_,
 };
@@ -129,6 +130,33 @@ pub const Encoder = struct {
     /// Emits a CBOR half, single, or double precision float.
     pub fn emitFloat(self: *Self, value: anytype) !void {
         try self.beforeValue();
+        try self.writeFloat(value);
+    }
+
+    /// Emits a UTF-8 text string.
+    pub fn emitString(self: *Self, value: []const u8) !void {
+        try self.beforeValue();
+        try self.writeString(value);
+    }
+
+    /// Emits raw bytes as a CBOR byte string.
+    pub fn emitBytes(self: *Self, value: []const u8) !void {
+        try self.beforeValue();
+        try self.writeBytes(value);
+    }
+
+    /// Emits an enum tag as a CBOR text string.
+    pub fn emitEnumTag(self: *Self, tag: []const u8) !void {
+        try self.emitString(tag);
+    }
+
+    /// Emits a CBOR-compatible event extension value.
+    pub fn emitEventExtension(self: *Self, extension: events.Extension) !void {
+        try self.beforeValue();
+        try self.writeEventExtension(extension);
+    }
+
+    fn writeFloat(self: *Self, value: anytype) !void {
 
         const T = @TypeOf(value);
         const Float = switch (@typeInfo(T)) {
@@ -149,24 +177,15 @@ pub const Encoder = struct {
         try writeBig(self.writer, Int, raw);
     }
 
-    /// Emits a UTF-8 text string.
-    pub fn emitString(self: *Self, value: []const u8) !void {
+    fn writeString(self: *Self, value: []const u8) !void {
         if (!std.unicode.utf8ValidateSlice(value)) return error.InvalidUtf8;
-        try self.beforeValue();
         try writeHead(self.writer, 3, value.len);
         try self.writer.writeAll(value);
     }
 
-    /// Emits raw bytes as a CBOR byte string.
-    pub fn emitBytes(self: *Self, value: []const u8) !void {
-        try self.beforeValue();
+    fn writeBytes(self: *Self, value: []const u8) !void {
         try writeHead(self.writer, 2, value.len);
         try self.writer.writeAll(value);
-    }
-
-    /// Emits an enum tag as a CBOR text string.
-    pub fn emitEnumTag(self: *Self, tag: []const u8) !void {
-        try self.emitString(tag);
     }
 
     /// Begins a definite-length CBOR array.
@@ -282,6 +301,44 @@ pub const Encoder = struct {
         }
     }
 
+    fn writeEventValue(self: *Self, value: events.Value) anyerror!void {
+        switch (value) {
+            .null => try self.writer.writeByte(0xf6),
+            .bool => |actual| try self.writer.writeByte(if (actual) 0xf5 else 0xf4),
+            .int => |actual| try self.writeInteger(actual),
+            .float => |actual| try self.writeFloat(actual),
+            .string, .enum_tag, .datetime => |actual| try self.writeString(actual),
+            .bytes => |actual| try self.writeBytes(actual),
+            .extension => |actual| try self.writeEventExtension(actual),
+            .seq => |items| {
+                try writeHead(self.writer, 4, items.len);
+                for (items) |item| try self.writeEventValue(item);
+            },
+            .struct_ => |fields| {
+                try writeHead(self.writer, 5, fields.len);
+                for (fields) |field| {
+                    try self.writeString(field.name);
+                    try self.writeEventValue(field.value);
+                }
+            },
+        }
+    }
+
+    fn writeEventExtension(self: *Self, extension: events.Extension) anyerror!void {
+        switch (extension) {
+            .tagged => |tagged| {
+                if (tagged.namespace != .cbor) return error.UnsupportedEventKind;
+                try writeHead(self.writer, 6, try extensionIdUnsigned(tagged.id));
+                try self.writeEventValue(tagged.value.*);
+            },
+            .simple => |simple| {
+                if (simple.namespace != .cbor) return error.UnsupportedEventKind;
+                try writeCborSimple(self.writer, try extensionIdU8(simple.id));
+            },
+            .opaque_ => return error.UnsupportedEventKind,
+        }
+    }
+
     fn ensureCanPush(self: *Self) !void {
         if (self.stack_len == self.stack.len) return error.NestingTooDeep;
     }
@@ -369,6 +426,12 @@ pub const EventEncoder = struct {
 
     pub fn emitEnumTag(self: *Self, tag: []const u8) !void {
         try self.emitString(tag);
+    }
+
+    pub fn emitEventExtension(self: *Self, extension: events.Extension) !void {
+        const owned = try self.cloneExtension(extension);
+        errdefer owned.deinit(self.allocator);
+        try self.appendValue(.{ .extension = owned });
     }
 
     pub fn beginSeq(self: *Self, len: ?usize) !void {
@@ -465,6 +528,72 @@ pub const EventEncoder = struct {
         }
     }
 
+    fn cloneExtension(self: *Self, extension: events.Extension) anyerror!events.Extension {
+        return switch (extension) {
+            .opaque_ => |raw| blk: {
+                const data = try self.allocator.dupe(u8, raw.data);
+                break :blk .{ .opaque_ = .{ .namespace = raw.namespace, .id = raw.id, .data = data } };
+            },
+            .tagged => |tagged| blk: {
+                const value = try self.allocator.create(events.Value);
+                errdefer self.allocator.destroy(value);
+                value.* = try self.cloneValue(tagged.value.*);
+                break :blk .{ .tagged = .{ .namespace = tagged.namespace, .id = tagged.id, .value = value } };
+            },
+            .simple => |simple| .{ .simple = simple },
+        };
+    }
+
+    fn cloneValue(self: *Self, value: events.Value) anyerror!events.Value {
+        return switch (value) {
+            .null => .null,
+            .bool => |actual| .{ .bool = actual },
+            .int => |actual| .{ .int = actual },
+            .float => |actual| .{ .float = actual },
+            .string => |actual| .{ .string = try self.allocator.dupe(u8, actual) },
+            .bytes => |actual| .{ .bytes = try self.allocator.dupe(u8, actual) },
+            .enum_tag => |actual| .{ .enum_tag = try self.allocator.dupe(u8, actual) },
+            .datetime => |actual| .{ .datetime = try self.allocator.dupe(u8, actual) },
+            .extension => |actual| .{ .extension = try self.cloneExtension(actual) },
+            .seq => |items| .{ .seq = try self.cloneValues(items) },
+            .struct_ => |fields| .{ .struct_ = try self.cloneFields(fields) },
+        };
+    }
+
+    fn cloneValues(self: *Self, items: []const events.Value) anyerror![]events.Value {
+        const out = try self.allocator.alloc(events.Value, items.len);
+        errdefer self.allocator.free(out);
+
+        var initialized: usize = 0;
+        errdefer for (out[0..initialized]) |*item| item.deinit(self.allocator);
+
+        for (items, 0..) |item, i| {
+            out[i] = try self.cloneValue(item);
+            initialized += 1;
+        }
+        return out;
+    }
+
+    fn cloneFields(self: *Self, fields: []const events.ObjectField) anyerror![]events.ObjectField {
+        const out = try self.allocator.alloc(events.ObjectField, fields.len);
+        errdefer self.allocator.free(out);
+
+        var initialized: usize = 0;
+        errdefer for (out[0..initialized]) |*field| {
+            self.allocator.free(field.name);
+            field.value.deinit(self.allocator);
+        };
+
+        for (fields, 0..) |field, i| {
+            const name = try self.allocator.dupe(u8, field.name);
+            errdefer self.allocator.free(name);
+            const value = try self.cloneValue(field.value);
+            out[i] = .{ .name = name, .value = value };
+            initialized += 1;
+        }
+        return out;
+    }
+
     fn push(self: *Self, frame: Frame) !void {
         if (self.stack_len == self.stack.len) return error.NestingTooDeep;
         if (self.stack_len == 0 and self.root != null) return error.InvalidCborEncoderState;
@@ -533,12 +662,12 @@ pub const Decoder = struct {
             3 => .string,
             4 => .seq,
             5 => .struct_,
-            6 => error.UnsupportedCborTag,
+            6 => .extension,
             7 => switch (head.ai) {
+                0...19, 23, 24 => .extension,
                 20, 21 => .bool,
                 22 => .null,
                 25, 26, 27 => .float,
-                24 => error.UnsupportedCborSimpleValue,
                 31 => error.InvalidCborBreak,
                 else => error.UnsupportedCborSimpleValue,
             },
@@ -604,6 +733,22 @@ pub const Decoder = struct {
     /// Reads a CBOR byte string as allocator-owned bytes.
     pub fn readBytes(self: *Self, allocator: std.mem.Allocator) ![]u8 {
         return try self.readRaw(allocator, 2);
+    }
+
+    /// Reads a CBOR tag or simple value as an event extension.
+    pub fn readEventExtension(self: *Self, allocator: std.mem.Allocator) anyerror!events.Extension {
+        const head = parseHead(try self.reader.takeByte());
+        return switch (head.major) {
+            6 => blk: {
+                const tag = try self.readArgNoIndef(head.ai);
+                const value = try allocator.create(events.Value);
+                errdefer allocator.destroy(value);
+                value.* = try events.readAlloc(allocator, self);
+                break :blk events.Extension.cborTag(tag, value);
+            },
+            7 => events.Extension.cborSimple(try self.readSimpleCodeAfterHead(head)),
+            else => error.InvalidType,
+        };
     }
 
     /// Begins reading a CBOR array and returns its element count when definite.
@@ -769,6 +914,21 @@ pub const Decoder = struct {
         };
     }
 
+    fn readSimpleCodeAfterHead(self: *Self, head: Head) !u8 {
+        std.debug.assert(head.major == 7);
+        return switch (head.ai) {
+            0...19, 23 => @intCast(head.ai),
+            24 => blk: {
+                const code = try self.reader.takeByte();
+                if (code < 32) return error.InvalidCborSyntax;
+                break :blk code;
+            },
+            20, 21, 22, 25, 26, 27 => error.InvalidType,
+            28...30 => error.InvalidCborSyntax,
+            31 => error.InvalidCborBreak,
+        };
+    }
+
     fn skipRawAfterHead(self: *Self, head: Head) anyerror!void {
         if (head.ai == 31) {
             while (true) {
@@ -915,6 +1075,28 @@ fn readBig(reader: *std.Io.Reader, comptime T: type) !T {
 
 fn lengthToUsize(value: anytype) !usize {
     return std.math.cast(usize, value) orelse error.IntegerOverflow;
+}
+
+fn extensionIdUnsigned(id: events.Extension.Id) !u64 {
+    return switch (id) {
+        .unsigned => |value| value,
+        .signed => |value| std.math.cast(u64, value) orelse error.IntegerOverflow,
+    };
+}
+
+fn extensionIdU8(id: events.Extension.Id) !u8 {
+    return std.math.cast(u8, try extensionIdUnsigned(id)) orelse error.IntegerOverflow;
+}
+
+fn writeCborSimple(writer: *std.Io.Writer, code: u8) !void {
+    switch (code) {
+        0...19, 23 => try writer.writeByte(0xe0 | code),
+        20...22, 24...31 => return error.InvalidType,
+        else => {
+            try writer.writeByte(0xf8);
+            try writer.writeByte(code);
+        },
+    }
 }
 
 fn expectCbor(value: anytype, expected: []const u8) !void {
@@ -1412,9 +1594,20 @@ test "cbor rejects typed values outside the Zerde data model" {
     try std.testing.expectError(error.UnsupportedCborSimpleValue, readSlice(?u8, std.testing.allocator, &.{0xe0}));
     try std.testing.expectError(error.UnsupportedCborSimpleValue, readSlice(?u8, std.testing.allocator, &.{ 0xf8, 0xff }));
 
-    var reader: std.Io.Reader = .fixed(&.{ 0xc1, 0x00 });
+    var reader: std.Io.Reader = .fixed(&.{ 0xd8, 0x18, 0x41, 0x00 });
     var dec = decoder(&reader, std.testing.allocator);
-    try std.testing.expectError(error.UnsupportedCborTag, events.readAlloc(std.testing.allocator, &dec));
+    var value = try events.readAlloc(std.testing.allocator, &dec);
+    defer value.deinit(std.testing.allocator);
+    try dec.finish();
+
+    switch (value.extension) {
+        .tagged => |tagged| {
+            try std.testing.expectEqual(events.Extension.Namespace.cbor, tagged.namespace);
+            try std.testing.expectEqual(@as(u64, 24), tagged.id.unsigned);
+            try std.testing.expectEqualSlices(u8, &.{0}, tagged.value.bytes);
+        },
+        else => return error.InvalidValue,
+    }
 }
 
 test "cbor rejects numeric overflow and non-text struct keys" {
@@ -1466,6 +1659,70 @@ test "cbor event support preserves byte strings" {
     try std.testing.expectEqualStrings("Ada", value.struct_[0].value.string);
     try std.testing.expectEqualStrings("data", value.struct_[1].name);
     try std.testing.expectEqualSlices(u8, &.{ 0, 1 }, value.struct_[1].value.bytes);
+}
+
+test "cbor event support preserves tags and simple values" {
+    const tagged_input = &.{ 0xc1, 0x63, 'a', 'b', 'c' };
+
+    var tagged_reader: std.Io.Reader = .fixed(tagged_input);
+    var tagged_dec = decoder(&tagged_reader, std.testing.allocator);
+    var tagged_value = try events.readAlloc(std.testing.allocator, &tagged_dec);
+    defer tagged_value.deinit(std.testing.allocator);
+    try tagged_dec.finish();
+
+    switch (tagged_value.extension) {
+        .tagged => |tagged| {
+            try std.testing.expectEqual(events.Extension.Namespace.cbor, tagged.namespace);
+            try std.testing.expectEqual(@as(u64, 1), tagged.id.unsigned);
+            try std.testing.expectEqualStrings("abc", tagged.value.string);
+        },
+        else => return error.InvalidValue,
+    }
+
+    var tagged_out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer tagged_out.deinit();
+    var tagged_enc = encoder(&tagged_out.writer);
+    try tagged_value.write(&tagged_enc);
+    try tagged_enc.finish();
+    try std.testing.expectEqualSlices(u8, tagged_input, tagged_out.writer.buffered());
+
+    var simple_reader: std.Io.Reader = .fixed(&.{0xf7});
+    var simple_dec = decoder(&simple_reader, std.testing.allocator);
+    var simple_value = try events.readAlloc(std.testing.allocator, &simple_dec);
+    defer simple_value.deinit(std.testing.allocator);
+    try simple_dec.finish();
+
+    switch (simple_value.extension) {
+        .simple => |simple| {
+            try std.testing.expectEqual(events.Extension.Namespace.cbor, simple.namespace);
+            try std.testing.expectEqual(@as(u64, 23), simple.id.unsigned);
+        },
+        else => return error.InvalidValue,
+    }
+
+    var simple_out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer simple_out.deinit();
+    var simple_enc = encoder(&simple_out.writer);
+    try simple_value.write(&simple_enc);
+    try simple_enc.finish();
+    try std.testing.expectEqualSlices(u8, &.{0xf7}, simple_out.writer.buffered());
+}
+
+test "cbor event encoder clones extension values" {
+    const input = &.{ 0xc1, 0x63, 'a', 'b', 'c' };
+    var reader: std.Io.Reader = .fixed(input);
+    var dec = decoder(&reader, std.testing.allocator);
+
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer out.deinit();
+    var enc = eventEncoder(&out.writer, std.testing.allocator);
+    defer enc.deinit();
+
+    try events.consume(std.testing.allocator, &dec, &enc);
+    try dec.finish();
+    try enc.finish();
+
+    try std.testing.expectEqualSlices(u8, input, out.writer.buffered());
 }
 
 test "cbor event encoder buffers unknown dynamic lengths" {
