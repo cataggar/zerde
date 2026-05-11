@@ -431,7 +431,7 @@ Values returned by read APIs own allocator-backed strings, slices, lists, maps, 
 | JSON | yes | yes | yes | yes | write | encoder, decoder | yes | yes |
 | TOML | yes | yes | yes | yes | write | encoder, decoder | yes | yes |
 | MessagePack | yes | yes | yes | yes | write | encoder, decoder | yes | yes |
-| CBOR | yes | yes | yes | yes | write | encoder, eventEncoder, decoder | yes | yes |
+| CBOR | yes | yes | yes | yes | write | encoder, decoder | yes | yes |
 | ZON | yes | yes | yes | yes | write | encoder, decoder | yes | yes |
 | Binary | yes | yes | yes | yes | read, write | encoder, decoder | yes | no |
 | CSV | yes | yes | yes | yes | read, write | encoder, decoder | yes | yes, as rows |
