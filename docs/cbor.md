@@ -53,6 +53,7 @@ CBOR format support.
 ## Types
 
 - [WriteOptions](#type-writeoptions)
+- [Tag](#type-tag)
 - [Kind](#type-kind)
 - [Encoder](#type-encoder)
 - [EventEncoder](#type-eventencoder)
@@ -66,6 +67,19 @@ CBOR writer configuration. Reserved for future profile options.
 
 ```zig
 pub const WriteOptions = struct {};
+```
+
+<a id="type-tag"></a>
+
+## Tag
+
+CBOR semantic tag value for low-level/custom event use.
+
+```zig
+pub const Tag = struct {
+    number: u64,
+    value: events.Value,
+};
 ```
 
 <a id="fn-write"></a>
@@ -216,6 +230,8 @@ pub const Encoder = struct {
     stack_len: usize = 0,
     /// Number of root values emitted so far.
     root_count: usize = 0,
+    /// Number of semantic tag heads emitted before the next value.
+    pending_tags: usize = 0,
 };
 ```
 
@@ -230,6 +246,8 @@ pub const Encoder = struct {
 | [emitString](#fn-encoder-emitstring) | `self: *Self, value: []const u8` | `!void` | Emits a UTF-8 text string. |
 | [emitBytes](#fn-encoder-emitbytes) | `self: *Self, value: []const u8` | `!void` | Emits raw bytes as a CBOR byte string. |
 | [emitEnumTag](#fn-encoder-emitenumtag) | `self: *Self, tag: []const u8` | `!void` | Emits an enum tag as a CBOR text string. |
+| [emitTag](#fn-encoder-emittag) | `self: *Self, tag: u64` | `!void` | Emits a CBOR semantic tag head. The next emitted value is the tagged value. |
+| [emitSimple](#fn-encoder-emitsimple) | `self: *Self, value: u8` | `!void` | Emits an unmodeled CBOR simple value such as &#96;undefined&#96; (23). |
 | [emitEventExtension](#fn-encoder-emiteventextension) | `self: *Self, extension: events.Extension` | `!void` | Emits a CBOR-compatible event extension value. |
 | [beginSeq](#fn-encoder-beginseq) | `self: *Self, len: ?usize` | `!void` | Begins a definite-length CBOR array. |
 | [beginArray](#fn-encoder-beginarray) | `self: *Self, comptime T: type, len: usize` | `!void` | Begins a definite-length CBOR array for a fixed Zig array. |
@@ -308,6 +326,26 @@ Emits an enum tag as a CBOR text string.
 
 ```zig
 pub fn emitEnumTag(self: *Self, tag: []const u8) !void
+```
+
+<a id="fn-encoder-emittag"></a>
+
+### Encoder.emitTag
+
+Emits a CBOR semantic tag head. The next emitted value is the tagged value.
+
+```zig
+pub fn emitTag(self: *Self, tag: u64) !void
+```
+
+<a id="fn-encoder-emitsimple"></a>
+
+### Encoder.emitSimple
+
+Emits an unmodeled CBOR simple value such as `undefined` (23).
+
+```zig
+pub fn emitSimple(self: *Self, value: u8) !void
 ```
 
 <a id="fn-encoder-emiteventextension"></a>
@@ -617,6 +655,8 @@ pub const Decoder = struct {
 | [readFloat](#fn-decoder-readfloat) | `self: *Self, comptime T: type` | `!T` | Reads a CBOR float, or an integer coerced to &#96;T&#96;. |
 | [readString](#fn-decoder-readstring) | `self: *Self, allocator: std.mem.Allocator` | `![]u8` | Reads a CBOR text string as allocator-owned UTF-8 bytes. |
 | [readBytes](#fn-decoder-readbytes) | `self: *Self, allocator: std.mem.Allocator` | `![]u8` | Reads a CBOR byte string as allocator-owned bytes. |
+| [readTag](#fn-decoder-readtag) | `self: *Self` | `!u64` | Reads a CBOR semantic tag head and leaves the tagged value unread. |
+| [readSimple](#fn-decoder-readsimple) | `self: *Self` | `!u8` | Reads an unmodeled CBOR simple value such as &#96;undefined&#96; (23). |
 | [readEventExtension](#fn-decoder-readeventextension) | `self: *Self, allocator: std.mem.Allocator` | `anyerror!events.Extension` | Reads a CBOR tag or simple value as an event extension. |
 | [beginSeq](#fn-decoder-beginseq) | `self: *Self` | `!?usize` | Begins reading a CBOR array and returns its element count when definite. |
 | [hasNextSeqElem](#fn-decoder-hasnextseqelem) | `self: *Self` | `!bool` | Returns whether the current CBOR array has another element. |
@@ -698,6 +738,26 @@ Reads a CBOR byte string as allocator-owned bytes.
 
 ```zig
 pub fn readBytes(self: *Self, allocator: std.mem.Allocator) ![]u8
+```
+
+<a id="fn-decoder-readtag"></a>
+
+### Decoder.readTag
+
+Reads a CBOR semantic tag head and leaves the tagged value unread.
+
+```zig
+pub fn readTag(self: *Self) !u64
+```
+
+<a id="fn-decoder-readsimple"></a>
+
+### Decoder.readSimple
+
+Reads an unmodeled CBOR simple value such as `undefined` (23).
+
+```zig
+pub fn readSimple(self: *Self) !u8
 ```
 
 <a id="fn-decoder-readeventextension"></a>

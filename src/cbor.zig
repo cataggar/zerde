@@ -10,6 +10,12 @@ const events = @import("events.zig");
 /// CBOR writer configuration. Reserved for future profile options.
 pub const WriteOptions = struct {};
 
+/// CBOR semantic tag value for low-level/custom event use.
+pub const Tag = struct {
+    number: u64,
+    value: events.Value,
+};
+
 /// Serializes `value` as CBOR to `writer`.
 pub fn write(writer: *std.Io.Writer, value: anytype) !void {
     try writeWithOptions(writer, value, .{});
@@ -108,6 +114,8 @@ pub const Encoder = struct {
     stack_len: usize = 0,
     /// Number of root values emitted so far.
     root_count: usize = 0,
+    /// Number of semantic tag heads emitted before the next value.
+    pending_tags: usize = 0,
 
     /// Emits the CBOR null simple value.
     pub fn emitNull(self: *Self) !void {
@@ -148,6 +156,19 @@ pub const Encoder = struct {
     /// Emits an enum tag as a CBOR text string.
     pub fn emitEnumTag(self: *Self, tag: []const u8) !void {
         try self.emitString(tag);
+    }
+
+    /// Emits a CBOR semantic tag head. The next emitted value is the tagged value.
+    pub fn emitTag(self: *Self, tag: u64) !void {
+        try self.ensureValueSlotAvailable();
+        try writeHead(self.writer, 6, tag);
+        self.pending_tags += 1;
+    }
+
+    /// Emits an unmodeled CBOR simple value such as `undefined` (23).
+    pub fn emitSimple(self: *Self, value: u8) !void {
+        try self.beforeValue();
+        try writeCborSimple(self.writer, value);
     }
 
     /// Emits a CBOR-compatible event extension value.
@@ -247,6 +268,7 @@ pub const Encoder = struct {
 
     /// Verifies that exactly one complete CBOR root value was emitted.
     pub fn finish(self: *Self) !void {
+        if (self.pending_tags != 0) return error.IncompleteCborDocument;
         if (self.root_count == 0) return error.IncompleteCborDocument;
         if (self.stack_len == 0) return;
 
@@ -256,6 +278,24 @@ pub const Encoder = struct {
     }
 
     fn beforeValue(self: *Self) !void {
+        try self.accountValue();
+        self.pending_tags = 0;
+    }
+
+    fn ensureValueSlotAvailable(self: *Self) !void {
+        if (self.stack_len == 0) {
+            if (self.root_count != 0) return error.InvalidCborEncoderState;
+            return;
+        }
+
+        const frame = &self.stack[self.stack_len - 1];
+        switch (frame.container) {
+            .seq => if (frame.count == frame.len) return error.InvalidCborEncoderState,
+            .map => if (!frame.expecting_field_value) return error.InvalidCborEncoderState,
+        }
+    }
+
+    fn accountValue(self: *Self) !void {
         if (self.stack_len == 0) {
             if (self.root_count != 0) return error.InvalidCborEncoderState;
             self.root_count += 1;
@@ -733,6 +773,20 @@ pub const Decoder = struct {
     /// Reads a CBOR byte string as allocator-owned bytes.
     pub fn readBytes(self: *Self, allocator: std.mem.Allocator) ![]u8 {
         return try self.readRaw(allocator, 2);
+    }
+
+    /// Reads a CBOR semantic tag head and leaves the tagged value unread.
+    pub fn readTag(self: *Self) !u64 {
+        const head = parseHead(try self.reader.takeByte());
+        if (head.major != 6) return error.InvalidType;
+        return try self.readArgNoIndef(head.ai);
+    }
+
+    /// Reads an unmodeled CBOR simple value such as `undefined` (23).
+    pub fn readSimple(self: *Self) !u8 {
+        const head = parseHead(try self.reader.takeByte());
+        if (head.major != 7) return error.InvalidType;
+        return try self.readSimpleCodeAfterHead(head);
     }
 
     /// Reads a CBOR tag or simple value as an event extension.
@@ -1610,6 +1664,156 @@ test "cbor rejects typed values outside the Zerde data model" {
     }
 }
 
+test "cbor low-level encoder and decoder support tags and simple values" {
+    var tagged_out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer tagged_out.deinit();
+    var tagged_enc = encoder(&tagged_out.writer);
+    try tagged_enc.emitTag(1);
+    try tagged_enc.emitString("time");
+    try tagged_enc.finish();
+    try std.testing.expectEqualSlices(u8, &.{ 0xc1, 0x64, 't', 'i', 'm', 'e' }, tagged_out.writer.buffered());
+
+    var tagged_reader: std.Io.Reader = .fixed(tagged_out.writer.buffered());
+    var tagged_dec = decoder(&tagged_reader, std.testing.allocator);
+    try std.testing.expectEqual(Kind.extension, try tagged_dec.peek());
+    try std.testing.expectEqual(@as(u64, 1), try tagged_dec.readTag());
+    const tagged_value = try tagged_dec.readString(std.testing.allocator);
+    defer std.testing.allocator.free(tagged_value);
+    try std.testing.expectEqualStrings("time", tagged_value);
+    try tagged_dec.finish();
+
+    var simple_out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer simple_out.deinit();
+    var simple_enc = encoder(&simple_out.writer);
+    try simple_enc.emitSimple(23);
+    try simple_enc.finish();
+    try std.testing.expectEqualSlices(u8, &.{0xf7}, simple_out.writer.buffered());
+
+    var simple_reader: std.Io.Reader = .fixed(simple_out.writer.buffered());
+    var simple_dec = decoder(&simple_reader, std.testing.allocator);
+    try std.testing.expectEqual(Kind.extension, try simple_dec.peek());
+    try std.testing.expectEqual(@as(u8, 23), try simple_dec.readSimple());
+    try simple_dec.finish();
+}
+
+test "cbor low-level supports stacked tags and extended simple codes" {
+    var tagged_out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer tagged_out.deinit();
+    var tagged_enc = encoder(&tagged_out.writer);
+    try tagged_enc.emitTag(55799);
+    try tagged_enc.emitTag(24);
+    try tagged_enc.emitBytes(&.{0x01});
+    try tagged_enc.finish();
+    try std.testing.expectEqualSlices(u8, &.{ 0xd9, 0xd9, 0xf7, 0xd8, 0x18, 0x41, 0x01 }, tagged_out.writer.buffered());
+
+    var tagged_reader: std.Io.Reader = .fixed(tagged_out.writer.buffered());
+    var tagged_dec = decoder(&tagged_reader, std.testing.allocator);
+    try std.testing.expectEqual(@as(u64, 55799), try tagged_dec.readTag());
+    try std.testing.expectEqual(@as(u64, 24), try tagged_dec.readTag());
+    const tagged_bytes = try tagged_dec.readBytes(std.testing.allocator);
+    defer std.testing.allocator.free(tagged_bytes);
+    try std.testing.expectEqualSlices(u8, &.{0x01}, tagged_bytes);
+    try tagged_dec.finish();
+
+    var simple_out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer simple_out.deinit();
+    var simple_enc = encoder(&simple_out.writer);
+    try simple_enc.beginSeq(5);
+    try simple_enc.emitSimple(0);
+    try simple_enc.emitSimple(19);
+    try simple_enc.emitSimple(23);
+    try simple_enc.emitSimple(32);
+    try simple_enc.emitSimple(255);
+    try simple_enc.endSeq();
+    try simple_enc.finish();
+    try std.testing.expectEqualSlices(u8, &.{ 0x85, 0xe0, 0xf3, 0xf7, 0xf8, 0x20, 0xf8, 0xff }, simple_out.writer.buffered());
+
+    var simple_reader: std.Io.Reader = .fixed(simple_out.writer.buffered());
+    var simple_dec = decoder(&simple_reader, std.testing.allocator);
+    try std.testing.expectEqual(@as(?usize, 5), try simple_dec.beginSeq());
+    try std.testing.expect(try simple_dec.hasNextSeqElem());
+    try std.testing.expectEqual(@as(u8, 0), try simple_dec.readSimple());
+    try std.testing.expect(try simple_dec.hasNextSeqElem());
+    try std.testing.expectEqual(@as(u8, 19), try simple_dec.readSimple());
+    try std.testing.expect(try simple_dec.hasNextSeqElem());
+    try std.testing.expectEqual(@as(u8, 23), try simple_dec.readSimple());
+    try std.testing.expect(try simple_dec.hasNextSeqElem());
+    try std.testing.expectEqual(@as(u8, 32), try simple_dec.readSimple());
+    try std.testing.expect(try simple_dec.hasNextSeqElem());
+    try std.testing.expectEqual(@as(u8, 255), try simple_dec.readSimple());
+    try std.testing.expect(!try simple_dec.hasNextSeqElem());
+    try simple_dec.endSeq();
+    try simple_dec.finish();
+}
+
+test "cbor low-level rejects invalid tag and simple operations" {
+    var simple_writer = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer simple_writer.deinit();
+    var simple_enc = encoder(&simple_writer.writer);
+    try std.testing.expectError(error.InvalidType, simple_enc.emitSimple(20));
+
+    var tag_wrong_type_reader: std.Io.Reader = .fixed(&.{0xf7});
+    var tag_wrong_type_dec = decoder(&tag_wrong_type_reader, std.testing.allocator);
+    try std.testing.expectError(error.InvalidType, tag_wrong_type_dec.readTag());
+
+    var tag_indef_reader: std.Io.Reader = .fixed(&.{0xdf});
+    var tag_indef_dec = decoder(&tag_indef_reader, std.testing.allocator);
+    try std.testing.expectError(error.InvalidCborSyntax, tag_indef_dec.readTag());
+
+    var simple_bool_reader: std.Io.Reader = .fixed(&.{0xf4});
+    var simple_bool_dec = decoder(&simple_bool_reader, std.testing.allocator);
+    try std.testing.expectError(error.InvalidType, simple_bool_dec.readSimple());
+
+    var simple_non_minimal_reader: std.Io.Reader = .fixed(&.{ 0xf8, 0x1f });
+    var simple_non_minimal_dec = decoder(&simple_non_minimal_reader, std.testing.allocator);
+    try std.testing.expectError(error.InvalidCborSyntax, simple_non_minimal_dec.readSimple());
+}
+
+test "cbor low-level tags wrap the next value in containers" {
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer out.deinit();
+    var enc = encoder(&out.writer);
+    try enc.beginSeq(1);
+    try enc.emitTag(42);
+    try enc.emitInt(7);
+    try enc.endSeq();
+    try enc.finish();
+
+    try std.testing.expectEqualSlices(u8, &.{ 0x81, 0xd8, 0x2a, 0x07 }, out.writer.buffered());
+
+    var dangling_out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer dangling_out.deinit();
+    var dangling_enc = encoder(&dangling_out.writer);
+    try dangling_enc.emitTag(1);
+    try std.testing.expectError(error.IncompleteCborDocument, dangling_enc.finish());
+}
+
+test "cbor custom hooks can use low-level tags" {
+    const TaggedText = struct {
+        value: []const u8,
+
+        pub fn zerdeWrite(self: @This(), enc: anytype) !void {
+            try enc.emitTag(0);
+            try enc.emitString(self.value);
+        }
+
+        pub fn zerdeRead(allocator: std.mem.Allocator, dec: anytype) !@This() {
+            if (try dec.readTag() != 0) return error.InvalidValue;
+            return .{ .value = try dec.readString(allocator) };
+        }
+    };
+
+    const bytes = try writeAlloc(std.testing.allocator, TaggedText{ .value = "2026-05-10T00:00:00Z" });
+    defer std.testing.allocator.free(bytes);
+    try std.testing.expectEqualSlices(u8, &.{
+        0xc0, 0x74, '2', '0', '2', '6', '-', '0', '5', '-', '1', '0', 'T', '0', '0', ':', '0', '0', ':', '0', '0', 'Z',
+    }, bytes);
+
+    const parsed = try readSlice(TaggedText, std.testing.allocator, bytes);
+    defer deinitValue(TaggedText, std.testing.allocator, parsed);
+    try std.testing.expectEqualStrings("2026-05-10T00:00:00Z", parsed.value);
+}
+
 test "cbor rejects numeric overflow and non-text struct keys" {
     try std.testing.expectError(error.IntegerOverflow, readSlice(u8, std.testing.allocator, &.{ 0x19, 0x01, 0x00 }));
     try std.testing.expectError(error.IntegerOverflow, readSlice(i8, std.testing.allocator, &.{ 0x18, 0x80 }));
@@ -1706,6 +1910,39 @@ test "cbor event support preserves tags and simple values" {
     try simple_value.write(&simple_enc);
     try simple_enc.finish();
     try std.testing.expectEqualSlices(u8, &.{0xf7}, simple_out.writer.buffered());
+}
+
+test "cbor event support preserves nested tags" {
+    const input = &.{ 0xc1, 0xc2, 0x01 };
+
+    var reader: std.Io.Reader = .fixed(input);
+    var dec = decoder(&reader, std.testing.allocator);
+    var value = try events.readAlloc(std.testing.allocator, &dec);
+    defer value.deinit(std.testing.allocator);
+    try dec.finish();
+
+    switch (value.extension) {
+        .tagged => |outer| {
+            try std.testing.expectEqual(events.Extension.Namespace.cbor, outer.namespace);
+            try std.testing.expectEqual(@as(u64, 1), outer.id.unsigned);
+            switch (outer.value.extension) {
+                .tagged => |inner| {
+                    try std.testing.expectEqual(events.Extension.Namespace.cbor, inner.namespace);
+                    try std.testing.expectEqual(@as(u64, 2), inner.id.unsigned);
+                    try std.testing.expectEqual(@as(i128, 1), inner.value.int);
+                },
+                else => return error.InvalidValue,
+            }
+        },
+        else => return error.InvalidValue,
+    }
+
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer out.deinit();
+    var enc = encoder(&out.writer);
+    try value.write(&enc);
+    try enc.finish();
+    try std.testing.expectEqualSlices(u8, input, out.writer.buffered());
 }
 
 test "cbor event encoder clones extension values" {

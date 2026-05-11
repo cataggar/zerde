@@ -445,6 +445,7 @@ CBOR:
 - Typed writes emit definite-length arrays, maps, text strings, and byte strings.
 - The event encoder buffers dynamic unknown-length containers explicitly and emits definite-length CBOR.
 - The decoder accepts definite and indefinite strings, arrays, and maps, rejects trailing data, rejects unsupported tags/simple values as actual values, and validates UTF-8 text.
+- Low-level custom hooks can emit/read CBOR semantic tags and unmodeled simple values explicitly.
 - Date/time helper types use their ordinary struct or string fallbacks; CBOR date/time tags are not emitted automatically.
 
 ZON:
