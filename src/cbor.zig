@@ -725,7 +725,15 @@ pub const Decoder = struct {
                 const chunk_head = parseHead(chunk_first);
                 if (chunk_head.major != expected_major or chunk_head.ai == 31) return error.InvalidCborSyntax;
                 const len = try lengthToUsize(try self.readArgNoIndef(chunk_head.ai));
-                try self.copyBytes(&out.writer, len);
+                if (expected_major == 3) {
+                    const chunk = try allocator.alloc(u8, len);
+                    defer allocator.free(chunk);
+                    try self.readExact(chunk);
+                    if (!std.unicode.utf8ValidateSlice(chunk)) return error.InvalidUtf8;
+                    try out.writer.writeAll(chunk);
+                } else {
+                    try self.copyBytes(&out.writer, len);
+                }
             }
             return try out.toOwnedSlice();
         }
@@ -915,6 +923,38 @@ fn expectCbor(value: anytype, expected: []const u8) !void {
     try std.testing.expectEqualSlices(u8, expected, bytes);
 }
 
+fn expectReadValue(comptime T: type, input: []const u8, expected: T) !void {
+    const actual = try readSlice(T, std.testing.allocator, input);
+    try std.testing.expectEqual(expected, actual);
+}
+
+fn expectReadString(input: []const u8, expected: []const u8) !void {
+    const actual = try readSlice([]const u8, std.testing.allocator, input);
+    defer std.testing.allocator.free(actual);
+    try std.testing.expectEqualStrings(expected, actual);
+}
+
+fn expectReadBytes(input: []const u8, expected: []const u8) !void {
+    var reader: std.Io.Reader = .fixed(input);
+    var dec = decoder(&reader, std.testing.allocator);
+    const actual = try dec.readBytes(std.testing.allocator);
+    defer std.testing.allocator.free(actual);
+    try dec.finish();
+    try std.testing.expectEqualSlices(u8, expected, actual);
+}
+
+fn expectSkips(input: []const u8) !void {
+    var reader: std.Io.Reader = .fixed(input);
+    var dec = decoder(&reader, std.testing.allocator);
+    try dec.skipValue();
+    try dec.finish();
+}
+
+fn expectMalformed(input: []const u8) !void {
+    expectSkips(input) catch return;
+    return error.ExpectedMalformedCbor;
+}
+
 test "cbor writes primitive values with shortest heads" {
     try expectCbor(null, &.{0xf6});
     try expectCbor(true, &.{0xf5});
@@ -1102,6 +1142,297 @@ test "cbor reads indefinite strings arrays and maps" {
     defer deinitValue(User, std.testing.allocator, user);
     try std.testing.expectEqual(@as(u8, 1), user.id);
     try std.testing.expectEqualStrings("Ada", user.name);
+}
+
+test "cbor reads RFC 8949 Appendix A integer vectors" {
+    try expectReadValue(u8, &.{0x00}, 0);
+    try expectReadValue(u8, &.{0x01}, 1);
+    try expectReadValue(u8, &.{0x0a}, 10);
+    try expectReadValue(u8, &.{0x17}, 23);
+    try expectReadValue(u8, &.{ 0x18, 0x18 }, 24);
+    try expectReadValue(u8, &.{ 0x18, 0x19 }, 25);
+    try expectReadValue(u8, &.{ 0x18, 0x64 }, 100);
+    try expectReadValue(u16, &.{ 0x19, 0x03, 0xe8 }, 1000);
+    try expectReadValue(u32, &.{ 0x1a, 0x00, 0x0f, 0x42, 0x40 }, 1000000);
+    try expectReadValue(u64, &.{ 0x1b, 0x00, 0x00, 0x00, 0xe8, 0xd4, 0xa5, 0x10, 0x00 }, 1000000000000);
+    try expectReadValue(u64, &.{ 0x1b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff }, std.math.maxInt(u64));
+
+    try expectReadValue(i8, &.{0x20}, -1);
+    try expectReadValue(i8, &.{0x29}, -10);
+    try expectReadValue(i8, &.{ 0x38, 0x63 }, -100);
+    try expectReadValue(i16, &.{ 0x39, 0x03, 0xe7 }, -1000);
+    try expectReadValue(i128, &.{ 0x3b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff }, -18446744073709551616);
+}
+
+test "cbor reads RFC 8949 Appendix A simple and float vectors" {
+    try expectReadValue(bool, &.{0xf4}, false);
+    try expectReadValue(bool, &.{0xf5}, true);
+    try std.testing.expectEqual(null, try readSlice(?u8, std.testing.allocator, &.{0xf6}));
+    try std.testing.expectError(error.UnsupportedCborSimpleValue, readSlice(?u8, std.testing.allocator, &.{0xf7}));
+
+    const User = struct { id: u8 };
+    const user = try readSlice(User, std.testing.allocator, &.{
+        0xa2,
+        0x62, 'i', 'd', 0x01,
+        0x69, 'u', 'n', 'd', 'e', 'f', 'i', 'n', 'e', 'd', 0xf7,
+    });
+    try std.testing.expectEqual(@as(u8, 1), user.id);
+
+    try expectReadValue(f64, &.{ 0xf9, 0x00, 0x00 }, 0.0);
+    const negative_zero = try readSlice(f64, std.testing.allocator, &.{ 0xf9, 0x80, 0x00 });
+    try std.testing.expectEqual(@as(u64, 0x8000000000000000), @as(u64, @bitCast(negative_zero)));
+    try expectReadValue(f64, &.{ 0xf9, 0x3c, 0x00 }, 1.0);
+    try expectReadValue(f64, &.{ 0xfb, 0x3f, 0xf1, 0x99, 0x99, 0x99, 0x99, 0x99, 0x9a }, 1.1);
+    try expectReadValue(f64, &.{ 0xf9, 0x3e, 0x00 }, 1.5);
+    try expectReadValue(f64, &.{ 0xf9, 0x7b, 0xff }, 65504.0);
+    try expectReadValue(f64, &.{ 0xfa, 0x47, 0xc3, 0x50, 0x00 }, 100000.0);
+    try expectReadValue(f32, &.{ 0xfa, 0x7f, 0x7f, 0xff, 0xff }, 3.4028234663852886e+38);
+    try expectReadValue(f64, &.{ 0xfb, 0x7e, 0x37, 0xe4, 0x3c, 0x88, 0x00, 0x75, 0x9c }, 1.0e+300);
+    try expectReadValue(f64, &.{ 0xf9, 0x00, 0x01 }, 5.960464477539063e-8);
+    try expectReadValue(f64, &.{ 0xf9, 0x04, 0x00 }, 0.00006103515625);
+    try expectReadValue(f64, &.{ 0xf9, 0xc4, 0x00 }, -4.0);
+    try expectReadValue(f64, &.{ 0xfb, 0xc0, 0x10, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66 }, -4.1);
+    try std.testing.expect(std.math.isPositiveInf(try readSlice(f64, std.testing.allocator, &.{ 0xf9, 0x7c, 0x00 })));
+    try std.testing.expect(std.math.isNan(try readSlice(f64, std.testing.allocator, &.{ 0xf9, 0x7e, 0x00 })));
+    try std.testing.expect(std.math.isNegativeInf(try readSlice(f64, std.testing.allocator, &.{ 0xf9, 0xfc, 0x00 })));
+    try std.testing.expect(std.math.isPositiveInf(try readSlice(f64, std.testing.allocator, &.{ 0xfa, 0x7f, 0x80, 0x00, 0x00 })));
+    try std.testing.expect(std.math.isNan(try readSlice(f64, std.testing.allocator, &.{ 0xfa, 0x7f, 0xc0, 0x00, 0x00 })));
+    try std.testing.expect(std.math.isNegativeInf(try readSlice(f64, std.testing.allocator, &.{ 0xfa, 0xff, 0x80, 0x00, 0x00 })));
+    try std.testing.expect(std.math.isPositiveInf(try readSlice(f64, std.testing.allocator, &.{ 0xfb, 0x7f, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 })));
+    try std.testing.expect(std.math.isNan(try readSlice(f64, std.testing.allocator, &.{ 0xfb, 0x7f, 0xf8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 })));
+    try std.testing.expect(std.math.isNegativeInf(try readSlice(f64, std.testing.allocator, &.{ 0xfb, 0xff, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 })));
+}
+
+test "cbor reads RFC 8949 Appendix A string vectors" {
+    try expectReadBytes(&.{0x40}, "");
+    try expectReadBytes(&.{ 0x44, 0x01, 0x02, 0x03, 0x04 }, &.{ 0x01, 0x02, 0x03, 0x04 });
+    try expectReadString(&.{0x60}, "");
+    try expectReadString(&.{ 0x61, 'a' }, "a");
+    try expectReadString(&.{ 0x64, 'I', 'E', 'T', 'F' }, "IETF");
+    try expectReadString(&.{ 0x62, '"', '\\' }, "\"\\");
+    try expectReadString(&.{ 0x62, 0xc3, 0xbc }, "\xc3\xbc");
+    try expectReadString(&.{ 0x63, 0xe6, 0xb0, 0xb4 }, "\xe6\xb0\xb4");
+    try expectReadString(&.{ 0x64, 0xf0, 0x90, 0x85, 0x91 }, "\xf0\x90\x85\x91");
+}
+
+test "cbor reads RFC 8949 Appendix A array and map vectors" {
+    const empty = try readSlice([]const u16, std.testing.allocator, &.{0x80});
+    defer std.testing.allocator.free(empty);
+    try std.testing.expectEqual(@as(usize, 0), empty.len);
+
+    const values = try readSlice([]const u16, std.testing.allocator, &.{ 0x83, 0x01, 0x02, 0x03 });
+    defer std.testing.allocator.free(values);
+    try std.testing.expectEqualSlices(u16, &.{ 1, 2, 3 }, values);
+
+    const twenty_five = try readSlice([]const u16, std.testing.allocator, &.{
+        0x98, 0x19, 0x01, 0x02, 0x03, 0x04, 0x05,
+        0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c,
+        0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13,
+        0x14, 0x15, 0x16, 0x17, 0x18, 0x18, 0x18, 0x19,
+    });
+    defer std.testing.allocator.free(twenty_five);
+    try std.testing.expectEqualSlices(u16, &.{
+        1, 2, 3, 4, 5,
+        6, 7, 8, 9, 10,
+        11, 12, 13, 14, 15,
+        16, 17, 18, 19, 20,
+        21, 22, 23, 24, 25,
+    }, twenty_five);
+
+    const Pair = struct { a: u8, b: []const u8 };
+    const pair = try readSlice(Pair, std.testing.allocator, &.{ 0xa2, 0x61, 'a', 0x01, 0x61, 'b', 0x61, 'B' });
+    defer deinitValue(Pair, std.testing.allocator, pair);
+    try std.testing.expectEqual(@as(u8, 1), pair.a);
+    try std.testing.expectEqualStrings("B", pair.b);
+
+    const Nested = struct { b: []const u8 };
+    const nested = try readSlice(Nested, std.testing.allocator, &.{ 0xa1, 0x61, 'b', 0x61, 'c' });
+    defer deinitValue(Nested, std.testing.allocator, nested);
+    try std.testing.expectEqualStrings("c", nested.b);
+
+    try expectSkips(&.{ 0x83, 0x01, 0x82, 0x02, 0x03, 0x82, 0x04, 0x05 });
+    try expectSkips(&.{ 0xa0 });
+    try expectSkips(&.{ 0xa2, 0x01, 0x02, 0x03, 0x04 });
+    try expectSkips(&.{ 0x82, 0x61, 'a', 0xa1, 0x61, 'b', 0x61, 'c' });
+    try expectSkips(&.{ 0xa5, 0x61, 'a', 0x61, 'A', 0x61, 'b', 0x61, 'B', 0x61, 'c', 0x61, 'C', 0x61, 'd', 0x61, 'D', 0x61, 'e', 0x61, 'E' });
+}
+
+test "cbor reads RFC 8949 Appendix A indefinite vectors" {
+    try expectReadBytes(&.{ 0x5f, 0x42, 0x01, 0x02, 0x43, 0x03, 0x04, 0x05, 0xff }, &.{ 0x01, 0x02, 0x03, 0x04, 0x05 });
+    try expectReadString(&.{ 0x7f, 0x65, 's', 't', 'r', 'e', 'a', 0x64, 'm', 'i', 'n', 'g', 0xff }, "streaming");
+
+    const empty = try readSlice([]const u16, std.testing.allocator, &.{ 0x9f, 0xff });
+    defer std.testing.allocator.free(empty);
+    try std.testing.expectEqual(@as(usize, 0), empty.len);
+
+    const values = try readSlice([]const u16, std.testing.allocator, &.{
+        0x9f, 0x01, 0x02, 0x03, 0x04, 0x05,
+        0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c,
+        0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13,
+        0x14, 0x15, 0x16, 0x17, 0x18, 0x18, 0x18, 0x19, 0xff,
+    });
+    defer std.testing.allocator.free(values);
+    try std.testing.expectEqualSlices(u16, &.{
+        1, 2, 3, 4, 5,
+        6, 7, 8, 9, 10,
+        11, 12, 13, 14, 15,
+        16, 17, 18, 19, 20,
+        21, 22, 23, 24, 25,
+    }, values);
+
+    const Pair = struct { a: u8, b: []const u8 };
+    const pair = try readSlice(Pair, std.testing.allocator, &.{ 0xbf, 0x61, 'a', 0x01, 0x61, 'b', 0x61, 'B', 0xff });
+    defer deinitValue(Pair, std.testing.allocator, pair);
+    try std.testing.expectEqual(@as(u8, 1), pair.a);
+    try std.testing.expectEqualStrings("B", pair.b);
+
+    try expectSkips(&.{ 0x9f, 0x01, 0x82, 0x02, 0x03, 0x9f, 0x04, 0x05, 0xff, 0xff });
+    try expectSkips(&.{ 0x9f, 0x01, 0x82, 0x02, 0x03, 0x82, 0x04, 0x05, 0xff });
+    try expectSkips(&.{ 0x83, 0x01, 0x82, 0x02, 0x03, 0x9f, 0x04, 0x05, 0xff });
+    try expectSkips(&.{ 0x83, 0x01, 0x9f, 0x02, 0x03, 0xff, 0x82, 0x04, 0x05 });
+    try expectSkips(&.{ 0xbf, 0x61, 'a', 0x01, 0x61, 'b', 0x9f, 0x02, 0x03, 0xff, 0xff });
+    try expectSkips(&.{ 0x82, 0x61, 'a', 0xbf, 0x61, 'b', 0x61, 'c', 0xff });
+    try expectSkips(&.{ 0xbf, 0x63, 'F', 'u', 'n', 0xf5, 0x63, 'A', 'm', 't', 0x21, 0xff });
+}
+
+test "cbor rejects RFC 8949 Appendix F truncated input" {
+    const cases = [_][]const u8{
+        &.{0x18},
+        &.{0x19},
+        &.{0x1a},
+        &.{0x1b},
+        &.{ 0x19, 0x01 },
+        &.{ 0x1a, 0x01, 0x02 },
+        &.{ 0x1b, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07 },
+        &.{0x38},
+        &.{0x58},
+        &.{0x78},
+        &.{0x98},
+        &.{ 0x9a, 0x01, 0xff, 0x00 },
+        &.{0xb8},
+        &.{0xd8},
+        &.{0xf8},
+        &.{ 0xf9, 0x00 },
+        &.{ 0xfa, 0x00, 0x00 },
+        &.{ 0xfb, 0x00, 0x00, 0x00 },
+        &.{0x41},
+        &.{0x61},
+        &.{ 0x5a, 0xff, 0xff, 0xff, 0xff, 0x00 },
+        &.{ 0x5b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x02, 0x03 },
+        &.{ 0x7a, 0xff, 0xff, 0xff, 0xff, 0x00 },
+        &.{ 0x7b, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x02, 0x03 },
+        &.{0x81},
+        &.{ 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81 },
+        &.{ 0x82, 0x00 },
+        &.{0xa1},
+        &.{ 0xa2, 0x01, 0x02 },
+        &.{ 0xa1, 0x00 },
+        &.{ 0xa2, 0x00, 0x00, 0x00 },
+        &.{0xc0},
+        &.{ 0x5f, 0x41, 0x00 },
+        &.{ 0x7f, 0x61, 0x00 },
+        &.{0x9f},
+        &.{ 0x9f, 0x01, 0x02 },
+        &.{0xbf},
+        &.{ 0xbf, 0x01, 0x02, 0x01, 0x02 },
+        &.{ 0x81, 0x9f },
+        &.{ 0x9f, 0x80, 0x00 },
+        &.{ 0x9f, 0x9f, 0x9f, 0x9f, 0x9f, 0xff, 0xff, 0xff, 0xff },
+        &.{ 0x9f, 0x81, 0x9f, 0x81, 0x9f, 0x9f, 0xff, 0xff, 0xff },
+    };
+    for (cases) |input| try expectMalformed(input);
+}
+
+test "cbor rejects RFC 8949 Appendix F syntax errors" {
+    const reserved_ai = [_][]const u8{
+        &.{0x1c}, &.{0x1d}, &.{0x1e},
+        &.{0x3c}, &.{0x3d}, &.{0x3e},
+        &.{0x5c}, &.{0x5d}, &.{0x5e},
+        &.{0x7c}, &.{0x7d}, &.{0x7e},
+        &.{0x9c}, &.{0x9d}, &.{0x9e},
+        &.{0xbc}, &.{0xbd}, &.{0xbe},
+        &.{0xdc}, &.{0xdd}, &.{0xde},
+        &.{0xfc}, &.{0xfd}, &.{0xfe},
+    };
+    for (reserved_ai) |input| try expectMalformed(input);
+
+    const invalid_simple = [_][]const u8{
+        &.{ 0xf8, 0x00 },
+        &.{ 0xf8, 0x01 },
+        &.{ 0xf8, 0x18 },
+        &.{ 0xf8, 0x1f },
+    };
+    for (invalid_simple) |input| try expectMalformed(input);
+
+    const invalid_string_chunks = [_][]const u8{
+        &.{ 0x5f, 0x00, 0xff },
+        &.{ 0x5f, 0x21, 0xff },
+        &.{ 0x5f, 0x61, 0x00, 0xff },
+        &.{ 0x5f, 0x80, 0xff },
+        &.{ 0x5f, 0xa0, 0xff },
+        &.{ 0x5f, 0xc0, 0x00, 0xff },
+        &.{ 0x5f, 0xe0, 0xff },
+        &.{ 0x7f, 0x41, 0x00, 0xff },
+        &.{ 0x5f, 0x5f, 0x41, 0x00, 0xff, 0xff },
+        &.{ 0x7f, 0x7f, 0x61, 0x00, 0xff, 0xff },
+    };
+    for (invalid_string_chunks) |input| try expectMalformed(input);
+
+    const invalid_breaks = [_][]const u8{
+        &.{0xff},
+        &.{ 0x81, 0xff },
+        &.{ 0x82, 0x00, 0xff },
+        &.{ 0xa1, 0xff },
+        &.{ 0xa1, 0xff, 0x00 },
+        &.{ 0xa1, 0x00, 0xff },
+        &.{ 0xa2, 0x00, 0x00, 0xff },
+        &.{ 0x9f, 0x81, 0xff },
+        &.{ 0x9f, 0x82, 0x9f, 0x81, 0x9f, 0x9f, 0xff, 0xff, 0xff, 0xff },
+        &.{ 0xbf, 0x00, 0xff },
+        &.{ 0xbf, 0x00, 0x00, 0x00, 0xff },
+    };
+    for (invalid_breaks) |input| try expectMalformed(input);
+
+    const invalid_indefinite_major = [_][]const u8{
+        &.{0x1f},
+        &.{0x3f},
+        &.{0xdf},
+    };
+    for (invalid_indefinite_major) |input| try expectMalformed(input);
+}
+
+test "cbor rejects RFC 8949 Appendix F trailing input" {
+    try expectMalformed(&.{ 0x00, 0x00 });
+    try std.testing.expectError(error.InvalidCborTrailingData, readSlice(u8, std.testing.allocator, &.{ 0x00, 0x00 }));
+}
+
+test "cbor rejects typed values outside the Zerde data model" {
+    try std.testing.expectError(error.UnsupportedCborTag, readSlice(u8, std.testing.allocator, &.{ 0xc0, 0x00 }));
+    try std.testing.expectError(error.UnsupportedCborTag, readSlice(u8, std.testing.allocator, &.{ 0xd8, 0x18, 0x41, 0x00 }));
+    try std.testing.expectError(error.UnsupportedCborSimpleValue, readSlice(?u8, std.testing.allocator, &.{0xe0}));
+    try std.testing.expectError(error.UnsupportedCborSimpleValue, readSlice(?u8, std.testing.allocator, &.{ 0xf8, 0xff }));
+
+    var reader: std.Io.Reader = .fixed(&.{ 0xc1, 0x00 });
+    var dec = decoder(&reader, std.testing.allocator);
+    try std.testing.expectError(error.UnsupportedCborTag, events.readAlloc(std.testing.allocator, &dec));
+}
+
+test "cbor rejects numeric overflow and non-text struct keys" {
+    try std.testing.expectError(error.IntegerOverflow, readSlice(u8, std.testing.allocator, &.{ 0x19, 0x01, 0x00 }));
+    try std.testing.expectError(error.IntegerOverflow, readSlice(i8, std.testing.allocator, &.{ 0x18, 0x80 }));
+    try std.testing.expectError(error.IntegerOverflow, readSlice(i8, std.testing.allocator, &.{ 0x38, 0x80 }));
+
+    const User = struct { id: u8 };
+    try std.testing.expectError(error.InvalidType, readSlice(User, std.testing.allocator, &.{ 0xa1, 0x01, 0x02 }));
+}
+
+test "cbor validates UTF-8 text and indefinite text chunks" {
+    try std.testing.expectError(error.InvalidUtf8, readSlice([]const u8, std.testing.allocator, &.{ 0x61, 0xff }));
+    try std.testing.expectError(error.InvalidUtf8, readSlice([]const u8, std.testing.allocator, &.{ 0x7f, 0x61, 0xc3, 0x61, 0xbc, 0xff }));
+
+    const value = try readSlice([]const u8, std.testing.allocator, &.{ 0x7f, 0x62, 0xc3, 0xbc, 0xff });
+    defer std.testing.allocator.free(value);
+    try std.testing.expectEqualStrings("\xc3\xbc", value);
 }
 
 test "cbor skips unknown fields including tags and simple values" {
