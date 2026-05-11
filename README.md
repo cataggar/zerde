@@ -115,18 +115,18 @@ The option type is format-specific, usually named `WriteOptions` or `Options`. L
 
 ## Structural Events
 
-Zerde has one structural protocol with two roles. A decoder is a structural source: it exposes methods like `peek`, `readBool`, `beginSeq`, `nextField`, and `skipValue`. A sink receives structural callbacks like `emitNull`, `emitBool`, `emitInt`, `emitString`, `beginSeq`, `endSeq`, `beginStruct`, `emitFieldName`, and `endStruct`; format encoders are sinks that write bytes.
+Structural events are Zerde's untyped path for data whose shape is not represented by an application Zig type. Use them to build your own value tree, validate or count a stream, transform data, or transcode between formats.
 
-The typed APIs and event APIs are different traversals over that same protocol:
+A decoder is a structural source, and an encoder or custom sink is a structural target. The same protocol backs both the typed APIs and the event APIs:
 
 ```zig
-try zerde.serialize(value, &encoder);                    // typed value -> sink
+try zerde.serialize(value, &encoder);                         // typed value -> sink
 const value2 = try zerde.deserialize(T, allocator, &decoder); // source -> typed value
-try zerde.consume(allocator, &decoder, &sink);           // source -> sink
-try zerde.pipe(allocator, &decoder, &encoder);           // source -> encoder sink
+try zerde.consume(allocator, &decoder, &sink);                // source -> custom sink
+try zerde.pipe(allocator, &decoder, &encoder);                // source -> encoder
 ```
 
-Use structural events when you want to read Zerde-supported formats into your own representation instead of into a reflected Zig struct. Custom sinks can build an application value tree, validate a stream, count events, or transform data. String and field-name slices passed to the sink are temporary; copy them if your representation retains them.
+Custom sinks implement callbacks such as `emitNull`, `emitBool`, `emitInt`, `emitString`, `beginSeq`, `endSeq`, `beginStruct`, `emitFieldName`, and `endStruct`. String and field-name slices passed to a sink are temporary; copy them if your representation retains them.
 
 ```zig
 var reader: std.Io.Reader = .fixed("{\"id\":42,\"name\":\"Ada\"}");
@@ -141,7 +141,16 @@ try decoder.finish();
 const my_value = try builder.finish();
 ```
 
-For simple transcoding or tests, `zerde.events.Value` provides an allocator-owned tree:
+For dynamic in-memory data, `zerde.events.readAlloc` returns an allocator-owned `zerde.events.Value` tree:
+
+```zig
+var value = try zerde.events.readAlloc(allocator, &decoder);
+defer value.deinit(allocator);
+
+try decoder.finish();
+```
+
+For direct transcoding, pipe a decoder into a format encoder:
 
 ```zig
 var in = zerde.json.decoder(&reader, allocator);
@@ -152,7 +161,7 @@ try in.finish();
 try out.finish();
 ```
 
-The event APIs are intended for self-describing data streams such as JSON, TOML, MessagePack, CBOR, and ZON. CSV participates as a row stream; binary remains type-directed. See the feature matrix for format-specific source and target constraints.
+Event sources are intended for self-describing data streams such as JSON, TOML, MessagePack, CBOR, and ZON. CSV participates as a row stream; binary remains type-directed. See the [feature matrix](#feature-support-matrix) for source and target constraints.
 
 ## Type Codecs
 
