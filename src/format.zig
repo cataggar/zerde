@@ -5,6 +5,7 @@ pub const Format = enum {
     json,
     toml,
     msgpack,
+    cbor,
     zon,
     binary,
     csv,

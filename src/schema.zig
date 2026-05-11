@@ -8,6 +8,7 @@ const Format = @import("format.zig").Format;
 const json = @import("json.zig");
 const meta = @import("meta.zig");
 const msgpack = @import("msgpack.zig");
+const cbor = @import("cbor.zig");
 const serializeValue = @import("serialize.zig").serialize;
 const toml = @import("toml.zig");
 
@@ -110,6 +111,7 @@ pub fn write(writer: *std.Io.Writer, schema: Schema, comptime format: Format) !v
         .json => try json.write(writer, WireSchema{ .schema = &schema }),
         .toml => try toml.write(writer, WireSchema{ .schema = &schema }),
         .msgpack => try msgpack.write(writer, WireSchema{ .schema = &schema }),
+        .cbor => try cbor.write(writer, WireSchema{ .schema = &schema }),
         .human => try writeHuman(writer, schema),
         .zon => @compileError("schema output does not support zon format"),
         .binary => @compileError("schema output does not support binary format"),
@@ -853,7 +855,7 @@ test "schema json writes enums and tagged unions canonically" {
     try expectJson(forType(Drawing), expected.buffered());
 }
 
-test "schema write supports human toml and msgpack formats" {
+test "schema write supports human toml msgpack and cbor formats" {
     const User = struct {
         id: u8,
         name: []const u8,
@@ -875,4 +877,9 @@ test "schema write supports human toml and msgpack formats" {
     var msgpack_writer: std.Io.Writer = .fixed(&msgpack_buffer);
     try write(&msgpack_writer, schema, .msgpack);
     try std.testing.expect(msgpack_writer.buffered().len != 0);
+
+    var cbor_buffer: [4096]u8 = undefined;
+    var cbor_writer: std.Io.Writer = .fixed(&cbor_buffer);
+    try write(&cbor_writer, schema, .cbor);
+    try std.testing.expect(cbor_writer.buffered().len != 0);
 }

@@ -20,10 +20,11 @@
 - [toml](toml.md)
 - [datetime](datetime.md)
 - [msgpack](msgpack.md)
+- [cbor](cbor.md)
+- [events](events.md)
 - [zon](zon.md)
 - [binary](binary.md)
 - [csv](csv.md)
-- [events](events.md)
 - [human](human.md)
 - [traits](traits.md)
 - [schema](schema.md)
@@ -51,6 +52,7 @@ pub const Format = enum {
     json,
     toml,
     msgpack,
+    cbor,
     zon,
     binary,
     csv,
