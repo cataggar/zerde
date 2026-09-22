@@ -18,13 +18,17 @@ jobs:
       - name: Checkout
         uses: https://code.forgejo.org/actions/checkout@v4
 
-      - name: Set up Zig
-        uses: https://codeberg.org/mlugg/setup-zig@v2.2.1
-        with:
-          use-cache: false
+      # ghr's install composite uses GitHub's $/ self-reference, which is not
+      # supported by Forgejo Runner, so bootstrap the pinned CLI explicitly.
+      - name: Install Zig via ghr
+        run: .forgejo/scripts/install-zig-with-ghr.sh
 
       - name: Show Zig version
-        run: zig version
+        run: |
+          expected="$(sed -nE 's/^[[:space:]]*\.minimum_zig_version = "([^"]+)".*/\1/p' build.zig.zon)"
+          actual="$(zig version)"
+          echo "$actual"
+          test "$actual" = "$expected"
 
       - name: Build and test
         run: zig build test
