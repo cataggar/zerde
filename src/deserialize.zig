@@ -60,6 +60,7 @@
 //! should call that decoder's `finish` after the root value has been read.
 
 const std = @import("std");
+const reflection = @import("reflection.zig");
 
 const base64 = @import("base64.zig");
 const containers = @import("containers.zig");
@@ -101,7 +102,7 @@ fn deserializeValue(comptime T: type, allocator: std.mem.Allocator, decoder: any
             const tag = try decoder.readString(allocator);
             defer allocator.free(tag);
 
-            inline for (enum_info.fields) |field| {
+            inline for (comptime reflection.fields(enum_info)) |field| {
                 if (std.mem.eql(u8, tag, field.name)) return @field(T, field.name);
             }
             return error.InvalidEnumTag;
@@ -219,10 +220,10 @@ fn deserializeStructFromFields(comptime T: type, allocator: std.mem.Allocator, d
     const options = comptime meta.optionsFor(T);
 
     var result: T = undefined;
-    var seen = [_]bool{false} ** struct_info.fields.len;
-    var initialized = [_]bool{false} ** struct_info.fields.len;
+    var seen: [struct_info.field_names.len]bool = @splat(false);
+    var initialized: [struct_info.field_names.len]bool = @splat(false);
     errdefer {
-        inline for (struct_info.fields, 0..) |field, i| {
+        inline for (comptime reflection.fields(struct_info), 0..) |field, i| {
             if (!field.is_comptime and initialized[i]) {
                 deinit_mod.deinit(field.type, allocator, @field(result, field.name));
             }
@@ -233,7 +234,7 @@ fn deserializeStructFromFields(comptime T: type, allocator: std.mem.Allocator, d
         defer allocator.free(field_name);
         var matched = false;
 
-        inline for (struct_info.fields, 0..) |field, i| {
+        inline for (comptime reflection.fields(struct_info), 0..) |field, i| {
             if (!field.is_comptime) {
                 const field_options = comptime meta.fieldOptionsFor(T, field.name);
                 const wire_name = comptime meta.fieldWireName(field.name, field_options, options);
@@ -264,7 +265,7 @@ fn deserializeStructFromFields(comptime T: type, allocator: std.mem.Allocator, d
     }
     try decoder.endStruct();
 
-    inline for (struct_info.fields, 0..) |field, i| {
+    inline for (comptime reflection.fields(struct_info), 0..) |field, i| {
         if (!field.is_comptime and !initialized[i]) {
             if (field.defaultValue()) |default| {
                 @field(result, field.name) = try cloneDefaultValue(field.type, allocator, default);
@@ -288,7 +289,7 @@ fn deserializeExternalUnion(comptime T: type, allocator: std.mem.Allocator, deco
     const field_name = (try decoder.nextField()) orelse return error.MissingUnionTag;
     defer allocator.free(field_name);
 
-    inline for (union_info.fields) |field| {
+    inline for (comptime reflection.fields(union_info)) |field| {
         if (std.mem.eql(u8, field_name, field.name)) {
             const result = try deserializeUnionPayload(T, field, allocator, decoder);
             errdefer deinit_mod.deinit(T, allocator, result);
@@ -328,7 +329,7 @@ fn deserializeAdjacentUnion(comptime T: type, allocator: std.mem.Allocator, deco
         return error.MissingField;
     }
 
-    inline for (union_info.fields) |field| {
+    inline for (comptime reflection.fields(union_info)) |field| {
         if (std.mem.eql(u8, tag, field.name)) {
             const result = try deserializeUnionPayload(T, field, allocator, decoder);
             errdefer deinit_mod.deinit(T, allocator, result);
@@ -361,7 +362,7 @@ fn deserializeInternalUnion(comptime T: type, allocator: std.mem.Allocator, deco
     const tag = try decoder.readString(allocator);
     defer allocator.free(tag);
 
-    inline for (union_info.fields) |field| {
+    inline for (comptime reflection.fields(union_info)) |field| {
         if (std.mem.eql(u8, tag, field.name)) {
             if (field.type == void) {
                 if (try decoder.nextField()) |extra_name| {
@@ -435,7 +436,7 @@ fn deserializeBytesValue(comptime T: type, allocator: std.mem.Allocator, decoder
     };
 }
 
-fn deserializeUnionPayload(comptime T: type, comptime field: std.builtin.Type.UnionField, allocator: std.mem.Allocator, decoder: anytype) !T {
+fn deserializeUnionPayload(comptime T: type, comptime field: reflection.UnionField, allocator: std.mem.Allocator, decoder: anytype) !T {
     if (field.type == void) {
         try decoder.readNull();
         return @unionInit(T, field.name, {});
@@ -496,16 +497,16 @@ fn cloneDefaultValue(comptime T: type, allocator: std.mem.Allocator, value: T) !
             if (struct_info.is_tuple) unsupported(T);
 
             var result: T = undefined;
-            var initialized = [_]bool{false} ** struct_info.fields.len;
+            var initialized: [struct_info.field_names.len]bool = @splat(false);
             errdefer {
-                inline for (struct_info.fields, 0..) |field, i| {
+                inline for (comptime reflection.fields(struct_info), 0..) |field, i| {
                     if (!field.is_comptime and initialized[i]) {
                         deinit_mod.deinit(field.type, allocator, @field(result, field.name));
                     }
                 }
             }
 
-            inline for (struct_info.fields, 0..) |field, i| {
+            inline for (comptime reflection.fields(struct_info), 0..) |field, i| {
                 if (!field.is_comptime) {
                     @field(result, field.name) = try cloneDefaultValue(field.type, allocator, @field(value, field.name));
                     initialized[i] = true;
@@ -518,7 +519,7 @@ fn cloneDefaultValue(comptime T: type, allocator: std.mem.Allocator, value: T) !
             if (union_info.tag_type == null) unsupported(T);
 
             const active_name = @tagName(std.meta.activeTag(value));
-            inline for (union_info.fields) |field| {
+            inline for (comptime reflection.fields(union_info)) |field| {
                 if (std.mem.eql(u8, active_name, field.name)) {
                     if (field.type == void) return @unionInit(T, field.name, {});
 

@@ -174,7 +174,7 @@ pub const Encoder = struct {
             else => @compileError("MessagePack floats require a float value"),
         };
         const float_value: Float = value;
-        const Int = std.meta.Int(.unsigned, @bitSizeOf(Float));
+        const Int = @Int(.unsigned, @bitSizeOf(Float));
         const raw: Int = @bitCast(float_value);
 
         try self.writer.writeByte(if (Float == f32) 0xca else 0xcb);
@@ -860,7 +860,7 @@ fn kindFromByte(byte: u8) ?Kind {
 }
 
 fn writeBig(writer: *std.Io.Writer, comptime T: type, value: T) !void {
-    const Unsigned = std.meta.Int(.unsigned, @bitSizeOf(T));
+    const Unsigned = @Int(.unsigned, @bitSizeOf(T));
     const raw: Unsigned = @bitCast(value);
     var bytes: [@sizeOf(T)]u8 = undefined;
     std.mem.writeInt(Unsigned, &bytes, raw, .big);
@@ -868,7 +868,7 @@ fn writeBig(writer: *std.Io.Writer, comptime T: type, value: T) !void {
 }
 
 fn readBig(reader: *std.Io.Reader, comptime T: type) !T {
-    const Unsigned = std.meta.Int(.unsigned, @bitSizeOf(T));
+    const Unsigned = @Int(.unsigned, @bitSizeOf(T));
     var bytes: [@sizeOf(T)]u8 = undefined;
     for (&bytes) |*byte| byte.* = try reader.takeByte();
     const raw = std.mem.readInt(Unsigned, &bytes, .big);
@@ -926,7 +926,7 @@ test "msgpack reads float families and integer floats" {
 }
 
 test "msgpack writes boundary headers" {
-    var string_bytes = [_]u8{'x'} ** 32;
+    var string_bytes: [32]u8 = @splat('x');
     try expectMsgpack(string_bytes[0..], &.{
         0xd9, 0x20,
         'x',  'x',
@@ -961,7 +961,7 @@ test "msgpack writes boundary headers" {
     var buffer: [512]u8 = undefined;
     var writer: std.Io.Writer = .fixed(&buffer);
     var enc = encoder(&writer);
-    try enc.emitBytes(&([_]u8{0xaa} ** 256));
+    try enc.emitBytes(&@as([256]u8, @splat(0xaa)));
     try enc.finish();
 
     const encoded = writer.buffered();

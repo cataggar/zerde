@@ -159,7 +159,10 @@ fn run(init: std.process.Init.Minimal) !void {
     for (test_fns, 0..) |test_fn, test_index| {
         const capture = try Capture.start(test_index);
 
-        std.testing.allocator_instance = .{};
+        std.testing.allocator_instance = .init(std.heap.page_allocator, .{
+            .canary = 0xc3a701ba,
+            .check_write_after_free = true,
+        });
         std.testing.io_instance = .init(std.testing.allocator, .{
             .argv0 = .init(init.args),
             .environ = init.environ,
@@ -180,8 +183,7 @@ fn run(init: std.process.Init.Minimal) !void {
         }
 
         std.testing.io_instance.deinit();
-        const leak_count = std.testing.allocator_instance.detectLeaks();
-        std.testing.allocator_instance.deinitWithoutLeakChecks();
+        const leak_count = std.testing.allocator_instance.deinit();
         if (status == .pass and leak_count != 0) status = .leak;
         if (status == .pass and log_err_count != 0) status = .log_error;
 
@@ -322,8 +324,8 @@ pub fn log(
     comptime format: []const u8,
     args: anytype,
 ) void {
-    if (@intFromEnum(message_level) <= @intFromEnum(std.log.Level.err)) log_err_count +|= 1;
-    if (@intFromEnum(message_level) <= @intFromEnum(std.testing.log_level)) {
+    if (@backingInt(message_level) <= @backingInt(std.log.Level.err)) log_err_count +|= 1;
+    if (@backingInt(message_level) <= @backingInt(std.testing.log_level)) {
         std.debug.print("[" ++ @tagName(scope) ++ "] (" ++ @tagName(message_level) ++ "): " ++ format ++ "\n", args);
     }
 }

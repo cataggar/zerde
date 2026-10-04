@@ -23,6 +23,7 @@
 //! by doubling them. Empty cells decode as null for optional fields.
 
 const std = @import("std");
+const reflection = @import("reflection.zig");
 
 const base64 = @import("base64.zig");
 const containers = @import("containers.zig");
@@ -1070,7 +1071,7 @@ fn writeHeaderFields(comptime Row: type, comptime prefix: []const u8, writer: *s
     const row_info = @typeInfo(Row).@"struct";
     const row_options = comptime meta.optionsFor(Row);
 
-    inline for (row_info.fields) |field| {
+    inline for (comptime reflection.fields(row_info)) |field| {
         if (!field.is_comptime) {
             const field_options = comptime meta.fieldOptionsFor(Row, field.name);
             if (comptime !meta.shouldSerialize(field_options)) continue;
@@ -1096,7 +1097,7 @@ fn writeRow(comptime Row: type, writer: *std.Io.Writer, row: Row, options: Optio
 fn writeRowFields(comptime Row: type, writer: *std.Io.Writer, row: Row, options: Options, index: *usize) !void {
     const row_info = @typeInfo(Row).@"struct";
 
-    inline for (row_info.fields) |field| {
+    inline for (comptime reflection.fields(row_info)) |field| {
         if (!field.is_comptime) {
             const field_options = comptime meta.fieldOptionsFor(Row, field.name);
             if (comptime !meta.shouldSerialize(field_options)) continue;
@@ -1517,7 +1518,7 @@ fn buildDirectFieldEntries(comptime Row: type, comptime prefix: []const u8) [dir
     var entries: [directFieldCount(Row)]FieldEntry = undefined;
     var out: usize = 0;
 
-    inline for (row_info.fields) |field| {
+    inline for (comptime reflection.fields(row_info)) |field| {
         if (!field.is_comptime) {
             const field_options = comptime meta.fieldOptionsFor(Row, field.name);
             if (comptime !meta.shouldSerialize(field_options)) continue;
@@ -1544,7 +1545,7 @@ fn buildDirectFieldEntries(comptime Row: type, comptime prefix: []const u8) [dir
 fn directFieldCount(comptime Row: type) usize {
     const row_info = @typeInfo(Row).@"struct";
     comptime var count: usize = 0;
-    inline for (row_info.fields) |field| {
+    inline for (comptime reflection.fields(row_info)) |field| {
         if (!field.is_comptime) {
             const field_options = comptime meta.fieldOptionsFor(Row, field.name);
             if (comptime meta.shouldSerialize(field_options)) count += 1;
@@ -1636,14 +1637,14 @@ fn readStruct(comptime T: type, allocator: std.mem.Allocator, record: Record, lo
     comptime meta.validate(T, options);
 
     var result: T = undefined;
-    var initialized = [_]bool{false} ** struct_info.fields.len;
+    var initialized: [struct_info.field_names.len]bool = @splat(false);
     errdefer {
-        inline for (struct_info.fields, 0..) |field, i| {
+        inline for (comptime reflection.fields(struct_info), 0..) |field, i| {
             if (!field.is_comptime and initialized[i]) deinitValue(field.type, allocator, @field(result, field.name));
         }
     }
 
-    inline for (struct_info.fields, 0..) |field, i| {
+    inline for (comptime reflection.fields(struct_info), 0..) |field, i| {
         if (!field.is_comptime) {
             const field_options = comptime meta.fieldOptionsFor(T, field.name);
             const wire_name = comptime meta.fieldWireName(field.name, field_options, options);
@@ -1670,7 +1671,7 @@ fn readStruct(comptime T: type, allocator: std.mem.Allocator, record: Record, lo
         }
     }
 
-    inline for (struct_info.fields, 0..) |field, i| {
+    inline for (comptime reflection.fields(struct_info), 0..) |field, i| {
         if (!field.is_comptime and !initialized[i]) {
             if (field.defaultValue()) |default| {
                 @field(result, field.name) = try cloneDefaultValue(field.type, allocator, default);
@@ -1715,7 +1716,7 @@ fn readCellValue(comptime T: type, allocator: std.mem.Allocator, cell: []const u
             return try readCellValue(optional_info.child, allocator, cell, .{});
         },
         .@"enum" => |enum_info| {
-            inline for (enum_info.fields) |field| {
+            inline for (comptime reflection.fields(enum_info)) |field| {
                 if (std.mem.eql(u8, cell, field.name)) return @field(T, field.name);
             }
             return error.InvalidEnumTag;
@@ -1841,7 +1842,7 @@ fn validateRow(comptime Row: type) void {
     const options = comptime meta.optionsFor(Row);
     comptime meta.validate(Row, options);
 
-    inline for (row_info.fields) |field| {
+    inline for (comptime reflection.fields(row_info)) |field| {
         if (!field.is_comptime) {
             const field_options = comptime meta.fieldOptionsFor(Row, field.name);
             if (!field_options.skip) validateFieldType(field.type, field_options);
@@ -1884,7 +1885,7 @@ fn validateScalar(comptime T: type, comptime field_options: meta.FieldOptions) v
 fn csvFieldCount(comptime Row: type) usize {
     const row_info = @typeInfo(Row).@"struct";
     comptime var count: usize = 0;
-    inline for (row_info.fields) |field| {
+    inline for (comptime reflection.fields(row_info)) |field| {
         if (!field.is_comptime) {
             const field_options = comptime meta.fieldOptionsFor(Row, field.name);
             if (comptime meta.shouldSerialize(field_options)) {
@@ -1924,7 +1925,7 @@ fn buildFieldNamesWithPrefix(comptime Row: type, comptime prefix: []const u8) [c
     var names: [csvFieldCount(Row)][]const u8 = undefined;
     var current: usize = 0;
 
-    inline for (row_info.fields) |field| {
+    inline for (comptime reflection.fields(row_info)) |field| {
         if (!field.is_comptime) {
             const field_options = comptime meta.fieldOptionsFor(Row, field.name);
             if (comptime !meta.shouldSerialize(field_options)) continue;
@@ -2013,14 +2014,14 @@ fn cloneDefaultValue(comptime T: type, allocator: std.mem.Allocator, value: T) !
         .@"struct" => |struct_info| {
             if (struct_info.is_tuple) unsupportedScalar(T);
             var result: T = undefined;
-            var initialized = [_]bool{false} ** struct_info.fields.len;
+            var initialized: [struct_info.field_names.len]bool = @splat(false);
             errdefer {
-                inline for (struct_info.fields, 0..) |field, i| {
+                inline for (comptime reflection.fields(struct_info), 0..) |field, i| {
                     if (!field.is_comptime and initialized[i]) deinitValue(field.type, allocator, @field(result, field.name));
                 }
             }
 
-            inline for (struct_info.fields, 0..) |field, i| {
+            inline for (comptime reflection.fields(struct_info), 0..) |field, i| {
                 if (!field.is_comptime) {
                     @field(result, field.name) = try cloneDefaultValue(field.type, allocator, @field(value, field.name));
                     initialized[i] = true;

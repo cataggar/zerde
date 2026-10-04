@@ -427,7 +427,7 @@ fn methodParamCount(comptime T: type, comptime name: []const u8) comptime_int {
         .pointer => |pointer| pointer.child,
         else => T,
     };
-    return @typeInfo(@TypeOf(@field(Target, name))).@"fn".params.len;
+    return @typeInfo(@TypeOf(@field(Target, name))).@"fn".param_types.len;
 }
 
 test "events consume json into custom sink" {

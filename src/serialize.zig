@@ -47,6 +47,7 @@
 //! call that encoder's `finish` after the root value has been written.
 
 const std = @import("std");
+const reflection = @import("reflection.zig");
 
 const base64 = @import("base64.zig");
 const containers = @import("containers.zig");
@@ -215,7 +216,7 @@ fn serializeExternalUnion(comptime T: type, value: T, active_name: []const u8, e
     const union_info = @typeInfo(T).@"union";
 
     try encoder.beginStruct(T, 1);
-    inline for (union_info.fields) |field| {
+    inline for (comptime reflection.fields(union_info)) |field| {
         if (std.mem.eql(u8, active_name, field.name)) {
             try encoder.emitFieldName(field.name);
             try serializeUnionPayload(field.type, @field(value, field.name), encoder);
@@ -233,7 +234,7 @@ fn serializeAdjacentUnion(comptime T: type, value: T, active_name: []const u8, e
     try encoder.emitFieldName(meta.union_tag_field_name);
     try encoder.emitString(active_name);
 
-    inline for (union_info.fields) |field| {
+    inline for (comptime reflection.fields(union_info)) |field| {
         if (std.mem.eql(u8, active_name, field.name)) {
             try encoder.emitFieldName(meta.union_content_field_name);
             try serializeUnionPayload(field.type, @field(value, field.name), encoder);
@@ -247,7 +248,7 @@ fn serializeAdjacentUnion(comptime T: type, value: T, active_name: []const u8, e
 fn serializeInternalUnion(comptime T: type, value: T, active_name: []const u8, encoder: anytype) !void {
     const union_info = @typeInfo(T).@"union";
 
-    inline for (union_info.fields) |field| {
+    inline for (comptime reflection.fields(union_info)) |field| {
         if (std.mem.eql(u8, active_name, field.name)) {
             const field_count = 1 + comptime if (field.type == void) 0 else serializableStructFieldCount(field.type);
             try encoder.beginStruct(T, field_count);
@@ -276,7 +277,7 @@ fn serializableStructFieldCount(comptime T: type) usize {
     comptime meta.validate(T, options);
 
     comptime var field_count: usize = 0;
-    inline for (struct_info.fields) |field| {
+    inline for (comptime reflection.fields(struct_info)) |field| {
         if (!field.is_comptime) {
             const field_options = comptime meta.fieldOptionsFor(T, field.name);
             if (comptime meta.shouldSerialize(field_options)) field_count += 1;
@@ -289,7 +290,7 @@ fn serializeStructFields(comptime T: type, value: T, encoder: anytype) !void {
     const struct_info = @typeInfo(T).@"struct";
     const options = comptime meta.optionsFor(T);
 
-    inline for (struct_info.fields) |field| {
+    inline for (comptime reflection.fields(struct_info)) |field| {
         if (!field.is_comptime) {
             const field_options = comptime meta.fieldOptionsFor(T, field.name);
             if (comptime !meta.shouldSerialize(field_options)) continue;

@@ -1,6 +1,7 @@
 //! Metadata parsing and validation helpers.
 
 const std = @import("std");
+const reflection = @import("reflection.zig");
 
 const base64 = @import("base64.zig");
 const rename = @import("rename.zig");
@@ -75,7 +76,7 @@ pub fn validate(comptime T: type, comptime options: Options) void {
         const fields_metadata = @field(metadata, "fields");
         validateMetadataStruct(@TypeOf(fields_metadata), "field metadata set");
 
-        inline for (@typeInfo(@TypeOf(fields_metadata)).@"struct".fields) |field_metadata| {
+        inline for (comptime reflection.fields(@typeInfo(@TypeOf(fields_metadata)).@"struct")) |field_metadata| {
             if (!hasField(T, field_metadata.name)) {
                 @compileError("zerde metadata references unknown field '" ++ field_metadata.name ++ "' on " ++ @typeName(T));
             }
@@ -103,7 +104,7 @@ fn validateUnionOptions(comptime T: type, comptime metadata: anytype) void {
 
             const repr = @field(metadata, "union_repr");
             if (repr == .internal) {
-                inline for (union_info.fields) |field| {
+                inline for (comptime reflection.fields(union_info)) |field| {
                     if (field.type != void and @typeInfo(field.type) != .@"struct") {
                         @compileError("zerde internal union_repr requires struct or void variants on " ++ @typeName(T));
                     }
@@ -115,14 +116,14 @@ fn validateUnionOptions(comptime T: type, comptime metadata: anytype) void {
     }
 }
 
-fn validateInternalUnionPayload(comptime Union: type, comptime variant: std.builtin.Type.UnionField) void {
+fn validateInternalUnionPayload(comptime Union: type, comptime variant: reflection.UnionField) void {
     if (variant.type == void) return;
 
     const Payload = variant.type;
     const payload_info = @typeInfo(Payload).@"struct";
     const payload_options = optionsFor(Payload);
 
-    inline for (payload_info.fields) |field| {
+    inline for (comptime reflection.fields(payload_info)) |field| {
         if (!field.is_comptime) {
             const field_options = fieldOptionsFor(Payload, field.name);
             if (shouldSerialize(field_options) or shouldDeserialize(field_options)) {
@@ -225,7 +226,7 @@ fn validateHookMethod(comptime Hook: type, comptime method_name: []const u8, com
     switch (@typeInfo(@TypeOf(@field(Hook, method_name)))) {
         .@"fn" => |fn_info| {
             const expected_params = if (comptimeEql(method_name, "write")) 2 else 3;
-            if (fn_info.params.len != expected_params) {
+            if (fn_info.param_types.len != expected_params) {
                 @compileError("zerde " ++ label ++ " custom hook '" ++ method_name ++ "' has the wrong number of parameters");
             }
         },
@@ -255,7 +256,7 @@ const MetadataOptionSet = enum {
 };
 
 fn validateKnownOptions(comptime T: type, comptime allowed: MetadataOptionSet, comptime label: []const u8) void {
-    const actual_count = comptime @typeInfo(T).@"struct".fields.len;
+    const actual_count = comptime @typeInfo(T).@"struct".field_names.len;
     const known_count = comptime countKnownOptions(T, allowed);
 
     if (actual_count != known_count) @compileError("unknown zerde " ++ label ++ " option");
@@ -264,7 +265,7 @@ fn validateKnownOptions(comptime T: type, comptime allowed: MetadataOptionSet, c
 fn countKnownOptions(comptime T: type, comptime allowed: MetadataOptionSet) usize {
     comptime var count: usize = 0;
 
-    inline for (@typeInfo(T).@"struct".fields) |field| {
+    inline for (comptime reflection.fields(@typeInfo(T).@"struct")) |field| {
         if (comptime isKnownOptionName(allowed, field.name)) count += 1;
     }
 
@@ -285,7 +286,7 @@ fn comptimeEql(comptime a: []const u8, comptime b: []const u8) bool {
 fn hasField(comptime T: type, comptime field_name: []const u8) bool {
     switch (@typeInfo(T)) {
         .@"struct" => |struct_info| {
-            inline for (struct_info.fields) |field| {
+            inline for (comptime reflection.fields(struct_info)) |field| {
                 if (comptime std.mem.eql(u8, field.name, field_name)) return true;
             }
             return false;
@@ -294,9 +295,9 @@ fn hasField(comptime T: type, comptime field_name: []const u8) bool {
     }
 }
 
-fn fieldByName(comptime T: type, comptime field_name: []const u8) std.builtin.Type.StructField {
+fn fieldByName(comptime T: type, comptime field_name: []const u8) reflection.StructField {
     const struct_info = @typeInfo(T).@"struct";
-    inline for (struct_info.fields) |field| {
+    inline for (comptime reflection.fields(struct_info)) |field| {
         if (comptime std.mem.eql(u8, field.name, field_name)) return field;
     }
     unreachable;

@@ -1,6 +1,6 @@
 # Zerde
 
-Zerde is a small Zig 0.16 serialization framework built around comptime reflection, explicit I/O, and type-specialized codecs.
+Zerde is a small Zig 0.17 serialization framework built around comptime reflection, explicit I/O, and type-specialized codecs.
 
 ## Features
 
@@ -15,7 +15,7 @@ Zerde is a small Zig 0.16 serialization framework built around comptime reflecti
 
 ## Status
 
-The current version is `0.3.1` and targets Zig `0.16.0` or newer. The API is usable, but still early.
+The current version is `0.3.1` and targets Zig `0.17.0` or newer. The API is usable, but still early.
 
 ## Quick Start
 
