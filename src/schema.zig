@@ -1,6 +1,7 @@
 //! Schema descriptors for reflected Zig types.
 
 const std = @import("std");
+const reflection = @import("reflection.zig");
 
 const base64 = @import("base64.zig");
 const containers = @import("containers.zig");
@@ -490,7 +491,7 @@ fn buildStructFields(comptime T: type) [fieldCount(T)]FieldInfo {
     var fields: [fieldCount(T)]FieldInfo = undefined;
     var out: usize = 0;
 
-    inline for (struct_info.fields) |field| {
+    inline for (comptime reflection.fields(struct_info)) |field| {
         if (!field.is_comptime) {
             const field_options = meta.fieldOptionsFor(T, field.name);
             if (!field_options.skip) {
@@ -525,7 +526,7 @@ fn fieldCount(comptime T: type) usize {
     const struct_info = @typeInfo(T).@"struct";
     var count: usize = 0;
 
-    inline for (struct_info.fields) |field| {
+    inline for (comptime reflection.fields(struct_info)) |field| {
         if (!field.is_comptime) {
             const field_options = meta.fieldOptionsFor(T, field.name);
             if (!field_options.skip) count += 1;
@@ -542,11 +543,11 @@ fn enumTags(comptime T: type) []const []const u8 {
     return &Holder.tags;
 }
 
-fn buildEnumTags(comptime T: type) [@typeInfo(T).@"enum".fields.len][]const u8 {
+fn buildEnumTags(comptime T: type) [@typeInfo(T).@"enum".field_names.len][]const u8 {
     const enum_info = @typeInfo(T).@"enum";
-    var tags: [enum_info.fields.len][]const u8 = undefined;
+    var tags: [enum_info.field_names.len][]const u8 = undefined;
 
-    inline for (enum_info.fields, 0..) |field, i| {
+    inline for (comptime reflection.fields(enum_info), 0..) |field, i| {
         tags[i] = field.name;
     }
 
@@ -560,11 +561,11 @@ fn unionVariants(comptime T: type) []const UnionVariantInfo {
     return &Holder.variants;
 }
 
-fn buildUnionVariants(comptime T: type) [@typeInfo(T).@"union".fields.len]UnionVariantInfo {
+fn buildUnionVariants(comptime T: type) [@typeInfo(T).@"union".field_names.len]UnionVariantInfo {
     const union_info = @typeInfo(T).@"union";
-    var variants: [union_info.fields.len]UnionVariantInfo = undefined;
+    var variants: [union_info.field_names.len]UnionVariantInfo = undefined;
 
-    inline for (union_info.fields, 0..) |field, i| {
+    inline for (comptime reflection.fields(union_info), 0..) |field, i| {
         variants[i] = .{
             .zig_name = field.name,
             .schema = if (field.type == void) null else schemaFor(field.type),
@@ -574,7 +575,7 @@ fn buildUnionVariants(comptime T: type) [@typeInfo(T).@"union".fields.len]UnionV
     return variants;
 }
 
-fn isRequiredField(comptime field: std.builtin.Type.StructField, comptime field_options: meta.FieldOptions) bool {
+fn isRequiredField(comptime field: reflection.StructField, comptime field_options: meta.FieldOptions) bool {
     if (!meta.shouldDeserialize(field_options)) return false;
     if (field.defaultValue() != null) return false;
     return switch (@typeInfo(field.type)) {

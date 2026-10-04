@@ -1,6 +1,7 @@
 //! Traits and helpers for std container types supported by Zerde.
 
 const std = @import("std");
+const reflection = @import("reflection.zig");
 
 /// Returns whether `T` is a supported std list container.
 pub fn isList(comptime T: type) bool {
@@ -47,7 +48,7 @@ pub fn initList(comptime T: type, allocator: std.mem.Allocator, len: ?usize) !T 
 /// Appends one item to a supported list container.
 pub fn appendList(comptime T: type, list: *T, allocator: std.mem.Allocator, item: listChild(T)) !void {
     const append_info = @typeInfo(@TypeOf(T.append)).@"fn";
-    switch (append_info.params.len) {
+    switch (append_info.param_types.len) {
         2 => try list.append(item),
         3 => try list.append(allocator, item),
         else => @compileError("unsupported std list append signature for " ++ @typeName(T)),
@@ -58,7 +59,7 @@ pub fn appendList(comptime T: type, list: *T, allocator: std.mem.Allocator, item
 pub fn deinitListStorage(comptime T: type, allocator: std.mem.Allocator, value: T) void {
     var copy = value;
     const deinit_info = @typeInfo(@TypeOf(T.deinit)).@"fn";
-    switch (deinit_info.params.len) {
+    switch (deinit_info.param_types.len) {
         1 => copy.deinit(),
         2 => copy.deinit(allocator),
         else => @compileError("unsupported std list deinit signature for " ++ @typeName(T)),
@@ -101,7 +102,7 @@ pub fn putMapEntry(
     value: mapValue(T),
 ) !void {
     const get_or_put_info = @typeInfo(@TypeOf(T.getOrPut)).@"fn";
-    const gop = switch (get_or_put_info.params.len) {
+    const gop = switch (get_or_put_info.param_types.len) {
         2 => try map.getOrPut(key),
         3 => try map.getOrPut(allocator, key),
         else => @compileError("unsupported std map getOrPut signature for " ++ @typeName(T)),
@@ -114,7 +115,7 @@ pub fn putMapEntry(
 pub fn deinitMapStorage(comptime T: type, allocator: std.mem.Allocator, value: T) void {
     var copy = value;
     const deinit_info = @typeInfo(@TypeOf(T.deinit)).@"fn";
-    switch (deinit_info.params.len) {
+    switch (deinit_info.param_types.len) {
         1 => copy.deinit(),
         2 => copy.deinit(allocator),
         else => @compileError("unsupported std map deinit signature for " ++ @typeName(T)),
@@ -143,7 +144,7 @@ fn isMultiArrayList(comptime T: type) bool {
 fn isHashMap(comptime T: type) bool {
     if (@typeInfo(T) != .@"struct") return false;
     if (!@hasDecl(T, "KV") or !@hasDecl(T, "iterator") or !@hasDecl(T, "count") or !@hasDecl(T, "getOrPut")) return false;
-    return comptime typeNameContains(T, "hash_map.HashMap(") or typeNameContains(T, "hash_map.HashMapUnmanaged(");
+    return comptime typeNameContains(T, "hash_map.Custom(") or typeNameContains(T, "hash_map.HashMap(");
 }
 
 fn isArrayHashMap(comptime T: type) bool {
@@ -158,11 +159,11 @@ fn isStoredAllocatorHashMap(comptime T: type) bool {
 
 fn appendItemType(comptime T: type) type {
     const append_info = @typeInfo(@TypeOf(T.append)).@"fn";
-    return append_info.params[append_info.params.len - 1].type.?;
+    return append_info.param_types[append_info.param_types.len - 1].?;
 }
 
 fn fieldType(comptime T: type, comptime name: []const u8) type {
-    inline for (@typeInfo(T).@"struct".fields) |field| {
+    inline for (comptime reflection.fields(@typeInfo(T).@"struct")) |field| {
         if (comptime std.mem.eql(u8, field.name, name)) return field.type;
     }
     @compileError(@typeName(T) ++ " has no field named '" ++ name ++ "'");

@@ -1,6 +1,7 @@
 //! Type-specialized codec API.
 
 const std = @import("std");
+const reflection = @import("reflection.zig");
 
 const meta = @import("meta.zig");
 const rename = @import("rename.zig");
@@ -122,7 +123,7 @@ fn coerceOptions(comptime Options: type, options: anytype) Options {
     if (@typeInfo(Actual) != .@"struct") @compileError("format options must be a struct literal");
 
     var result = Options{};
-    inline for (@typeInfo(Actual).@"struct".fields) |field| {
+    inline for (comptime reflection.fields(@typeInfo(Actual).@"struct")) |field| {
         if (!@hasField(Options, field.name)) @compileError("unknown format option '" ++ field.name ++ "'");
         @field(result, field.name) = @field(options, field.name);
     }
@@ -783,9 +784,16 @@ test "codec writeWithOptions supports cbor deterministic output" {
 
     try std.testing.expectEqualSlices(u8, &.{
         0xa3,
-        0x61, 'a', 0x03,
-        0x61, 'z', 0x01,
-        0x62, 'a', 'a', 0x02,
+        0x61,
+        'a',
+        0x03,
+        0x61,
+        'z',
+        0x01,
+        0x62,
+        'a',
+        'a',
+        0x02,
     }, writer.buffered());
 }
 

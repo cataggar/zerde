@@ -17,6 +17,7 @@
 //! decoder reject trailing data after the single root value.
 
 const std = @import("std");
+const reflection = @import("reflection.zig");
 
 const base64 = @import("base64.zig");
 const deserialize = @import("deserialize.zig").deserialize;
@@ -160,7 +161,7 @@ pub const Encoder = struct {
         const Float = if (@typeInfo(T) == .comptime_float) f64 else T;
         const float_value: Float = value;
         const bits = @bitSizeOf(Float);
-        const Int = std.meta.Int(.unsigned, bits);
+        const Int = @Int(.unsigned, bits);
         const raw: Int = @bitCast(float_value);
         try self.writeInt(Int, raw);
     }
@@ -188,7 +189,7 @@ pub const Encoder = struct {
 
     /// Emits an enum value using the enum tag's integer storage size.
     pub fn emitEnum(self: *Self, comptime T: type, value: T) !void {
-        try self.writeEnumTag(T, @intFromEnum(value));
+        try self.writeEnumTag(T, @backingInt(value));
     }
 
     /// Emits an enum tag by name.
@@ -293,8 +294,8 @@ pub const Encoder = struct {
         const byte_count = comptime intByteCount(T);
         if (comptime byte_count == 0) return;
 
-        const Unsigned = std.meta.Int(.unsigned, @bitSizeOf(T));
-        const Storage = std.meta.Int(.unsigned, byte_count * 8);
+        const Unsigned = @Int(.unsigned, @bitSizeOf(T));
+        const Storage = @Int(.unsigned, byte_count * 8);
         const raw: Unsigned = @bitCast(value);
         const storage: Storage = @intCast(raw);
         var bytes: [byte_count]u8 = undefined;
@@ -409,8 +410,8 @@ pub const Decoder = struct {
         const byte_count = comptime intByteCount(T);
         if (comptime byte_count == 0) return @intCast(0);
 
-        const Storage = std.meta.Int(.unsigned, byte_count * 8);
-        const Unsigned = std.meta.Int(.unsigned, @bitSizeOf(T));
+        const Storage = @Int(.unsigned, byte_count * 8);
+        const Unsigned = @Int(.unsigned, @bitSizeOf(T));
         var bytes: [byte_count]u8 = undefined;
         try self.readExact(&bytes);
         const storage = std.mem.readInt(Storage, &bytes, self.options.endian);
@@ -420,7 +421,7 @@ pub const Decoder = struct {
 
     /// Reads a floating-point value from its raw IEEE bits.
     pub fn readFloat(self: *Self, comptime T: type) !T {
-        const Int = std.meta.Int(.unsigned, @bitSizeOf(T));
+        const Int = @Int(.unsigned, @bitSizeOf(T));
         const raw = try self.readInt(Int);
         return @bitCast(raw);
     }
@@ -448,8 +449,8 @@ pub const Decoder = struct {
     pub fn readEnum(self: *Self, comptime T: type) !T {
         const value = try self.readTagValue(comptime tagByteCount(T));
         const enum_info = @typeInfo(T).@"enum";
-        inline for (enum_info.fields) |field| {
-            if ((comptime tagRawValue(T, field.value)) == value) return @enumFromInt(field.value);
+        inline for (comptime reflection.fields(enum_info)) |field| {
+            if ((comptime tagRawValue(T, field.value)) == value) return @fromBackingInt(@intCast(field.value));
         }
         return error.InvalidEnumTag;
     }
@@ -594,7 +595,7 @@ pub const Decoder = struct {
     }
 
     fn readTagValue(self: *Self, bytes: usize) !u64 {
-        var buf = [_]u8{0} ** 8;
+        var buf: [8]u8 = @splat(0);
         if (self.options.endian == .little) {
             try self.readExact(buf[0..bytes]);
         } else {
@@ -634,7 +635,7 @@ fn structFieldNames(comptime T: type) []const []const u8 {
 
     comptime var names: [count][]const u8 = undefined;
     comptime var index: usize = 0;
-    inline for (struct_info.fields) |field| {
+    inline for (comptime reflection.fields(struct_info)) |field| {
         if (!field.is_comptime) {
             const field_options = comptime meta.fieldOptionsFor(T, field.name);
             if (comptime meta.shouldSerialize(field_options)) {
@@ -652,7 +653,7 @@ fn serializableStructFieldCount(comptime T: type) usize {
     const struct_info = @typeInfo(T).@"struct";
 
     comptime var field_count: usize = 0;
-    inline for (struct_info.fields) |field| {
+    inline for (comptime reflection.fields(struct_info)) |field| {
         if (!field.is_comptime) {
             const field_options = comptime meta.fieldOptionsFor(T, field.name);
             if (comptime meta.shouldSerialize(field_options)) field_count += 1;
@@ -666,10 +667,10 @@ fn unionTagEntries(comptime T: type) []const TagEntry {
     const Tag = union_info.tag_type.?;
     const enum_info = @typeInfo(Tag).@"enum";
 
-    comptime var entries: [union_info.fields.len]TagEntry = undefined;
-    inline for (union_info.fields, 0..) |field, i| {
+    comptime var entries: [union_info.field_names.len]TagEntry = undefined;
+    inline for (comptime reflection.fields(union_info), 0..) |field, i| {
         var value: u64 = 0;
-        inline for (enum_info.fields) |enum_field| {
+        inline for (comptime reflection.fields(enum_info)) |enum_field| {
             if (std.mem.eql(u8, enum_field.name, field.name)) value = comptime tagRawValue(Tag, enum_field.value);
         }
         entries[i] = .{
@@ -713,7 +714,7 @@ fn tagRawValue(comptime T: type, value: anytype) u64 {
         .int => T,
         else => @compileError("binary tags require enum or integer types"),
     };
-    const Unsigned = std.meta.Int(.unsigned, @bitSizeOf(Int));
+    const Unsigned = @Int(.unsigned, @bitSizeOf(Int));
     const typed: Int = @intCast(value);
     const raw: Unsigned = @bitCast(typed);
     return @intCast(raw);

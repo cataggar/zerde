@@ -65,7 +65,7 @@ pub fn build(b: *std.Build) void {
     });
     const run_doc_server = b.addRunArtifact(doc_server);
     run_doc_server.step.dependOn(&install_docs.step);
-    if (b.args) |args| run_doc_server.addArgs(args);
+    run_doc_server.addPassthruArgs();
 
     const doc_serve_step = b.step("docs-serve", "Generate docs and serve zig-out/docs over HTTP");
     doc_serve_step.dependOn(&run_doc_server.step);

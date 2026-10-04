@@ -211,7 +211,6 @@ pub const Encoder = struct {
     }
 
     fn writeFloat(self: *Self, value: anytype) !void {
-
         const T = @TypeOf(value);
         const Float = switch (@typeInfo(T)) {
             .comptime_float => f64,
@@ -219,7 +218,7 @@ pub const Encoder = struct {
             else => @compileError("CBOR floats require a float value"),
         };
         const float_value: Float = value;
-        const Int = std.meta.Int(.unsigned, @bitSizeOf(Float));
+        const Int = @Int(.unsigned, @bitSizeOf(Float));
         const raw: Int = @bitCast(float_value);
 
         try self.writer.writeByte(switch (Float) {
@@ -1468,7 +1467,7 @@ fn writeHead(writer: *std.Io.Writer, major: u3, value: u64) !void {
 }
 
 fn writeBig(writer: *std.Io.Writer, comptime T: type, value: T) !void {
-    const Unsigned = std.meta.Int(.unsigned, @bitSizeOf(T));
+    const Unsigned = @Int(.unsigned, @bitSizeOf(T));
     const raw: Unsigned = @bitCast(value);
     var bytes: [@sizeOf(T)]u8 = undefined;
     std.mem.writeInt(Unsigned, &bytes, raw, .big);
@@ -1476,7 +1475,7 @@ fn writeBig(writer: *std.Io.Writer, comptime T: type, value: T) !void {
 }
 
 fn readBig(reader: *std.Io.Reader, comptime T: type) !T {
-    const Unsigned = std.meta.Int(.unsigned, @bitSizeOf(T));
+    const Unsigned = @Int(.unsigned, @bitSizeOf(T));
     var bytes: [@sizeOf(T)]u8 = undefined;
     for (&bytes) |*byte| byte.* = try reader.takeByte();
     const raw = std.mem.readInt(Unsigned, &bytes, .big);
@@ -1562,7 +1561,7 @@ fn encodeFloatAlloc(allocator: std.mem.Allocator, value: anytype) ![]u8 {
         else => @compileError("CBOR floats require a float value"),
     };
     const float_value: Float = value;
-    const Int = std.meta.Int(.unsigned, @bitSizeOf(Float));
+    const Int = @Int(.unsigned, @bitSizeOf(Float));
     const raw: Int = @bitCast(float_value);
 
     try allocating.writer.writeByte(switch (Float) {
@@ -1768,8 +1767,19 @@ test "cbor writes strings bytes arrays and maps" {
     };
     try expectCbor(User{ .id = 1, .name = "Ada" }, &.{
         0xa2,
-        0x62, 'i', 'd', 0x01,
-        0x64, 'n', 'a', 'm', 'e', 0x63, 'A', 'd', 'a',
+        0x62,
+        'i',
+        'd',
+        0x01,
+        0x64,
+        'n',
+        'a',
+        'm',
+        'e',
+        0x63,
+        'A',
+        'd',
+        'a',
     });
 
     const Blob = struct {
@@ -1791,31 +1801,69 @@ test "cbor deterministic write sorts map keys by encoded bytes" {
 
     try expectCbor(value, &.{
         0xa3,
-        0x61, 'z', 0x01,
-        0x62, 'a', 'a', 0x02,
-        0x61, 'a', 0x03,
+        0x61,
+        'z',
+        0x01,
+        0x62,
+        'a',
+        'a',
+        0x02,
+        0x61,
+        'a',
+        0x03,
     });
     try expectCborWithOptions(value, .{ .deterministic = true }, &.{
         0xa3,
-        0x61, 'a', 0x03,
-        0x61, 'z', 0x01,
-        0x62, 'a', 'a', 0x02,
+        0x61,
+        'a',
+        0x03,
+        0x61,
+        'z',
+        0x01,
+        0x62,
+        'a',
+        'a',
+        0x02,
     });
 }
 
 test "cbor deterministic write sorts by encoded key not text order" {
     const Value = struct {
-        @"aaaaaaaaaaaaaaaaaaaaaaaa": u8,
+        aaaaaaaaaaaaaaaaaaaaaaaa: u8,
         b: u8,
     };
 
-    try expectCborWithOptions(Value{ .@"aaaaaaaaaaaaaaaaaaaaaaaa" = 1, .b = 2 }, .{ .deterministic = true }, &.{
+    try expectCborWithOptions(Value{ .aaaaaaaaaaaaaaaaaaaaaaaa = 1, .b = 2 }, .{ .deterministic = true }, &.{
         0xa2,
-        0x61, 'b', 0x02,
-        0x78, 0x18,
-        'a',  'a',  'a',  'a',  'a',  'a',  'a',  'a',
-        'a',  'a',  'a',  'a',  'a',  'a',  'a',  'a',
-        'a',  'a',  'a',  'a',  'a',  'a',  'a',  'a',
+        0x61,
+        'b',
+        0x02,
+        0x78,
+        0x18,
+        'a',
+        'a',
+        'a',
+        'a',
+        'a',
+        'a',
+        'a',
+        'a',
+        'a',
+        'a',
+        'a',
+        'a',
+        'a',
+        'a',
+        'a',
+        'a',
+        'a',
+        'a',
+        'a',
+        'a',
+        'a',
+        'a',
+        'a',
+        'a',
         0x01,
     });
 }
@@ -1832,10 +1880,22 @@ test "cbor deterministic write sorts nested maps and preserves scalar encodings"
 
     try expectCborWithOptions(Outer{ .z = .{ .b = 1.5, .a = -1 }, .a = 7 }, .{ .deterministic = true }, &.{
         0xa2,
-        0x61, 'a', 0x07,
-        0x61, 'z', 0xa2,
-        0x61, 'a', 0x20,
-        0x61, 'b', 0xfa, 0x3f, 0xc0, 0x00, 0x00,
+        0x61,
+        'a',
+        0x07,
+        0x61,
+        'z',
+        0xa2,
+        0x61,
+        'a',
+        0x20,
+        0x61,
+        'b',
+        0xfa,
+        0x3f,
+        0xc0,
+        0x00,
+        0x00,
     });
 }
 
@@ -1857,9 +1917,10 @@ test "cbor deterministic write preserves low-level tags around sorted maps" {
 
     try expectCborWithOptions(Tagged{ .z = 1, .a = 2 }, .{ .deterministic = true }, &.{
         0xd8, 0x2a,
-        0xa2,
-        0x61, 'a', 0x02,
-        0x61, 'z', 0x01,
+        0xa2, 0x61,
+        'a',  0x02,
+        0x61, 'z',
+        0x01,
     });
 }
 
@@ -1883,9 +1944,16 @@ test "cbor deterministic event encoder sorts maps and preserves tags" {
     try std.testing.expectEqualSlices(u8, &.{
         0xc1,
         0xa3,
-        0x61, 'a', 0x03,
-        0x61, 'z', 0x01,
-        0x62, 'a', 'a', 0x02,
+        0x61,
+        'a',
+        0x03,
+        0x61,
+        'z',
+        0x01,
+        0x62,
+        'a',
+        'a',
+        0x02,
     }, out.writer.buffered());
 }
 
@@ -1906,8 +1974,15 @@ test "cbor deterministic event encoder sorts maps containing extensions" {
 
     try std.testing.expectEqualSlices(u8, &.{
         0xa2,
-        0x61, 'a', 0xd8, 0x18, 0x41, 0x00,
-        0x61, 'z', 0xf7,
+        0x61,
+        'a',
+        0xd8,
+        0x18,
+        0x41,
+        0x00,
+        0x61,
+        'z',
+        0xf7,
     }, out.writer.buffered());
 }
 
@@ -1936,9 +2011,16 @@ test "cbor deterministic event value write sorts buffered object fields" {
 
     try std.testing.expectEqualSlices(u8, &.{
         0xa3,
-        0x61, 'a', 0x03,
-        0x61, 'z', 0x01,
-        0x62, 'a', 'a', 0x02,
+        0x61,
+        'a',
+        0x03,
+        0x61,
+        'z',
+        0x01,
+        0x62,
+        'a',
+        'a',
+        0x02,
     }, out.writer.buffered());
 }
 
@@ -2085,8 +2167,19 @@ test "cbor reads indefinite strings arrays and maps" {
     const User = struct { id: u8, name: []const u8 };
     const user = try readSlice(User, std.testing.allocator, &.{
         0xbf,
-        0x62, 'i', 'd', 0x01,
-        0x64, 'n', 'a', 'm', 'e', 0x63, 'A', 'd', 'a',
+        0x62,
+        'i',
+        'd',
+        0x01,
+        0x64,
+        'n',
+        'a',
+        'm',
+        'e',
+        0x63,
+        'A',
+        'd',
+        'a',
         0xff,
     });
     defer deinitValue(User, std.testing.allocator, user);
@@ -2123,8 +2216,21 @@ test "cbor reads RFC 8949 Appendix A simple and float vectors" {
     const User = struct { id: u8 };
     const user = try readSlice(User, std.testing.allocator, &.{
         0xa2,
-        0x62, 'i', 'd', 0x01,
-        0x69, 'u', 'n', 'd', 'e', 'f', 'i', 'n', 'e', 'd', 0xf7,
+        0x62,
+        'i',
+        'd',
+        0x01,
+        0x69,
+        'u',
+        'n',
+        'd',
+        'e',
+        'f',
+        'i',
+        'n',
+        'e',
+        'd',
+        0xf7,
     });
     try std.testing.expectEqual(@as(u8, 1), user.id);
 
@@ -2178,12 +2284,13 @@ test "cbor reads RFC 8949 Appendix A array and map vectors" {
         0x98, 0x19, 0x01, 0x02, 0x03, 0x04, 0x05,
         0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c,
         0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13,
-        0x14, 0x15, 0x16, 0x17, 0x18, 0x18, 0x18, 0x19,
+        0x14, 0x15, 0x16, 0x17, 0x18, 0x18, 0x18,
+        0x19,
     });
     defer std.testing.allocator.free(twenty_five);
     try std.testing.expectEqualSlices(u16, &.{
-        1, 2, 3, 4, 5,
-        6, 7, 8, 9, 10,
+        1,  2,  3,  4,  5,
+        6,  7,  8,  9,  10,
         11, 12, 13, 14, 15,
         16, 17, 18, 19, 20,
         21, 22, 23, 24, 25,
@@ -2201,7 +2308,7 @@ test "cbor reads RFC 8949 Appendix A array and map vectors" {
     try std.testing.expectEqualStrings("c", nested.b);
 
     try expectSkips(&.{ 0x83, 0x01, 0x82, 0x02, 0x03, 0x82, 0x04, 0x05 });
-    try expectSkips(&.{ 0xa0 });
+    try expectSkips(&.{0xa0});
     try expectSkips(&.{ 0xa2, 0x01, 0x02, 0x03, 0x04 });
     try expectSkips(&.{ 0x82, 0x61, 'a', 0xa1, 0x61, 'b', 0x61, 'c' });
     try expectSkips(&.{ 0xa5, 0x61, 'a', 0x61, 'A', 0x61, 'b', 0x61, 'B', 0x61, 'c', 0x61, 'C', 0x61, 'd', 0x61, 'D', 0x61, 'e', 0x61, 'E' });
@@ -2217,14 +2324,15 @@ test "cbor reads RFC 8949 Appendix A indefinite vectors" {
 
     const values = try readSlice([]const u16, std.testing.allocator, &.{
         0x9f, 0x01, 0x02, 0x03, 0x04, 0x05,
-        0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c,
-        0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13,
-        0x14, 0x15, 0x16, 0x17, 0x18, 0x18, 0x18, 0x19, 0xff,
+        0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b,
+        0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11,
+        0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+        0x18, 0x18, 0x18, 0x19, 0xff,
     });
     defer std.testing.allocator.free(values);
     try std.testing.expectEqualSlices(u16, &.{
-        1, 2, 3, 4, 5,
-        6, 7, 8, 9, 10,
+        1,  2,  3,  4,  5,
+        6,  7,  8,  9,  10,
         11, 12, 13, 14, 15,
         16, 17, 18, 19, 20,
         21, 22, 23, 24, 25,
@@ -2550,9 +2658,25 @@ test "cbor skips unknown fields including tags and simple values" {
     const User = struct { id: u8 };
     const parsed = try readSlice(User, std.testing.allocator, &.{
         0xa3,
-        0x62, 'i', 'd', 0x01,
-        0x63, 't', 'a', 'g', 0xc1, 0x18, 0x2a,
-        0x66, 's', 'i', 'm', 'p', 'l', 'e', 0xf7,
+        0x62,
+        'i',
+        'd',
+        0x01,
+        0x63,
+        't',
+        'a',
+        'g',
+        0xc1,
+        0x18,
+        0x2a,
+        0x66,
+        's',
+        'i',
+        'm',
+        'p',
+        'l',
+        'e',
+        0xf7,
     });
     try std.testing.expectEqual(@as(u8, 1), parsed.id);
 }

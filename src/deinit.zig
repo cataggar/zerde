@@ -1,6 +1,7 @@
 //! Type-directed cleanup for values produced by Zerde deserialization.
 
 const std = @import("std");
+const reflection = @import("reflection.zig");
 
 const containers = @import("containers.zig");
 
@@ -41,7 +42,7 @@ pub fn deinit(comptime T: type, allocator: std.mem.Allocator, value: T) void {
                 }
                 containers.deinitMapStorage(T, allocator, value);
             } else {
-                inline for (struct_info.fields) |field| {
+                inline for (comptime reflection.fields(struct_info)) |field| {
                     if (!field.is_comptime) deinit(field.type, allocator, @field(value, field.name));
                 }
             }
@@ -49,7 +50,7 @@ pub fn deinit(comptime T: type, allocator: std.mem.Allocator, value: T) void {
         .@"union" => |union_info| {
             if (union_info.tag_type) |_| {
                 const active_name = @tagName(std.meta.activeTag(value));
-                inline for (union_info.fields) |field| {
+                inline for (comptime reflection.fields(union_info)) |field| {
                     if (std.mem.eql(u8, active_name, field.name)) {
                         if (field.type != void) deinit(field.type, allocator, @field(value, field.name));
                         return;
@@ -98,7 +99,7 @@ test "deinit frees nested structs arrays and optional owned fields" {
         .maybe_child = null,
     };
     var initialized_child = false;
-    var initialized_children = [_]bool{false} ** 2;
+    var initialized_children: [2]bool = @splat(false);
     var initialized_maybe_child = false;
     errdefer {
         if (initialized_child) deinit(Child, allocator, value.child);

@@ -21,6 +21,7 @@
 //! reading, and trailing commas are accepted in structs and sequences.
 
 const std = @import("std");
+const reflection = @import("reflection.zig");
 
 const serialize = @import("serialize.zig").serialize;
 const deserialize = @import("deserialize.zig").deserialize;
@@ -460,7 +461,7 @@ pub const Decoder = struct {
         const tag = try self.readDotName(self.allocator);
         defer self.allocator.free(tag);
 
-        inline for (enum_info.fields) |field| {
+        inline for (comptime reflection.fields(enum_info)) |field| {
             if (std.mem.eql(u8, tag, field.name)) return @field(T, field.name);
         }
         return error.InvalidEnumTag;
