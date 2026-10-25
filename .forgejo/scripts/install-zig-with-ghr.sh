@@ -2,9 +2,9 @@
 
 set -euo pipefail
 
-readonly GHR_VERSION="v0.8.1"
-readonly GHR_LINUX_X64_SHA256="3c517e5d6feb891830a6c4a425181b5da04490f553373e5aef0688003a7451ff"
-readonly GHR_LINUX_ARM64_SHA256="715188751ab2893d4478abd9cfc061f0a0547caec44af4fd7bdb4b937d577269"
+readonly GHR_VERSION="v0.9.1"
+readonly GHR_LINUX_X64_SHA256="4e67aa4a31e94e5beffcd4c08f21b44e0f6e091aa9b432ff2fe375063ec7db8c"
+readonly GHR_LINUX_ARM64_SHA256="793773ed194a01b8fe743f166646af5ef48bace6ba122f01110ce35020888092"
 readonly ZIG_MINISIGN_KEY="RWSGOq2NVecA2UPNdBUZykf1CCb147pkmdtYxgb3Ti+JO/wCYvhbAb/U"
 
 fail() {
@@ -144,7 +144,7 @@ case "$(uname -m)" in
         readonly GHR_BUILD_TARGET="linux-aarch64-musl"
         readonly GHR_SHA256="$GHR_LINUX_ARM64_SHA256"
         ;;
-    *) fail "ghr v0.8.1 does not publish a Linux archive for $(uname -m)" ;;
+    *) fail "ghr v0.9.1 does not publish a Linux archive for $(uname -m)" ;;
 esac
 
 zig_version="$(
